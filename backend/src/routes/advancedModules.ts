@@ -28,6 +28,7 @@ const moduleIdSchema = z.enum([
   "anti-disconnect",
   "auto-unmute",
   "temporary-voice",
+  "patrol-reports",
   "tag-verification",
   "bio-url-verification",
   "first-lady",
@@ -115,6 +116,49 @@ const temporaryVoiceConfigSchema = z.object({
   emptyDeleteMinutes: z.coerce.number().int().min(1).max(1440).default(1),
   logChannelId: snowflakeSchema.nullable().default(null),
   autoDeleteChannelIds: z.array(snowflakeSchema).max(100).default([])
+});
+const patrolReportsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  systemName: z.string().trim().min(1).max(100).default("Sistema de Relatorios"),
+  description: z.string().trim().max(500).default("Registre patrulhamentos com canal temporario e exportacao automatica."),
+  panelColor: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/).default("#2563eb"),
+  bannerUrl: z.string().trim().max(500).nullable().default(null),
+  thumbnailUrl: z.string().trim().max(500).nullable().default(null),
+  footerText: z.string().trim().max(200).default("Relatorio de patrulhamento"),
+  emojiCreate: z.string().trim().max(80).default("📝"),
+  emojiFinish: z.string().trim().max(80).default("✅"),
+  emojiExport: z.string().trim().max(80).default("📄"),
+  commandChannelId: snowflakeSchema.nullable().default(null),
+  logChannelId: snowflakeSchema.nullable().default(null),
+  categoryId: snowflakeSchema.nullable().default(null),
+  auditChannelId: snowflakeSchema.nullable().default(null),
+  creatorRoleId: snowflakeSchema.nullable().default(null),
+  viewerRoleId: snowflakeSchema.nullable().default(null),
+  deleteRoleId: snowflakeSchema.nullable().default(null),
+  adminRoleId: snowflakeSchema.nullable().default(null),
+  tempAccessRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  channelNameTemplate: z.string().trim().min(1).max(80).default("relatorio-{user}"),
+  autoDeleteMinutes: z.coerce.number().int().min(1).max(10080).default(60),
+  lockAfterFinish: z.boolean().default(true),
+  archiveBeforeDelete: z.boolean().default(true),
+  deleteAfterExport: z.boolean().default(false),
+  exportPdf: z.boolean().default(true),
+  exportHtml: z.boolean().default(true),
+  exportJson: z.boolean().default(true),
+  exportHeader: z.string().trim().max(200).default("Relatorio de Patrulhamento"),
+  exportFooter: z.string().trim().max(200).default("Gerado automaticamente pelo sistema"),
+  exportLogoUrl: z.string().trim().max(500).nullable().default(null),
+  exportWatermark: z.string().trim().max(100).default(""),
+  statsTotalReports: z.boolean().default(true),
+  statsTotalPatrolTime: z.boolean().default(true),
+  statsOfficerRanking: z.boolean().default(true),
+  statsReviewerRanking: z.boolean().default(true),
+  statsAveragePatrol: z.boolean().default(true),
+  statsLastReport: z.boolean().default(true),
+  statsFirstReport: z.boolean().default(true),
+  componentButtonText: z.string().trim().max(80).default("Finalizar relatorio"),
+  componentSelectText: z.string().trim().max(100).default("Selecione uma acao"),
+  componentOrder: z.string().trim().max(120).default("panel,finish,export,stats")
 });
 const tagVerificationConfigSchema = z.object({
   enabled: z.boolean().default(false),
@@ -320,6 +364,24 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
 
   if (moduleId === "temporary-voice") {
     return temporaryVoiceConfigSchema.parse(config);
+  }
+
+  if (moduleId === "patrol-reports") {
+    return patrolReportsConfigSchema.parse({
+      ...config,
+      bannerUrl: config.bannerUrl || null,
+      thumbnailUrl: config.thumbnailUrl || null,
+      commandChannelId: config.commandChannelId || null,
+      logChannelId: config.logChannelId || null,
+      categoryId: config.categoryId || null,
+      auditChannelId: config.auditChannelId || null,
+      creatorRoleId: config.creatorRoleId || null,
+      viewerRoleId: config.viewerRoleId || null,
+      deleteRoleId: config.deleteRoleId || null,
+      adminRoleId: config.adminRoleId || null,
+      tempAccessRoleIds: Array.isArray(config.tempAccessRoleIds) ? config.tempAccessRoleIds : [],
+      exportLogoUrl: config.exportLogoUrl || null
+    });
   }
 
   if (moduleId === "tag-verification") {

@@ -74,6 +74,7 @@ export const DEV_MODULES = [
   { id: "anti-disconnect", label: "Anti Disconnect" },
   { id: "auto-unmute", label: "Auto Desmutar" },
   { id: "temporary-voice", label: "Chamadas Temporárias" },
+  { id: "patrol-reports", label: "Sistema de Relatorios" },
   { id: "tag-verification", label: "Verificacao de Tag" },
   { id: "bio-url-verification", label: "Verificacao de URL na Bio" },
   { id: "first-lady", label: "Sistema Primeira Dama" },

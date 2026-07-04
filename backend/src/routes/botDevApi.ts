@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireBot } from "../middleware/auth";
 import { authorizeBotCommand } from "../services/botCommandAuthorizationService";
-import { authorizeBotRuntimeModule, getBotGuildConfig, getBotApiPermissions, updateBotGuildModuleRuntimeStatus } from "../services/devBotService";
+import { authorizeBotRuntimeModule, getBotGuildConfig, getBotApiPermissions, updateBotGuildModuleConfig, updateBotGuildModuleRuntimeStatus } from "../services/devBotService";
 import { getMaintenanceState } from "../services/maintenanceService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
 
@@ -12,6 +12,12 @@ const commandAuthorizationSchema = z.object({
   userId: z.string().nullable().optional()
 });
 const guildIdSchema = z.string().regex(/^\d{5,32}$/);
+const moduleIdSchema = z.string().regex(/^[a-z0-9_-]{1,80}$/);
+const primitiveConfigValue = z.union([z.boolean(), z.string().max(500), z.number().finite().min(0).max(1_000_000), z.null()]);
+const moduleConfigSchema = z.record(
+  z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
+  z.union([primitiveConfigValue, z.array(primitiveConfigValue).max(250)])
+).default({});
 const tagVerificationStatusSchema = z.object({
   lastCheckAt: z.string().datetime(),
   nextCheckAt: z.string().datetime().nullable(),
