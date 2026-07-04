@@ -60,6 +60,14 @@ const policeReportTypeSchema = z.object({
   emoji: z.string().trim().max(80).nullable().default(null),
   order: z.coerce.number().int().min(0).default(0)
 });
+const defaultPoliceReportComplaintTypes = [
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+];
 const policeReportsConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),
@@ -76,12 +84,12 @@ const policeReportsConfigSchema = z.object({
   footerImageUrl: z.string().trim().max(2048).default(""),
   imagePosition: z.enum(["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"]).default("banner"),
   panelMessageId: snowflakeSchema.nullable().default(null),
-  panelTitle: z.string().trim().min(1).max(120).default("Sistema de Denuncias EAB"),
+  panelTitle: z.string().trim().min(1).max(120).default("Sistema de Denuncias IAB"),
   panelDescription: z.string().trim().max(1200).default("Registre uma denuncia de forma segura e sigilosa."),
   buttonLabel: z.string().trim().max(80).default("Selecionar denuncia"),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
   thumbnailUrl: z.string().trim().max(2048).default(""),
-  complaintTypes: z.array(policeReportTypeSchema).default([])
+  complaintTypes: z.array(policeReportTypeSchema).default(defaultPoliceReportComplaintTypes)
 });
 const policeReportsSaveSchema = z.object({
   config: policeReportsConfigSchema,
@@ -473,9 +481,10 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
 
   if (moduleId === "police-reports") {
     const parsed = policeReportsConfigSchema.parse(config);
+    const complaintTypes = parsed.complaintTypes.length ? parsed.complaintTypes : defaultPoliceReportComplaintTypes;
     return {
       ...parsed,
-      complaintTypes: parsed.complaintTypes
+      complaintTypes: complaintTypes
         .map((item, index) => ({ ...item, order: Number.isFinite(item.order) ? item.order : index }))
         .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
     };

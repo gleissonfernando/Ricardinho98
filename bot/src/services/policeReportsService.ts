@@ -48,10 +48,19 @@ type PoliceReportsConfig = {
   complaintTypes: ComplaintType[];
 };
 
+const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+];
+
 export const policeReportsCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("config_denuncias")
-    .setDescription("Gerencia o painel de denuncias EAB.")
+    .setDescription("Gerencia o painel de denuncias IAB.")
     .addSubcommand((command) => command.setName("publicar").setDescription("Publica ou atualiza o painel configurado.")),
   moduleId: MODULE_ID,
   async execute(interaction, context) {
@@ -107,7 +116,7 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
 
 async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allowCreate: boolean) {
   const config = await loadConfig(guild.id, context);
-  if (!config?.enabled) throw new Error("Ative o Sistema de Denuncias EAB antes de publicar.");
+  if (!config?.enabled) throw new Error("Ative o Sistema de Denuncias IAB antes de publicar.");
   if (!config.complaintTypes.length) throw new Error("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
   if (!config.panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
   if (!config.categoryId) throw new Error("Configure a categoria dos canais temporarios antes de publicar.");
@@ -140,7 +149,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     enabled: raw.enabled === true,
     panelChannelId: readString(raw.panelChannelId),
     panelMessageId: readString(raw.panelMessageId),
-    panelTitle: readString(raw.panelTitle) ?? "Sistema de Denuncias EAB",
+    panelTitle: readString(raw.panelTitle) ?? "Sistema de Denuncias IAB",
     panelDescription: readString(raw.panelDescription) ?? "Registre uma denuncia de forma segura e sigilosa.",
     buttonLabel: readString(raw.buttonLabel) ?? "Selecionar denuncia",
     color: readString(raw.color) ?? "#7c3aed",
@@ -157,7 +166,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     channelImageUrl: readString(raw.channelImageUrl) ?? readEnabledImageUrl(channelVisual) ?? "",
     footerImageUrl: readString(raw.footerImageUrl) ?? readEnabledImageUrl(footerVisual) ?? "",
     imagePosition: readImagePosition(raw.imagePosition ?? mainVisual?.imagePosition),
-    complaintTypes
+    complaintTypes: complaintTypes.length ? complaintTypes : DEFAULT_COMPLAINT_TYPES
   };
 }
 
@@ -196,7 +205,7 @@ async function createTemporaryProcedureChannel(
 ) {
   if (!interaction.guild) return;
   if (!config.enabled) {
-    await interaction.reply({ content: "O Sistema de Denuncias EAB esta desativado.", ephemeral: true });
+    await interaction.reply({ content: "O Sistema de Denuncias IAB esta desativado.", ephemeral: true });
     return;
   }
   if (!config.categoryId) {
@@ -245,7 +254,7 @@ async function createTemporaryProcedureChannel(
         ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] }] : []),
         ...responsibleRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
       ],
-      reason: `Denuncia EAB criada por ${interaction.user.tag}`
+      reason: `Denuncia IAB criada por ${interaction.user.tag}`
     });
     const mentions = [`<@${interaction.user.id}>`, ...responsibleRoleIds.map((roleId) => `<@&${roleId}>`)];
     if (mentions.length) {
@@ -302,11 +311,11 @@ async function handleProcedureAction(
       await interaction.channel.permissionOverwrites.edit(requesterId, {
         SendMessages: false,
         ViewChannel: false
-      }, { reason: `Denuncia EAB finalizada por ${interaction.user.tag}` }).catch(async (error) => {
+      }, { reason: `Denuncia IAB finalizada por ${interaction.user.tag}` }).catch(async (error) => {
         await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.requester_remove_failed", "Erro ao remover o autor do canal finalizado.", { channelId: interaction.channel!.id, error: error instanceof Error ? error.message : String(error), requesterId });
       });
     }
-    await interaction.channel.setParent(archiveCategory.id, { lockPermissions: false, reason: `Denuncia EAB finalizada por ${interaction.user.tag}` });
+    await interaction.channel.setParent(archiveCategory.id, { lockPermissions: false, reason: `Denuncia IAB finalizada por ${interaction.user.tag}` });
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.channel_moved", "Canal de denuncia movido para categoria finalizada.", {
       archiveCategoryId: archiveCategory.id,
       channelId: interaction.channel.id,
@@ -317,7 +326,7 @@ async function handleProcedureAction(
   }
   if (action === "close") {
     await interaction.reply({ content: "Canal sera deletado.", ephemeral: true });
-    await interaction.channel.delete(`Denuncia EAB fechada por ${interaction.user.tag}`).catch(() => null);
+    await interaction.channel.delete(`Denuncia IAB fechada por ${interaction.user.tag}`).catch(() => null);
     return;
   }
   await interaction.update(createProcedurePanel(config, { id: "", name: typeName || "Denuncia", description: null, emoji: null, order: 0 }, requesterId || "desconhecido", requesterId || "Usuario", status));
@@ -345,7 +354,7 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
     image: panelImage(config.channelImageUrl || config.panelImageUrl || config.thumbnailUrl, config.imagePosition),
     extraImages: [panelImage(config.footerImageUrl, "footer")],
     moduleId: MODULE_ID,
-    title: "Procedimento EAB"
+    title: "Procedimento IAB"
   });
 }
 
@@ -384,7 +393,7 @@ function scheduleChannelExpiry(channelId: string, guildId: string, minutes: numb
     const guild = context.client.guilds.cache.get(guildId);
     void guild?.channels.fetch(channelId).then(async (channel) => {
       if (!channel || !("delete" in channel)) return;
-      await channel.delete("Denuncia EAB expirada por tempo maximo").catch(() => null);
+      await channel.delete("Denuncia IAB expirada por tempo maximo").catch(() => null);
       await writeLog(context, guildId, null, "police-reports.channel_deleted", "Canal temporario deletado por tempo maximo.", { channelId, maxChannelMinutes: minutes });
     }).catch(() => null);
   }, delay).unref?.();

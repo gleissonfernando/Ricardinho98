@@ -2806,6 +2806,15 @@ type PoliceReportsConfig = {
   complaintTypes: Array<{ id: string; name: string; description: string | null; emoji: string | null; order: number }>;
 };
 
+const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] = [
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+];
+
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
   panelChannelId: null,
@@ -2821,13 +2830,13 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   channelImageUrl: "",
   footerImageUrl: "",
   imagePosition: "banner",
-  panelTitle: "Sistema de Denuncias EAB",
+  panelTitle: "Sistema de Denuncias IAB",
   panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
   buttonLabel: "Abrir denuncia",
   color: "#7c3aed",
   thumbnailUrl: "",
   panelMessageId: null,
-  complaintTypes: []
+  complaintTypes: defaultPoliceReportComplaintTypes
 };
 
 function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
@@ -2847,12 +2856,13 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
     Promise.all([getAdvancedModuleConfig(botId, guild.id, "police-reports"), getGuildLiveOptions(guild.id, botId)])
       .then(([module, options]) => {
         if (!active) return;
-        setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
+        const savedConfig = module.config as Partial<PoliceReportsConfig>;
+        setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: savedConfig.complaintTypes?.length ? savedConfig.complaintTypes : defaultPoliceReportComplaintTypes });
         setChannels(options.channels);
         setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
       })
-      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias EAB."))
+      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias IAB."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [botId, guild?.id]);
@@ -2892,10 +2902,11 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         return;
       }
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
-      setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
-      setMessage("Configuracao do EAB salva.");
+      const savedConfig = module.config as Partial<PoliceReportsConfig>;
+      setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: savedConfig.complaintTypes?.length ? savedConfig.complaintTypes : defaultPoliceReportComplaintTypes });
+      setMessage("Configuracao do IAB salva.");
     } catch {
-      setError("Nao foi possivel salvar a configuracao do EAB.");
+      setError("Nao foi possivel salvar a configuracao do IAB.");
     } finally {
       setSaving(false);
     }
@@ -2934,7 +2945,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias EAB</CardTitle>
+            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias IAB</CardTitle>
             <CardDescription>Configuracao exclusiva da area Policia.</CardDescription>
           </div>
           <div className="flex items-center gap-3">
@@ -2991,7 +3002,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
             botId={botId}
             canManage={canManage}
             guildId={guild.id}
-            panelLabel="Denuncias EAB"
+            panelLabel="Denuncias IAB"
             panelSlots={[
               { id: "police-reports", label: "Painel principal" },
               { id: "police-reports-banner-2", label: "Canal temporario" },
@@ -3818,7 +3829,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
     { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
-    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, EAB", title: "Sistema de Denuncias EAB" }
+    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Sistema de Denuncias IAB" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -8564,7 +8575,7 @@ function policePanelImageSlotsForView(view: ViewId) {
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias EAB" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias IAB" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },
