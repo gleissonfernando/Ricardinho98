@@ -170,7 +170,6 @@ const envSchema = z
   });
 
 export const env = envSchema.parse(process.env);
-const ALWAYS_ENABLED_MODULE_IDS = ["mission-tools"] as const;
 const enabledModules = new Set(
   env.BOT_ENABLED_MODULES.split(",")
     .map((moduleId) => moduleId.trim())
@@ -190,10 +189,6 @@ export function isBotModuleEnabled(moduleId: string) {
   const modules = runtimeEnabledModules ?? enabledModules;
   const candidateModuleIds = MODULE_ALIASES[moduleId] ?? [moduleId];
 
-  if (candidateModuleIds.some((candidateModuleId) => ALWAYS_ENABLED_MODULE_IDS.includes(candidateModuleId as (typeof ALWAYS_ENABLED_MODULE_IDS)[number]))) {
-    return true;
-  }
-
   if (modules.size > 0) {
     return candidateModuleIds.some((candidateModuleId) => modules.has(candidateModuleId));
   }
@@ -202,7 +197,7 @@ export function isBotModuleEnabled(moduleId: string) {
 }
 
 export function configuredBotModules() {
-  return [...new Set([...enabledModules, ...ALWAYS_ENABLED_MODULE_IDS])];
+  return [...enabledModules];
 }
 
 export function currentRuntimeBotId() {
@@ -211,8 +206,7 @@ export function currentRuntimeBotId() {
 
 export function setRuntimeEnabledModules(moduleIds: string[], botId?: string | null) {
   runtimeEnabledModules = new Set([
-    ...moduleIds.map((moduleId) => moduleId.trim()).filter(Boolean),
-    ...ALWAYS_ENABLED_MODULE_IDS
+    ...moduleIds.map((moduleId) => moduleId.trim()).filter(Boolean)
   ]);
 
   if (botId?.trim()) {

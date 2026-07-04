@@ -66,14 +66,18 @@ export async function handleReady(client: Client<true>, context: BotContext) {
       return;
     }
 
+    const nextSignature = runtimeModuleSignature(true, runtimeBotId, payload.enabledModules);
+    if (nextSignature === lastRuntimeModuleSignature) return;
+
     const wasSelfBotEnabled = isSelfBotModuleEnabled();
     const wasMissionToolsEnabled = isBotModuleEnabled("mission-tools");
     const wasTemporaryVoiceEnabled = isBotModuleEnabled("temporary-voice");
     const wereLogsEnabled = isBotModuleEnabled("logs");
     const wasTagVerificationEnabled = isBotModuleEnabled("tag-verification");
     setRuntimeEnabledModules(payload.enabledModules);
-    lastRuntimeModuleSignature = runtimeModuleSignature(true, runtimeBotId, payload.enabledModules);
+    lastRuntimeModuleSignature = nextSignature;
     clearRuntimeModuleAuthorization();
+    void syncEnabledGuildCommands(client, context);
 
     if (!wasSelfBotEnabled && isSelfBotModuleEnabled()) {
       startSelfBotProtectionService(context);
@@ -124,18 +128,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
   if (isBotModuleEnabled("logs")) startAutomatedLogService(client, context);
   startMaintenanceService(context);
 
-  const commandGuildIds = commandRegistrationGuildIds(client);
-  const commands = [...context.commands.values()];
-  const commandNames = commands.map((command) => command.data.name).join(", ");
-
-  for (const commandGuildId of commandGuildIds) {
-    try {
-      await registerGuildCommands(commands, client.user.id, commandGuildId);
-      console.log(`[bot] comandos sincronizados no servidor ${commandGuildId}: ${commandNames}`);
-    } catch (error) {
-      console.warn(`[bot] falha ao sincronizar comandos no servidor ${commandGuildId}:`, error instanceof Error ? error.message : error);
-    }
-  }
+  await syncEnabledGuildCommands(client, context);
 
   if (isBotModuleEnabled("live")) {
     startSocialNotificationMonitor(client, context.api);
@@ -263,6 +256,7 @@ async function reconcileRuntimeModules(client: Client<true>, context: BotContext
   setRuntimeEnabledModules(runtimeModules, runtimeAccess.botId);
   lastRuntimeModuleSignature = nextSignature;
   clearRuntimeModuleAuthorization();
+  await syncEnabledGuildCommands(client, context);
 
   if (isSelfBotModuleEnabled()) {
     startSelfBotProtectionService(context);
@@ -286,6 +280,20 @@ async function reconcileRuntimeModules(client: Client<true>, context: BotContext
   }
   if (wasTagVerificationEnabled && !isBotModuleEnabled("tag-verification")) {
     stopTagVerificationService();
+  }
+}
+
+async function syncEnabledGuildCommands(client: Client<true>, context: BotContext) {
+  const commands = [...context.commands.values()].filter((command) => !command.moduleId || isBotModuleEnabled(command.moduleId));
+  const commandNames = commands.map((command) => command.data.name).join(", ") || "nenhum";
+
+  for (const guildId of commandRegistrationGuildIds(client)) {
+    try {
+      await registerGuildCommands(commands, client.user.id, guildId);
+      console.log(`[bot] comandos liberados sincronizados no servidor ${guildId}: ${commandNames}`);
+    } catch (error) {
+      console.warn(`[bot] falha ao sincronizar comandos no servidor ${guildId}:`, error instanceof Error ? error.message : error);
+    }
   }
 }
 

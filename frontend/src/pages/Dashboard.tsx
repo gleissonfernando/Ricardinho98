@@ -2809,7 +2809,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   function addHierarchy() {
     setDraft((current) => current ? {
       ...current,
-      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: "👤", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "" }]
+      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: null, id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "" }]
     } : current);
   }
 
@@ -2930,6 +2930,12 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                     <option value="thumbnail">Thumbnail</option>
                   </select>
                 </label>
+                <TicketField disabled={!canManage} label="URL da thumbnail/icone" onChange={(value) => patchDraft({ imageUrl: value || null })} value={draft.imageUrl ?? ""} />
+                <TicketField disabled={!canManage} label="Texto do rodape" onChange={(value) => patchDraft({ footerText: value || null })} value={draft.footerText ?? ""} />
+                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
+                  Exibir rodape
+                  <Switch checked={draft.footerEnabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ footerEnabled: checked })} />
+                </label>
                 <div className="md:col-span-2">
                   <TicketArea disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
                 </div>
@@ -2972,24 +2978,24 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
   return {
     allowedRoleIds: [],
     botId: botId ?? null,
-    color: "#22c55e",
+    color: "#8b5cf6",
     createdAt: now,
-    description: "Hierarquia atualizada automaticamente pelos cargos do servidor.",
+    description: "Lista de membros da unidade TRAFFIC",
     enabled: true,
     footerEnabled: true,
     footerIconUrl: null,
-    footerText: "Atualizado automaticamente",
+    footerText: "NPD - North Police Department",
     guildId,
     hierarchies: [],
     id: "new",
-    imagePosition: "none",
+    imagePosition: "thumbnail",
     imageUrl: null,
     linkedToFivem: true,
     logChannelId: null,
-    name: "Hierarquia FAQ",
+    name: "TRAFFIC",
     panelChannelId: null,
     panelMessageId: null,
-    title: "Hierarquia Policial",
+    title: "Hierarquia - TRAFFIC",
     updatedAt: now
   };
 }

@@ -276,6 +276,7 @@ export type FivemHierarchyPanel = {
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
   logChannelId: string | null;
+  name: string;
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;

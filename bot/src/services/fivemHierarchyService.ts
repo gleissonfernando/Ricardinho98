@@ -1,7 +1,4 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
@@ -21,7 +18,9 @@ const scheduledGuilds = new Map<string, NodeJS.Timeout>();
 export const hierarchyCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("hierarquia")
-    .setDescription("Gerencia ou atualiza o painel de Hierarquia FAQ FiveM."),
+    .setDescription("Gerencia os paineis automaticos de hierarquia.")
+    .addSubcommand((command) => command.setName("configurar").setDescription("Mostra onde configurar unidades, cargos e o painel."))
+    .addSubcommand((command) => command.setName("atualizar").setDescription("Atualiza agora todos os paineis de hierarquia.")),
   moduleId: "fivem-hierarchy",
   async execute(interaction: ChatInputCommandInteraction, context: BotContext) {
     if (!interaction.guild) return;
@@ -29,9 +28,13 @@ export const hierarchyCommand: BotCommand = {
       await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
       return;
     }
+    if (interaction.options.getSubcommand() === "configurar") {
+      await interaction.reply({ content: "Configure as unidades, canais, cargos, ordem, thumbnail e rodape na aba **Hierarquia** da Dashboard.", ephemeral: true });
+      return;
+    }
     await interaction.deferReply({ ephemeral: true });
     await refreshHierarchyPanelsForGuild(interaction.guild, context);
-    await interaction.editReply("Painel de Hierarquia FAQ atualizado.");
+    await interaction.editReply("Paineis de hierarquia atualizados.");
   }
 };
 
@@ -93,9 +96,7 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
   const payload = createHierarchyPayload(guild, panel, visuals[0] ?? null, visuals.slice(1));
   let message = panel.panelMessageId ? await channel.messages.fetch(panel.panelMessageId).catch(() => null) : null;
   if (message) {
-    await message.edit(payload).catch(async () => {
-      message = await channel.send(payload).catch(() => null);
-    });
+    await message.edit(payload);
   } else {
     message = await channel.send(payload).catch(() => null);
   }
@@ -106,10 +107,7 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
 
 function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual: PanelVisualConfig | null, extraImages: PanelVisualConfig[] = []) {
   const fallbackVisual: PanelVisualConfig | null = panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "bottom" ? "bottom" : panel.imagePosition, imageUrl: panel.imageUrl } : null;
-  const action = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`${PREFIX}:refresh:${panel.id}`).setLabel("Atualizar painel").setStyle(ButtonStyle.Secondary)
-      );
-  return renderComponentsV2Panel({ accentColor: colorToInt(panel.color), actions: [action], description: panel.description ?? "Hierarquia atualizada automaticamente pelos cargos do servidor.", extraImages, fields: [renderHierarchyText(guild, panel), ...(panel.footerEnabled && panel.footerText ? [`_${panel.footerText}_`] : [])], image: visual?.imageEnabled ? visual : fallbackVisual, moduleId: "fivem-hierarchy", title: panel.title });
+  return renderComponentsV2Panel({ accentColor: colorToInt(panel.color), description: panel.description ?? `Lista de membros da unidade ${panel.name}`, extraImages, fields: [renderHierarchyText(guild, panel), ...(panel.footerEnabled && panel.footerText ? [panel.footerText] : [])], image: visual?.imageEnabled ? visual : fallbackVisual, moduleId: "fivem-hierarchy", title: panel.title });
 }
 
 async function getPanelVisualSlots(context: BotContext, guildId: string, basePanelId: string) {
@@ -130,9 +128,11 @@ function renderHierarchyText(guild: Guild, panel: FivemHierarchyPanel) {
     .map((item) => {
       const members = guild.members.cache
         .filter((member: GuildMember) => member.roles.cache.has(item.roleId))
+        .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR"))
         .map((member) => `<@${member.id}>`)
         .slice(0, item.limit ?? 50);
-      return `${item.emoji ?? ""} **${item.name}**\n${members.length ? members.join("\n") : "*Nenhum membro encontrado.*"}`;
+      const heading = [item.emoji, `**${item.name}**`].filter(Boolean).join(" ");
+      return `${heading}\n${members.length ? members.join("\n") : "*Nenhum membro*"}`;
     })
     .join("\n\n")
     .slice(0, 3800) || "*Nenhuma hierarquia configurada.*";
