@@ -29,6 +29,9 @@ const tagVerificationStatusSchema = z.object({
   totalErrors: z.number().int().min(0),
   lastError: z.string().max(500).nullable()
 });
+const policeReportsPanelStateSchema = z.object({
+  messageId: z.string().regex(/^\d{5,32}$/).nullable()
+});
 
 botDevApiRouter.use(requireBot);
 
@@ -95,6 +98,29 @@ botDevApiRouter.post("/runtime/guilds/:guildId/tag-verification/status", async (
 
     await updateBotGuildModuleRuntimeStatus({ botId, guildId, moduleId: "tag-verification", status });
     return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.post("/runtime/guilds/:guildId/police-reports/panel-state", async (req, res, next) => {
+  try {
+    const botId = await resolveRequestBotId(req);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const input = policeReportsPanelStateSchema.parse(req.body ?? {});
+    const authorization = await authorizeBotRuntimeModule({ botId, guildId, moduleId: "police-reports" });
+    if (!authorization.allowed || !botId) return res.status(403).json({ message: authorization.reason });
+    const current = await getBotGuildConfig(botId, guildId);
+    const modules = current.modules as Record<string, Record<string, unknown>>;
+    const currentConfig = modules["police-reports"] ?? {};
+    const module = await updateBotGuildModuleConfig({
+      botId,
+      guildId,
+      guildName: current.guildName,
+      moduleId: "police-reports",
+      config: { ...currentConfig, panelMessageId: input.messageId }
+    });
+    return res.json({ module });
   } catch (error) {
     return next(error);
   }

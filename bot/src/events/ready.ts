@@ -16,6 +16,7 @@ import { startFivemOrderService } from "../services/fivemOrderService";
 import { startFivemHierarchyService } from "../services/fivemHierarchyService";
 import { startFivemActionService } from "../services/fivemActionService";
 import { startPolicePatrolReportService } from "../services/policePatrolReportService";
+import { startPoliceReportsService } from "../services/policeReportsService";
 import { startGiveawayService } from "../services/giveawayService";
 import { startGuildSettingsCache } from "../services/guildSettingsCache";
 import { startImageAntiSpamService } from "../services/imageAntiSpamService";
@@ -172,6 +173,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
   if (isBotModuleEnabled("police-patrol-reports")) {
     startPolicePatrolReportService(client, context);
   }
+  startPoliceReportsService(client, context);
   if (isBotModuleEnabled("manual-registration")) {
     startManualRegistrationService(client, context);
   }

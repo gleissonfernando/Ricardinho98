@@ -134,6 +134,7 @@ export type GiveawayPanelUpdateEvent = {
   giveawayId: string;
   guildId: string;
 };
+export type PoliceReportsPanelUpdateEvent = { action: "publish" | "update"; botId: string; guildId: string };
 
 export type ImageAntiSpamSettingsEvent = {
   botId?: string | null;
@@ -237,6 +238,7 @@ export class BotSocketClient {
   private manualRegistrationExecuteHandler: ((payload: ManualRegistrationExecuteEvent) => void) | null = null;
   private databaseMaintenanceDeleteChannelsHandler: ((payload: DatabaseMaintenanceDeleteChannelsEvent) => void) | null = null;
   private fivemHierarchyPanelUpdateHandler: ((payload: FivemHierarchyPanelUpdateEvent) => void) | null = null;
+  private policeReportsPanelUpdateHandler: ((payload: PoliceReportsPanelUpdateEvent) => void) | null = null;
   private fivemFacAbsenceUpdateHandler: ((payload: FivemFacAbsenceUpdateEvent) => void) | null = null;
   private missionToolsSettingsHandler: ((payload: MissionToolsSettingsEvent) => void) | null = null;
   private missionToolsPanelPublishHandler: ((payload: MissionToolsPanelPublishEvent) => void) | null = null;
@@ -345,6 +347,7 @@ export class BotSocketClient {
     if (this.fivemHierarchyPanelUpdateHandler) {
       this.socket.on("fivem:hierarchy:panel_update", this.fivemHierarchyPanelUpdateHandler);
     }
+    if (this.policeReportsPanelUpdateHandler) this.socket.on("police-reports:panel_update", this.policeReportsPanelUpdateHandler);
 
     if (this.fivemFacAbsenceUpdateHandler) {
       this.socket.on("fivem:fac:absence_updated", this.fivemFacAbsenceUpdateHandler);
@@ -548,6 +551,12 @@ export class BotSocketClient {
     this.fivemHierarchyPanelUpdateHandler = handler;
     this.socket?.off("fivem:hierarchy:panel_update");
     this.socket?.on("fivem:hierarchy:panel_update", handler);
+  }
+
+  onPoliceReportsPanelUpdate(handler: (payload: PoliceReportsPanelUpdateEvent) => void) {
+    this.policeReportsPanelUpdateHandler = handler;
+    this.socket?.off("police-reports:panel_update");
+    this.socket?.on("police-reports:panel_update", handler);
   }
 
   onFivemFacAbsenceUpdated(handler: (payload: FivemFacAbsenceUpdateEvent) => void) {

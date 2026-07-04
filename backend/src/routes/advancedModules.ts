@@ -15,6 +15,7 @@ import type { AuthSessionUser } from "../types/session";
 
 const guildIdSchema = z.string().regex(/^\d{5,32}$/);
 const botIdSchema = z.string().min(1).max(120);
+const snowflakeSchema = z.string().regex(/^\d{5,32}$/);
 const moduleIdSchema = z.enum([
   "anti-abuse",
   "anti-ban",
@@ -32,7 +33,8 @@ const moduleIdSchema = z.enum([
   "tag-verification",
   "bio-url-verification",
   "first-lady",
-  "music"
+  "music",
+  "police-reports"
 ]);
 const primitiveConfigValue = z.union([
   z.boolean(),
@@ -51,7 +53,31 @@ const saveSchema = z.object({
   config: configSchema,
   guildName: z.string().min(1).max(100).optional()
 });
-const snowflakeSchema = z.string().regex(/^\d{5,32}$/);
+const policeReportTypeSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(500).nullable().default(null),
+  emoji: z.string().trim().max(80).nullable().default(null),
+  order: z.coerce.number().int().min(0).default(0)
+});
+const policeReportsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  panelChannelId: snowflakeSchema.nullable().default(null),
+  categoryId: snowflakeSchema.nullable().default(null),
+  logChannelId: snowflakeSchema.nullable().default(null),
+  responsibleRoleId: snowflakeSchema.nullable().default(null),
+  panelMessageId: snowflakeSchema.nullable().default(null),
+  panelTitle: z.string().trim().min(1).max(120).default("Sistema de Denuncias EAB"),
+  panelDescription: z.string().trim().max(1200).default("Registre uma denuncia de forma segura e sigilosa."),
+  buttonLabel: z.string().trim().max(80).default("Selecionar denuncia"),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
+  thumbnailUrl: z.string().trim().max(2048).default(""),
+  complaintTypes: z.array(policeReportTypeSchema).default([])
+});
+const policeReportsSaveSchema = z.object({
+  config: policeReportsConfigSchema,
+  guildName: z.string().min(1).max(100).optional()
+});
 const autoUnmuteConfigSchema = z.object({
   enabled: z.boolean().default(false),
   voiceChannelId: snowflakeSchema.nullable().default(null),
@@ -223,7 +249,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
     const botId = botIdSchema.parse(req.params.botId);
     const guildId = guildIdSchema.parse(req.params.guildId);
     const moduleId = moduleIdSchema.parse(req.params.moduleId);
-    const input = saveSchema.parse(req.body ?? {});
+    const input = moduleId === "police-reports" ? policeReportsSaveSchema.parse(req.body ?? {}) : saveSchema.parse(req.body ?? {});
     const user = res.locals.dashboardAuth.user as AuthSessionUser;
 
     if (!(await canUseDevBotModule(user, botId, guildId, moduleId))) {
@@ -252,6 +278,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
       moduleId,
       config: {
         ...normalizedConfig,
+        ...(moduleId === "police-reports" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
         ...(moduleId === "tag-verification" ? { botId, guildId } : {}),
         updatedBy: user.id
       }
@@ -272,10 +299,36 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
         guildId
       });
     }
+    if (moduleId === "police-reports") {
+      emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "update", botId, guildId });
+    }
 
     return res.json({
       module: savedModule
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+advancedModulesRouter.post("/:botId/:guildId/police-reports/publish", async (req, res, next) => {
+  try {
+    const botId = botIdSchema.parse(req.params.botId);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const user = res.locals.dashboardAuth.user as AuthSessionUser;
+    if (!(await canUseDevBotModule(user, botId, guildId, "police-reports"))) {
+      return res.status(403).json({ message: "Este modulo nao foi liberado para este bot ou servidor." });
+    }
+    const module = await getBotGuildModuleConfig(botId, guildId, "police-reports");
+    const config = policeReportsConfigSchema.parse(module.config);
+    if (!config.complaintTypes.length) {
+      return res.status(409).json({ message: "Cadastre ao menos um tipo de denuncia antes de publicar o painel." });
+    }
+    if (!config.panelChannelId) {
+      return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
+    }
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "publish", botId, guildId });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }
@@ -401,6 +454,16 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
     }
 
     return result.data;
+  }
+
+  if (moduleId === "police-reports") {
+    const parsed = policeReportsConfigSchema.parse(config);
+    return {
+      ...parsed,
+      complaintTypes: parsed.complaintTypes
+        .map((item, index) => ({ ...item, order: Number.isFinite(item.order) ? item.order : index }))
+        .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
+    };
   }
 
   return config;

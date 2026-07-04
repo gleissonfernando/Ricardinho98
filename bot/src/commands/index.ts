@@ -16,6 +16,7 @@ import { serverClonerCommand } from "./serverCloner";
 import { serverGeneratorCommand } from "./serverGenerator";
 import { ticketCommand } from "./ticket";
 import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./policePatrolReports";
+import { policeReportsCommand } from "../services/policeReportsService";
 import type { BotCommand } from "../types";
 
 export function createCommandCollection() {
@@ -39,6 +40,7 @@ export function createCommandCollection() {
     ticketCommand,
     policePatrolReportCommand,
     viewPolicePatrolReportCommand,
+    policeReportsCommand,
     serverClonerCommand,
     serverGeneratorCommand
   ].forEach((command) => {

@@ -24,6 +24,7 @@ import {
   Mic2,
   Music2,
   PlayCircle,
+  Plus,
   SmilePlus,
   Plug,
   Radio,
@@ -116,6 +117,7 @@ import {
   patchGuildSettings,
   publishFivemGoalPanel,
   publishFivemHierarchyPanel,
+  publishPoliceReportsPanel,
   publishManualRegistrationPanel,
   publishRulesPanel,
   refreshApplicationEmojis,
@@ -2781,6 +2783,8 @@ type PoliceReportsConfig = {
   buttonLabel: string;
   color: string;
   thumbnailUrl: string;
+  panelMessageId: string | null;
+  complaintTypes: Array<{ id: string; name: string; description: string | null; emoji: string | null; order: number }>;
 };
 
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
@@ -2789,11 +2793,13 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   categoryId: null,
   logChannelId: null,
   responsibleRoleId: null,
-  panelTitle: "Sistema de Denuncias IAB",
+  panelTitle: "Sistema de Denuncias EAB",
   panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
   buttonLabel: "Abrir denuncia",
   color: "#7c3aed",
-  thumbnailUrl: ""
+  thumbnailUrl: "",
+  panelMessageId: null,
+  complaintTypes: []
 };
 
 function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
@@ -2818,13 +2824,25 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
       })
-      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias IAB."))
+      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias EAB."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [botId, guild?.id]);
 
   function patch(value: Partial<PoliceReportsConfig>) {
     setConfig((current) => ({ ...current, ...value }));
+  }
+
+  function addComplaintType() {
+    patch({ complaintTypes: [...config.complaintTypes, { id: `denuncia-${Date.now()}`, name: "", description: null, emoji: null, order: config.complaintTypes.length + 1 }] });
+  }
+
+  function patchComplaintType(index: number, value: Partial<PoliceReportsConfig["complaintTypes"][number]>) {
+    patch({ complaintTypes: config.complaintTypes.map((item, itemIndex) => itemIndex === index ? { ...item, ...value } : item) });
+  }
+
+  function removeComplaintType(index: number) {
+    patch({ complaintTypes: config.complaintTypes.filter((_, itemIndex) => itemIndex !== index).map((item, itemIndex) => ({ ...item, order: itemIndex + 1 })) });
   }
 
   async function save() {
@@ -2835,9 +2853,33 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
     try {
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
       setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
-      setMessage("Configuracao do IAB salva.");
+      setMessage("Configuracao do EAB salva.");
     } catch {
-      setError("Nao foi possivel salvar a configuracao do IAB.");
+      setError("Nao foi possivel salvar a configuracao do EAB.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publish() {
+    if (!botId || !guild) return;
+    if (!config.complaintTypes.length) {
+      setError("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
+      return;
+    }
+    if (config.complaintTypes.some((item) => !item.name.trim())) {
+      setError("Informe o nome de todos os tipos de denuncia.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
+      await publishPoliceReportsPanel(botId, guild.id);
+      setMessage("Painel de denuncias enviado para atualizacao no Discord.");
+    } catch (cause) {
+      setError(readResponseMessage(cause) ?? "Nao foi possivel publicar o painel de denuncias.");
     } finally {
       setSaving(false);
     }
@@ -2848,13 +2890,16 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias IAB</CardTitle>
+            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias EAB</CardTitle>
             <CardDescription>Configuracao exclusiva da area Policia.</CardDescription>
           </div>
           <div className="flex items-center gap-3">
             <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
             <Button disabled={!canManage || !botId || !guild || loading || saving} onClick={() => void save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar
+            </Button>
+            <Button disabled={!canManage || !botId || !guild || loading || saving || !config.complaintTypes.length} onClick={() => void publish()} size="sm" type="button" variant="outline">
+              <Upload className="mr-2 h-4 w-4" />Publicar painel
             </Button>
           </div>
         </div>
@@ -2874,6 +2919,25 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
           <div className="md:col-span-2">
             <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
           </div>
+        </div>
+        <div className="space-y-3 border-t border-zinc-800 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white">Tipos de denuncia</p>
+            <Button disabled={!canManage || loading} onClick={addComplaintType} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Adicionar tipo</Button>
+          </div>
+          {config.complaintTypes
+            .map((item, originalIndex) => ({ item, originalIndex }))
+            .sort((left, right) => left.item.order - right.item.order)
+            .map(({ item, originalIndex }) => (
+              <div className="grid gap-3 rounded-md border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1fr_1.4fr_100px_90px_auto]" key={item.id}>
+                <TicketField disabled={!canManage} label="Nome" onChange={(name) => patchComplaintType(originalIndex, { name })} value={item.name} />
+                <TicketField disabled={!canManage} label="Descricao (opcional)" onChange={(description) => patchComplaintType(originalIndex, { description: description || null })} value={item.description ?? ""} />
+                <TicketField disabled={!canManage} label="Emoji" onChange={(emoji) => patchComplaintType(originalIndex, { emoji: emoji || null })} value={item.emoji ?? ""} />
+                <TicketField disabled={!canManage} label="Ordem" onChange={(order) => patchComplaintType(originalIndex, { order: Number(order) || 0 })} value={String(item.order)} />
+                <div className="flex items-end"><Button disabled={!canManage} onClick={() => removeComplaintType(originalIndex)} size="icon" title="Remover tipo" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button></div>
+              </div>
+            ))}
+          {!config.complaintTypes.length ? <div className="rounded-md border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">Cadastre ao menos um tipo para liberar a publicacao.</div> : null}
         </div>
       </CardContent>
     </Card>
@@ -3640,7 +3704,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
     { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
-    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Sistema de Denuncias IAB" }
+    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, EAB", title: "Sistema de Denuncias EAB" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -8382,7 +8446,7 @@ function policePanelImageSlotsForView(view: ViewId) {
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias IAB" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias EAB" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },

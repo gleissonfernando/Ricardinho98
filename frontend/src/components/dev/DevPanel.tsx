@@ -162,7 +162,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "fivem-actions", label: "FiveM - Acoes FAC" },
   { id: "police-actions", label: "Policia - Acoes" },
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
-  { id: "police-reports", label: "Policia - Denuncias IAB" },
+  { id: "police-reports", label: "Policia - Denuncias EAB" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalização" }
 ];
@@ -489,7 +489,7 @@ const botMenuItems: BotMenuItem[] = [
       },
       {
         id: "police-reports",
-        label: "Denuncias IAB",
+        label: "Denuncias EAB",
         description: "Denuncias internas e corregedoria",
         icon: ShieldAlert,
         moduleIds: ["police-reports"]
