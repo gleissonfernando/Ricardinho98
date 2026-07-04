@@ -24,6 +24,10 @@ export async function handleMessageCreate(message: Message, context: BotContext)
     console.error("[police-patrol] falha ao salvar mensagem:", error instanceof Error ? error.message : error);
   });
 
+  if (await handlePoliceReportsMessage(message, context)) {
+    return;
+  }
+
   if (await handleTemporaryVoiceMessage(message, context)) {
     return;
   }
@@ -48,10 +52,6 @@ export async function handleMessageCreate(message: Message, context: BotContext)
   }
 
   if (isBotModuleEnabled("fivem-hierarchy") && await handleFivemHierarchyMessage(message, context)) {
-    return;
-  }
-
-  if (isBotModuleEnabled("police-reports") && await handlePoliceReportsMessage(message, context)) {
     return;
   }
 

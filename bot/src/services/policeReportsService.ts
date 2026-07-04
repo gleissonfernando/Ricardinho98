@@ -433,13 +433,10 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
   if (message.author.bot || !message.guild || !("topic" in message.channel)) return false;
   const ticket = parsePoliceReportTopic(String(message.channel.topic ?? ""));
   if (!ticket || !ticket.anonymous) return false;
-
-  const config = await loadConfig(message.guild.id, context).catch(() => null);
-  if (!config?.enabled || !("send" in message.channel)) return false;
-  const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-  const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
-  const isStaff = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || responsibleRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
-  const isAuthor = !isStaff;
+  if (!("send" in message.channel)) return false;
+  const requesterId = findRequesterId(message.channel, message.guild.members.me?.id);
+  const isAuthor = message.author.id === requesterId;
+  const isStaff = !isAuthor;
 
   const files = message.attachments.map((attachment) => ({ attachment: attachment.url, name: attachment.name ?? undefined }));
   const content = [
@@ -447,11 +444,11 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
     message.content,
     ...message.stickers.map((sticker) => `[Sticker: ${sticker.name}]`)
   ].filter(Boolean).join("\n");
-  await message.delete().catch(() => null);
+  const deleted = await message.delete().then(() => true).catch(() => false);
   await message.channel.send({ allowedMentions: { parse: [] }, content: content || "*Anexo enviado*", files }).catch(async (error) => {
     await writeLog(context, message.guild!.id, message.author.id, "police-reports.anonymous_relay_failed", "Falha ao retransmitir mensagem anonima.", { channelId: message.channel.id, error: error instanceof Error ? error.message : String(error) });
   });
-  await writeLog(context, message.guild.id, message.author.id, "police-reports.anonymous_message", "Mensagem retransmitida em denuncia anonima.", { attachmentCount: message.attachments.size, channelId: message.channel.id, isStaff, selectedType: ticket.selectedId });
+  await writeLog(context, message.guild.id, message.author.id, "police-reports.anonymous_message", "Mensagem retransmitida em denuncia anonima.", { attachmentCount: message.attachments.size, channelId: message.channel.id, deleted, isStaff, selectedType: ticket.selectedId });
   return true;
 }
 
