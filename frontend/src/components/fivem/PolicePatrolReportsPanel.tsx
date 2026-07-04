@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
 import { FileText, Loader2, Save, Shield, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { deletePolicePatrolReport, getGuildLiveOptions, getPolicePatrolDashboard, savePolicePatrolSettings } from "../../lib/api";
 import type { DashboardGuild, GuildCategoryOption, GuildChannelOption, GuildRoleOption, PolicePatrolDashboard, PolicePatrolSettings } from "../../types";
-import { Badge } from "../ui/badge"; import { Button } from "../ui/button"; import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"; import { Switch } from "../ui/switch";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Switch } from "../ui/switch";
 import { FivemResourceMultiSelect, FivemResourceSelect } from "./FivemResourceSelect";
 
 export function PolicePatrolReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
@@ -23,6 +26,8 @@ export function PolicePatrolReportsPanel({ botId, canManage, guild }: { botId?: 
       <FivemResourceMultiSelect disabled={!canManage} label="Cargos de supervisão nos canais" options={roles} values={data.settings.supervisorRoleIds} onChange={(supervisorRoleIds) => patch({ supervisorRoleIds })} />
       <FivemResourceSelect disabled={!canManage} label="Canal de logs" options={channels} value={data.settings.logChannelId} onChange={(logChannelId) => patch({ logChannelId })} />
       <FivemResourceSelect disabled={!canManage} label="Categoria dos canais temporários" options={categories} value={data.settings.temporaryCategoryId} onChange={(temporaryCategoryId) => patch({ temporaryCategoryId })} />
+      <FivemResourceSelect disabled={!canManage} label="Categoria de arquivo" options={categories} value={data.settings.archiveCategoryId} onChange={(archiveCategoryId) => patch({ archiveCategoryId })} />
+      <FivemResourceMultiSelect disabled={!canManage} label="Cargos que podem ver o canal arquivado" options={roles} values={data.settings.archiveViewRoleIds} onChange={(archiveViewRoleIds) => patch({ archiveViewRoleIds })} />
       <label className="text-sm text-zinc-300">Excluir canal após (minutos)<input className="mt-2 h-11 w-full rounded-lg border border-zinc-800 bg-black px-3" type="number" min={0} max={1440} disabled={!canManage} value={data.settings.deleteDelayMinutes} onChange={(event) => patch({ deleteDelayMinutes: Number(event.target.value) })} /></label>
       <label className="text-sm text-zinc-300">Exportação padrão<select className="mt-2 h-11 w-full rounded-lg border border-zinc-800 bg-black px-3" disabled={!canManage} value={data.settings.defaultExportFormat} onChange={(event) => patch({ defaultExportFormat: event.target.value as PolicePatrolSettings["defaultExportFormat"] })}><option value="html">HTML</option><option value="pdf">PDF</option><option value="json">JSON</option></select></label>
       <div className="flex items-center justify-between gap-3 lg:col-span-2"><label className="flex items-center gap-2"><Switch checked={data.settings.enabled} disabled={!canManage} onCheckedChange={(enabled) => patch({ enabled })} />Sistema policial ativo</label><Button disabled={!canManage || saving} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar</Button></div>

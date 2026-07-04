@@ -3,13 +3,13 @@ import { env } from "../config/env";
 import { getMongoCollections, type MongoPolicePatrolMessage, type MongoPolicePatrolSettings } from "../database/mongo";
 
 export const POLICE_PATROL_MODULE_ID = "police-patrol-reports";
-type SettingsInput = Partial<Pick<MongoPolicePatrolSettings, "enabled" | "creatorRoleIds" | "viewerRoleIds" | "deleteRoleIds" | "supervisorRoleIds" | "logChannelId" | "temporaryCategoryId" | "deleteDelayMinutes" | "defaultExportFormat">>;
+type SettingsInput = Partial<Pick<MongoPolicePatrolSettings, "enabled" | "creatorRoleIds" | "viewerRoleIds" | "deleteRoleIds" | "supervisorRoleIds" | "logChannelId" | "temporaryCategoryId" | "archiveCategoryId" | "archiveViewRoleIds" | "deleteDelayMinutes" | "defaultExportFormat">>;
 
 export async function getPolicePatrolSettings(botId: string, guildId: string) {
   const { policePatrolSettings } = await getMongoCollections();
   const found = await policePatrolSettings.findOne({ botId, guildId }); if (found) return settingsDto(found);
   const now = new Date();
-  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], logChannelId: null, temporaryCategoryId: null, deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
+  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], logChannelId: null, temporaryCategoryId: null, archiveCategoryId: null, archiveViewRoleIds: [], deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
   await policePatrolSettings.updateOne({ botId, guildId }, { $setOnInsert: settings }, { upsert: true });
   return settingsDto((await policePatrolSettings.findOne({ botId, guildId })) ?? settings);
 }
@@ -25,7 +25,7 @@ export async function createPolicePatrolReport(input: { botId: string; guildId: 
   const openKey = `${input.botId}:${input.guildId}:${input.authorId}:${input.officerId}`;
   const existing = await policePatrolReports.findOne({ botId: input.botId, guildId: input.guildId, authorId: input.authorId, officerId: input.officerId, status: { $in: ["draft", "active"] } });
   if (existing) return reportDto(existing);
-  const report = { _id: randomUUID(), ...input, openKey, patrolType: input.patrolType ?? null, initialNotes: input.initialNotes ?? null, patrolStart: null, patrolEnd: null, durationMinutes: null, channelId: null, panelMessageId: null, lastAuthorMessageId: null, messageCount: 0, attachmentCount: 0, status: "draft" as const, createdAt: now, startedAt: null, finishedAt: null, cancelledAt: null, deleteAt: null, updatedAt: now };
+  const report = { _id: randomUUID(), ...input, openKey, patrolType: input.patrolType ?? null, initialNotes: input.initialNotes ?? null, patrolStart: null, patrolEnd: null, durationMinutes: null, channelId: null, panelMessageId: null, lastAuthorMessageId: null, messageCount: 0, attachmentCount: 0, status: "draft" as const, createdAt: now, startedAt: null, finishedAt: null, cancelledAt: null, archivedAt: null, archivedBy: null, archiveCategoryId: null, archiveReason: null, deleteAt: null, updatedAt: now };
   try { await policePatrolReports.insertOne(report); } catch (error: any) { if (error?.code === 11000) { const duplicate = await policePatrolReports.findOne({ openKey }); if (duplicate) return reportDto(duplicate); } throw error; } await audit(report._id, input.botId, input.guildId, input.authorId, "created", {}); return reportDto(report);
 }
 
@@ -49,11 +49,15 @@ export async function appendPolicePatrolMessage(botId: string, reportId: string,
   await policePatrolReports.updateOne({ _id: reportId, botId }, { $set: { lastAuthorMessageId: input.discordMessageId, updatedAt: new Date() }, $inc: { messageCount: 1, attachmentCount: input.attachments.length } }); return messageDto(item);
 }
 
-export async function finishPolicePatrolReport(botId: string, reportId: string, actorId: string, deleteDelayMinutes: number) {
-  const { policePatrolReports } = await getMongoCollections(); const report = await policePatrolReports.findOne({ _id: reportId, botId });
+export async function finishPolicePatrolReport(botId: string, reportId: string, actorId: string, deleteDelayMinutes: number, archiveReason?: string | null) {
+  const { policePatrolReports, policePatrolSettings } = await getMongoCollections(); const report = await policePatrolReports.findOne({ _id: reportId, botId });
   if (!report) throw serviceError("Relatório não encontrado.", 404); if (report.authorId !== actorId) throw serviceError("Somente o responsável pode finalizar este relatório.", 403);
-  const now = new Date(); const deleteAt = new Date(now.getTime() + Math.max(0, deleteDelayMinutes) * 60_000);
-  const result = await policePatrolReports.updateOne({ _id: reportId, botId, status: "active" }, { $set: { status: "finished", finishedAt: now, deleteAt, updatedAt: now }, $unset: { openKey: "" } }); if (!result.matchedCount) throw serviceError("Este relatório não está em andamento.", 409); await audit(reportId, botId, report.guildId, actorId, "finished", {}); return getPolicePatrolReport(botId, reportId);
+  const settings = await policePatrolSettings.findOne({ botId, guildId: report.guildId });
+  const normalizedReason = archiveReason?.trim() ? archiveReason.trim() : null;
+  const now = new Date();
+  const archiveTarget = settings?.archiveCategoryId ?? null;
+  const shouldArchive = Boolean(normalizedReason || archiveTarget);
+  const result = await policePatrolReports.updateOne({ _id: reportId, botId, status: "active" }, { $set: { status: "finished", finishedAt: now, archivedAt: shouldArchive ? now : null, archivedBy: shouldArchive ? actorId : null, archiveCategoryId: archiveTarget, archiveReason: normalizedReason, deleteAt: null, updatedAt: now }, $unset: { openKey: "" } }); if (!result.matchedCount) throw serviceError("Este relatório não está em andamento.", 409); await audit(reportId, botId, report.guildId, actorId, "finished", { archiveReason: normalizedReason, archiveCategoryId: archiveTarget }); return getPolicePatrolReport(botId, reportId);
 }
 
 export async function cancelPolicePatrolReport(botId: string, reportId: string, actorId: string, deleteDelayMinutes: number) {
@@ -66,7 +70,7 @@ export async function getPolicePatrolReport(botId: string, reportId: string) { c
 export async function getPolicePatrolReportByChannel(botId: string, channelId: string) { const { policePatrolReports } = await getMongoCollections(); const report = await policePatrolReports.findOne({ botId, channelId, status: "active" }); return report ? reportDto(report) : null; }
 export async function listPolicePatrolReports(botId: string, guildId: string, officerId?: string | null, limit = 100) { const { policePatrolReports } = await getMongoCollections(); return (await policePatrolReports.find({ botId, guildId, ...(officerId ? { officerId } : {}) }).sort({ createdAt: -1 }).limit(Math.min(500, limit)).toArray()).map(reportDto); }
 export async function deletePolicePatrolReport(botId: string, reportId: string, actorId: string) { const { policePatrolReports, policePatrolMessages, policePatrolFiles } = await getMongoCollections(); const report = await policePatrolReports.findOne({ _id: reportId, botId }); if (!report) return null; await Promise.all([policePatrolMessages.deleteMany({ reportId, botId }), policePatrolFiles.deleteMany({ reportId, botId })]); await policePatrolReports.deleteOne({ _id: reportId, botId }); await audit(reportId, botId, report.guildId, actorId, "deleted", {}); return reportDto(report); }
-export async function listPolicePatrolChannelsDue(botId: string) { const { policePatrolReports } = await getMongoCollections(); return (await policePatrolReports.find({ botId, channelId: { $ne: null }, deleteAt: { $lte: new Date() }, status: { $in: ["finished", "cancelled"] } }).limit(100).toArray()).map(reportDto); }
+export async function listPolicePatrolChannelsDue(botId: string) { const { policePatrolReports } = await getMongoCollections(); return (await policePatrolReports.find({ botId, channelId: { $ne: null }, deleteAt: { $lte: new Date() }, status: "cancelled" }).limit(100).toArray()).map(reportDto); }
 export async function clearPolicePatrolChannel(botId: string, reportId: string) { const { policePatrolReports } = await getMongoCollections(); await policePatrolReports.updateOne({ _id: reportId, botId }, { $set: { channelId: null, panelMessageId: null, updatedAt: new Date() } }); }
 export async function savePolicePatrolFile(botId: string, reportId: string, input: { discordAttachmentId: string; name: string; mimeType: string; buffer: Buffer }) { const { policePatrolReports, policePatrolFiles } = await getMongoCollections(); const report = await policePatrolReports.findOne({ _id: reportId, botId }); if (!report) throw serviceError("Relatório não encontrado.", 404); const existing = await policePatrolFiles.findOne({ botId, discordAttachmentId: input.discordAttachmentId }); if (existing) return fileDto(existing); const file = { _id: randomUUID(), reportId, botId, guildId: report.guildId, ...input, size: input.buffer.length, createdAt: new Date() }; await policePatrolFiles.insertOne(file); return fileDto(file); }
 export async function getPolicePatrolFile(fileId: string) { const { policePatrolFiles } = await getMongoCollections(); return policePatrolFiles.findOne({ _id: fileId }); }
@@ -75,7 +79,7 @@ async function requireReport(botId: string, reportId: string) { const { policePa
 async function audit(reportId: string, botId: string, guildId: string, actorId: string | null, action: string, metadata: Record<string, unknown>) { const { policePatrolAudits } = await getMongoCollections(); await policePatrolAudits.insertOne({ _id: randomUUID(), reportId, botId, guildId, actorId, action, metadata, createdAt: new Date() }); }
 function timeMinutes(start: string, end: string) { const parse = (value: string) => { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw serviceError("Horário inválido. Use HH:mm.", 400); const [h, m] = value.split(":").map(Number); return h! * 60 + m!; }; const a = parse(start); let b = parse(end); if (b < a) b += 1440; return b - a; }
 function settingsDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
-function reportDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), startedAt: value.startedAt?.toISOString() ?? null, finishedAt: value.finishedAt?.toISOString() ?? null, cancelledAt: value.cancelledAt?.toISOString() ?? null, deleteAt: value.deleteAt?.toISOString() ?? null, updatedAt: value.updatedAt.toISOString() }; }
+function reportDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), startedAt: value.startedAt?.toISOString() ?? null, finishedAt: value.finishedAt?.toISOString() ?? null, cancelledAt: value.cancelledAt?.toISOString() ?? null, archivedAt: value.archivedAt?.toISOString() ?? null, archivedBy: value.archivedBy ?? null, archiveCategoryId: value.archiveCategoryId ?? null, archiveReason: value.archiveReason ?? null, deleteAt: value.deleteAt?.toISOString() ?? null, updatedAt: value.updatedAt.toISOString() }; }
 function messageDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString() }; }
 function fileDto(value: any) { const path = `/api/police-patrol-reports/files/${value._id}`; return { id: value._id, name: value.name, mimeType: value.mimeType, size: value.size, url: new URL(path, env.FRONTEND_URL).toString() }; }
 function serviceError(message: string, statusCode: number) { return Object.assign(new Error(message), { statusCode }); }

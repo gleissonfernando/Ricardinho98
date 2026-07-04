@@ -1,17 +1,22 @@
-import { Router, raw } from "express";
+import { raw, Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireBot } from "../middleware/auth";
 import { canReadDevBotModule, canUseDevBotModule, getBotApiPermissions } from "../services/devBotService";
-import { resolveRequestBotId } from "../services/requestBotScopeService";
 import {
-  appendPolicePatrolMessage, cancelPolicePatrolReport, clearPolicePatrolChannel, createPolicePatrolReport,
-  deletePolicePatrolReport, finishPolicePatrolReport, getPolicePatrolReport, getPolicePatrolReportByChannel,
-  getPolicePatrolSettings, getPolicePatrolFile, listPolicePatrolChannelsDue, listPolicePatrolReports, POLICE_PATROL_MODULE_ID,
-  savePolicePatrolSettings, savePolicePatrolFile, setPolicePatrolChannel, startPolicePatrolReport
+    appendPolicePatrolMessage, cancelPolicePatrolReport, clearPolicePatrolChannel, createPolicePatrolReport,
+    deletePolicePatrolReport, finishPolicePatrolReport,
+    getPolicePatrolFile,
+    getPolicePatrolReport, getPolicePatrolReportByChannel,
+    getPolicePatrolSettings,
+    listPolicePatrolChannelsDue, listPolicePatrolReports, POLICE_PATROL_MODULE_ID,
+    savePolicePatrolFile,
+    savePolicePatrolSettings,
+    setPolicePatrolChannel, startPolicePatrolReport
 } from "../services/policePatrolReportService";
+import { resolveRequestBotId } from "../services/requestBotScopeService";
 
 const snowflake = z.string().regex(/^\d{5,32}$/); const id = z.string().uuid();
-const settingsSchema = z.object({ enabled: z.boolean().optional(), creatorRoleIds: z.array(snowflake).max(100).optional(), viewerRoleIds: z.array(snowflake).max(100).optional(), deleteRoleIds: z.array(snowflake).max(100).optional(), supervisorRoleIds: z.array(snowflake).max(100).optional(), logChannelId: snowflake.nullable().optional(), temporaryCategoryId: snowflake.nullable().optional(), deleteDelayMinutes: z.coerce.number().int().min(0).max(1440).optional(), defaultExportFormat: z.enum(["html", "pdf", "json"]).optional() });
+const settingsSchema = z.object({ enabled: z.boolean().optional(), creatorRoleIds: z.array(snowflake).max(100).optional(), viewerRoleIds: z.array(snowflake).max(100).optional(), deleteRoleIds: z.array(snowflake).max(100).optional(), supervisorRoleIds: z.array(snowflake).max(100).optional(), logChannelId: snowflake.nullable().optional(), temporaryCategoryId: snowflake.nullable().optional(), archiveCategoryId: snowflake.nullable().optional(), archiveViewRoleIds: z.array(snowflake).max(100).optional(), deleteDelayMinutes: z.coerce.number().int().min(0).max(1440).optional(), defaultExportFormat: z.enum(["html", "pdf", "json"]).optional() });
 export const policePatrolReportsRouter = Router();
 
 policePatrolReportsRouter.get("/files/:fileId", requireAuth, async (req, res, next) => { try { const file = await getPolicePatrolFile(id.parse(req.params.fileId)); if (!file) throw routeError("Arquivo não encontrado.", 404); await authorize(res.locals.dashboardAuth.user, file.botId, file.guildId, false); res.setHeader("Content-Type", file.mimeType || "application/octet-stream"); res.setHeader("Content-Length", String(file.size)); res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`); res.send(file.buffer); } catch (error) { next(error); } });

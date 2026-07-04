@@ -1,8 +1,8 @@
 import {
-  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder,
-  PermissionFlagsBits, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
-  type ButtonInteraction, type ChatInputCommandInteraction, type Client, type GuildMember, type Interaction,
-  type Message, type ModalSubmitInteraction, type StringSelectMenuInteraction, type UserSelectMenuInteraction
+    ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder,
+    PermissionFlagsBits, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
+    type ButtonInteraction, type ChatInputCommandInteraction, type Client, type GuildMember, type Interaction,
+    type Message, type ModalSubmitInteraction, type StringSelectMenuInteraction, type UserSelectMenuInteraction
 } from "discord.js";
 import { isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
@@ -55,7 +55,8 @@ export async function handlePolicePatrolInteraction(interaction: Interaction, co
   const [, action, reportId] = interaction.customId.split(":");
   if (interaction.isButton() && action === "start") await showStartModal(interaction, reportId!);
   else if (interaction.isModalSubmit() && action === "start_modal") await startReport(interaction, context, reportId!);
-  else if (interaction.isButton() && action === "finish") await finishReport(interaction, context, reportId!);
+  else if (interaction.isButton() && action === "finish") await showFinishModal(interaction, reportId!);
+  else if (interaction.isModalSubmit() && action === "finish_modal") await finishReport(interaction, context, reportId!);
   else if (interaction.isButton() && action === "continue") await interaction.reply({ content: "Continue enviando mensagens neste canal. Tudo será salvo automaticamente.", ephemeral: true });
   else if (interaction.isButton() && action === "cancel") await cancelReport(interaction, context, reportId!);
   else if (interaction.isUserSelectMenu() && action === "officer") await selectOfficer(interaction, context);
@@ -99,11 +100,29 @@ async function startReport(interaction: ModalSubmitInteraction, context: BotCont
   await interaction.editReply("Agora descreva tudo que aconteceu. Envie quantas mensagens desejar; todas serão salvas automaticamente.");
 }
 
-async function finishReport(interaction: ButtonInteraction, context: BotContext, reportId: string) {
+async function showFinishModal(interaction: ButtonInteraction, reportId: string) {
+  const modal = new ModalBuilder().setCustomId(`${PREFIX}:finish_modal:${reportId}`).setTitle("Encerrar relatório").addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("reason").setLabel("Motivo do encerramento (opcional)").setStyle(TextInputStyle.Paragraph).setRequired(false).setPlaceholder("Ex.: relatório concluído, sem pendências."))
+  );
+  await interaction.showModal(modal);
+}
+
+async function finishReport(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext, reportId: string) {
   await interaction.deferReply({ ephemeral: true }); const settings = await context.api.getPolicePatrolSettings(interaction.guildId!);
-  const data = await context.api.finishPolicePatrolReport(reportId, interaction.user.id, settings.deleteDelayMinutes);
+  const archiveReason = interaction.isModalSubmit() ? normalizeArchiveReason(interaction.fields.getTextInputValue("reason")) : null;
+  const data = await context.api.finishPolicePatrolReport(reportId, interaction.user.id, settings.deleteDelayMinutes, archiveReason);
   if (data.report.lastAuthorMessageId && interaction.channel?.isTextBased()) { const message = await interaction.channel.messages.fetch(data.report.lastAuthorMessageId).catch(() => null); await message?.react("👍").catch(() => null); }
-  if (interaction.channel?.isTextBased() && "permissionOverwrites" in interaction.channel) { await Promise.all([interaction.channel.permissionOverwrites.edit(data.report.authorId, { SendMessages: false }), interaction.channel.permissionOverwrites.edit(data.report.officerId, { SendMessages: false }), ...settings.supervisorRoleIds.map((roleId) => interaction.channel!.isThread() ? Promise.resolve() : (interaction.channel as any).permissionOverwrites.edit(roleId, { SendMessages: false }))]).catch(() => null); }
+  const guild = interaction.guild;
+  const channel = data.report.channelId ? await guild?.channels.fetch(data.report.channelId).catch(() => null) : null;
+  if (guild && channel && channel.isTextBased() && "permissionOverwrites" in channel) {
+    const overwriteManager = channel.permissionOverwrites;
+    await overwriteManager.edit(guild.roles.everyone.id, { ViewChannel: false, ReadMessageHistory: false, SendMessages: false }).catch(() => null);
+    await overwriteManager.edit(data.report.authorId, { ViewChannel: false, ReadMessageHistory: false, SendMessages: false }).catch(() => null);
+    await overwriteManager.edit(data.report.officerId, { ViewChannel: false, ReadMessageHistory: false, SendMessages: false }).catch(() => null);
+    for (const roleId of settings.archiveViewRoleIds) { await overwriteManager.edit(roleId, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(() => null); }
+    await overwriteManager.edit(interaction.client.user.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(() => null);
+    if (settings.archiveCategoryId) { await channel.setParent(settings.archiveCategoryId, { lockPermissions: false }).catch(() => null); }
+  }
   await updatePanel(interaction, finishedPanel(data.report));
   await sendLog(interaction, context, settings, data.report);
   await interaction.deleteReply().catch(() => null);
@@ -129,7 +148,7 @@ async function exportDefaultReport(interaction: ButtonInteraction, context: BotC
 
 async function deleteReport(interaction: ButtonInteraction, context: BotContext, reportId: string) { const settings = await context.api.getPolicePatrolSettings(interaction.guildId!); const member = interaction.member as GuildMember; if (!hasRoleOrAdmin(member, settings.deleteRoleIds)) { await interaction.reply({ content: "Somente administradores autorizados podem excluir.", ephemeral: true }); return; } await context.api.deletePolicePatrolReport(reportId, interaction.user.id); await interaction.reply({ content: "Relatório excluído permanentemente.", ephemeral: true }); }
 
-async function sendLog(interaction: ButtonInteraction, context: BotContext, settings: PolicePatrolSettings, report: PolicePatrolReport) { if (!settings.logChannelId || !interaction.guild) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (!channel?.isTextBased() || channel.isDMBased()) return; const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver Relatório").setEmoji("📄").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}:export:${report.id}`).setLabel("Exportar").setEmoji("🗂️").setStyle(ButtonStyle.Secondary)); await channel.send({ components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: `# Novo relatório registrado\n**Policial:** <@${report.officerId}>\n**Autor:** <@${report.authorId}>\n**Tempo:** ${duration(report.durationMinutes)}\n**Data:** <t:${Math.floor(Date.parse(report.createdAt) / 1000)}:D>` }, buttons] }], flags: MessageFlags.IsComponentsV2 }); }
+async function sendLog(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext, settings: PolicePatrolSettings, report: PolicePatrolReport) { if (!settings.logChannelId || !interaction.guild) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (!channel?.isTextBased() || channel.isDMBased()) return; const categoryName = settings.archiveCategoryId ? await interaction.guild.channels.fetch(settings.archiveCategoryId).catch(() => null) : null; const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver Relatório").setEmoji("📄").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}:export:${report.id}`).setLabel("Exportar").setEmoji("🗂️").setStyle(ButtonStyle.Secondary)); const details = [`# Relatório encerrado`, `**Policial:** <@${report.officerId}>`, `**Autor:** <@${report.authorId}>`, `**Tempo:** ${duration(report.durationMinutes)}`, `**Finalizado por:** <@${interaction.user.id}>`, `**Motivo:** ${report.archiveReason || "Não informado"}`, ...(settings.archiveCategoryId ? [`**Categoria de arquivo:** ${categoryName && "name" in categoryName ? categoryName.name : settings.archiveCategoryId}`] : [])].join("\n"); await channel.send({ components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: details }, buttons] }], flags: MessageFlags.IsComponentsV2 }); }
 
 async function updatePanel(interaction: any, payload: any) { if (!interaction.message) return; await interaction.message.edit(payload).catch(() => null); }
 async function cleanupDueChannels(client: Client, context: BotContext) { const reports = await context.api.getPolicePatrolChannelsDue().catch(() => []); for (const report of reports) { if (!report.channelId) continue; const guild = await client.guilds.fetch(report.guildId).catch(() => null); const channel = await guild?.channels.fetch(report.channelId).catch(() => null); await channel?.delete(`Relatório ${report.status} arquivado`).catch(() => null); await context.api.clearPolicePatrolChannel(report.id).catch(() => null); } }
@@ -143,6 +162,11 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
     if (index > 0 && visual.useGlobalDefault) return [];
     return [{ imageEnabled: visual.imageEnabled, imagePosition: visual.imagePosition, imageUrl: visual.imageUrl }];
   });
+}
+
+export function normalizeArchiveReason(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }
 
 function initialPanel(report: PolicePatrolReport, visuals: PanelVisualConfig[] = []) {

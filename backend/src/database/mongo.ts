@@ -1271,8 +1271,8 @@ export type MongoFivemActionSession = {
 export type MongoPolicePatrolSettings = {
   _id: string; botId: string; guildId: string; enabled: boolean;
   creatorRoleIds: string[]; viewerRoleIds: string[]; deleteRoleIds: string[]; supervisorRoleIds: string[];
-  logChannelId: string | null; temporaryCategoryId: string | null; deleteDelayMinutes: number;
-  defaultExportFormat: "html" | "pdf" | "json"; createdAt: Date; updatedAt: Date; updatedBy: string | null;
+  logChannelId: string | null; temporaryCategoryId: string | null; archiveCategoryId: string | null; archiveViewRoleIds: string[];
+  deleteDelayMinutes: number; defaultExportFormat: "html" | "pdf" | "json"; createdAt: Date; updatedAt: Date; updatedBy: string | null;
 };
 
 export type MongoPolicePatrolReport = {
@@ -1281,7 +1281,7 @@ export type MongoPolicePatrolReport = {
   patrolType: string | null; initialNotes: string | null; patrolStart: string | null; patrolEnd: string | null; durationMinutes: number | null;
   channelId: string | null; panelMessageId: string | null; lastAuthorMessageId: string | null;
   messageCount: number; attachmentCount: number; status: "draft" | "active" | "finished" | "cancelled";
-  createdAt: Date; startedAt: Date | null; finishedAt: Date | null; cancelledAt: Date | null; deleteAt: Date | null; updatedAt: Date;
+  createdAt: Date; startedAt: Date | null; finishedAt: Date | null; cancelledAt: Date | null; archivedAt: Date | null; archivedBy: string | null; archiveCategoryId: string | null; archiveReason: string | null; deleteAt: Date | null; updatedAt: Date;
 };
 
 export type MongoPolicePatrolMessage = {

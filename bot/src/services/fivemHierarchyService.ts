@@ -1,11 +1,11 @@
 import {
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-  type ChatInputCommandInteraction,
-  type Client,
-  type Guild,
-  type GuildMember,
-  type Interaction
+    PermissionFlagsBits,
+    SlashCommandBuilder,
+    type ChatInputCommandInteraction,
+    type Client,
+    type Guild,
+    type GuildMember,
+    type Interaction
 } from "discord.js";
 import { isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
@@ -92,7 +92,7 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
   if (!panel.enabled || !panel.panelChannelId) return;
   const channel = await guild.channels.fetch(panel.panelChannelId).catch(() => null);
   if (!channel || !("send" in channel) || !("messages" in channel)) return;
-  const visuals = await getPanelVisualSlots(context, guild.id, "fivem-hierarchy");
+  const visuals = await getPanelVisualSlots(context, guild.id, panel.id);
   const payload = createHierarchyPayload(guild, panel, visuals[0] ?? null, visuals.slice(1));
   let message = panel.panelMessageId ? await channel.messages.fetch(panel.panelMessageId).catch(() => null) : null;
   if (message) {
@@ -110,8 +110,12 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
   return renderComponentsV2Panel({ accentColor: colorToInt(panel.color), description: panel.description ?? `Lista de membros da unidade ${panel.name}`, extraImages, fields: [renderHierarchyText(guild, panel), ...(panel.footerEnabled && panel.footerText ? [panel.footerText] : [])], image: visual?.imageEnabled ? visual : fallbackVisual, moduleId: "fivem-hierarchy", title: panel.title });
 }
 
+export function getHierarchyPanelVisualIds(basePanelId: string) {
+  return [basePanelId, `${basePanelId}-banner-2`, `${basePanelId}-banner-3`];
+}
+
 async function getPanelVisualSlots(context: BotContext, guildId: string, basePanelId: string) {
-  const panelIds = [basePanelId, `${basePanelId}-banner-2`, `${basePanelId}-banner-3`];
+  const panelIds = getHierarchyPanelVisualIds(basePanelId);
   const visuals = await Promise.all(panelIds.map((panelId) => context.api.getPanelVisualSettings(guildId, panelId).catch(() => null)));
 
   return visuals.flatMap((visual, index): PanelVisualConfig[] => {
