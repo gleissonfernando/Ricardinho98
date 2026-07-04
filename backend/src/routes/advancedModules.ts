@@ -68,6 +68,18 @@ const defaultPoliceReportComplaintTypes = [
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
 ];
+function mergeDefaultPoliceReportTypes(types: Array<z.infer<typeof policeReportTypeSchema>>) {
+  const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
+  const matched = new Set<string>();
+  const required = defaultPoliceReportComplaintTypes.map((fallback) => {
+    const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
+    if (existing) matched.add(existing.id);
+    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+  });
+  const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
+  return [...required, ...custom];
+}
 const policeReportsConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),
@@ -485,7 +497,7 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
 
   if (moduleId === "police-reports") {
     const parsed = policeReportsConfigSchema.parse(config);
-    const complaintTypes = parsed.complaintTypes.length ? parsed.complaintTypes : defaultPoliceReportComplaintTypes;
+    const complaintTypes = mergeDefaultPoliceReportTypes(parsed.complaintTypes);
     return {
       ...parsed,
       complaintTypes: complaintTypes

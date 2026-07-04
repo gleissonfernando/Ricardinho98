@@ -2815,6 +2815,19 @@ const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] =
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
 ];
 
+function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintTypes"] = []) {
+  const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
+  const matched = new Set<string>();
+  const required = defaultPoliceReportComplaintTypes.map((fallback) => {
+    const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
+    if (existing) matched.add(existing.id);
+    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+  });
+  const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
+  return [...required, ...custom];
+}
+
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
   panelChannelId: null,
@@ -2857,7 +2870,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       .then(([module, options]) => {
         if (!active) return;
         const savedConfig = module.config as Partial<PoliceReportsConfig>;
-        setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: savedConfig.complaintTypes?.length ? savedConfig.complaintTypes : defaultPoliceReportComplaintTypes });
+        setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
         setChannels(options.channels);
         setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
@@ -2903,7 +2916,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       }
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
       const savedConfig = module.config as Partial<PoliceReportsConfig>;
-      setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: savedConfig.complaintTypes?.length ? savedConfig.complaintTypes : defaultPoliceReportComplaintTypes });
+      setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
       setMessage("Configuracao do IAB salva.");
     } catch {
       setError("Nao foi possivel salvar a configuracao do IAB.");

@@ -58,6 +58,18 @@ const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
 ];
 
+function mergeDefaultComplaintTypes(types: ComplaintType[]) {
+  const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
+  const matched = new Set<string>();
+  const required = DEFAULT_COMPLAINT_TYPES.map((fallback) => {
+    const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
+    if (existing) matched.add(existing.id);
+    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+  });
+  return [...required, ...types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }))];
+}
+
 export const policeReportsCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("config_denuncias")
@@ -195,7 +207,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     channelImageUrl: readString(raw.channelImageUrl) ?? readEnabledImageUrl(channelVisual) ?? "",
     footerImageUrl: readString(raw.footerImageUrl) ?? readEnabledImageUrl(footerVisual) ?? "",
     imagePosition: readImagePosition(raw.imagePosition ?? mainVisual?.imagePosition),
-    complaintTypes: complaintTypes.length ? complaintTypes : DEFAULT_COMPLAINT_TYPES
+    complaintTypes: mergeDefaultComplaintTypes(complaintTypes)
   };
 }
 
