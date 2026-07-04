@@ -1382,6 +1382,15 @@ export class ApiClient {
     return data.module;
   }
 
+  async updatePoliceFlightState(guildId: string, patch: Record<string, unknown>) {
+    const { data } = await this.http.post<{ module: { config: Record<string, unknown> } }>(
+      `/bot/runtime/guilds/${encodeURIComponent(guildId)}/police-flight/state`,
+      patch,
+      { timeout: 8_000 }
+    );
+    return data.module;
+  }
+
   async reportTagVerificationStatus(guildId: string, status: TagVerificationRuntimeStatus) {
     const { data } = await this.http.post<{ ok: boolean }>(
       `/bot/runtime/guilds/${encodeURIComponent(guildId)}/tag-verification/status`,

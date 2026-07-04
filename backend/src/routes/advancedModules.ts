@@ -34,7 +34,8 @@ const moduleIdSchema = z.enum([
   "bio-url-verification",
   "first-lady",
   "music",
-  "police-reports"
+  "police-reports",
+  "police-flight"
 ]);
 const primitiveConfigValue = z.union([
   z.boolean(),
@@ -105,6 +106,40 @@ const policeReportsConfigSchema = z.object({
 });
 const policeReportsSaveSchema = z.object({
   config: policeReportsConfigSchema,
+  guildName: z.string().min(1).max(100).optional()
+});
+const policeFlightConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  panelChannelId: snowflakeSchema.nullable().default(null),
+  panelMessageId: snowflakeSchema.nullable().default(null),
+  logChannelId: snowflakeSchema.nullable().default(null),
+  allowedRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  pilotRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  shooterRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  closeRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  adminRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  titleText: z.string().trim().min(1).max(120).default("🚁 PAINEL DE ESCALACAO DE VOO — DAF"),
+  descriptionText: z.string().trim().max(1200).default("Use os botoes abaixo para abrir uma nova escalacao de voo.\nApos aberto, os membros assumem as posicoes de Piloto e Atirador.\n\nAo finalizar, clique em Fechar Escalacao para encerrar e registrar."),
+  pilotText: z.string().trim().max(300).default("Responsavel pelo voo"),
+  shooterText: z.string().trim().max(300).default("Responsavel pela cobertura"),
+  enterButtonText: z.string().trim().min(1).max(80).default("Abrir Escalacao de Voo"),
+  closeButtonText: z.string().trim().min(1).max(80).default("Fechar Escalacao"),
+  enterButtonEmoji: z.string().trim().max(40).default("🛫"),
+  closeButtonEmoji: z.string().trim().max(40).default("🔒"),
+  embedColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#3b82f6"),
+  allowReplaceOccupiedRole: z.boolean().default(false),
+  maxPilots: z.coerce.number().int().min(1).max(5).default(1),
+  maxShooters: z.coerce.number().int().min(1).max(5).default(1),
+  status: z.enum(["open", "closed"]).default("open"),
+  openedBy: snowflakeSchema.nullable().default(null),
+  openedAt: z.string().datetime().nullable().default(null),
+  closedBy: snowflakeSchema.nullable().default(null),
+  closedAt: z.string().datetime().nullable().default(null),
+  pilotIds: z.array(snowflakeSchema).max(5).default([]),
+  shooterIds: z.array(snowflakeSchema).max(5).default([])
+});
+const policeFlightSaveSchema = z.object({
+  config: policeFlightConfigSchema,
   guildName: z.string().min(1).max(100).optional()
 });
 const autoUnmuteConfigSchema = z.object({
@@ -282,7 +317,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
     const botId = botIdSchema.parse(req.params.botId);
     const guildId = guildIdSchema.parse(req.params.guildId);
     const moduleId = moduleIdSchema.parse(req.params.moduleId);
-    const input = moduleId === "police-reports" ? policeReportsSaveSchema.parse(req.body ?? {}) : saveSchema.parse(req.body ?? {});
+    const input = moduleId === "police-reports" ? policeReportsSaveSchema.parse(req.body ?? {}) : moduleId === "police-flight" ? policeFlightSaveSchema.parse(req.body ?? {}) : saveSchema.parse(req.body ?? {});
     const user = res.locals.dashboardAuth.user as AuthSessionUser;
 
     if (!(await canUseDevBotModule(user, botId, guildId, moduleId))) {
@@ -311,7 +346,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
       moduleId,
       config: {
         ...normalizedConfig,
-        ...(moduleId === "police-reports" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
+        ...(moduleId === "police-reports" || moduleId === "police-flight" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
         ...(moduleId === "tag-verification" ? { botId, guildId } : {}),
         updatedBy: user.id
       }
@@ -334,6 +369,9 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
     }
     if (moduleId === "police-reports") {
       emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "update", botId, guildId });
+    }
+    if (moduleId === "police-flight") {
+      emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "update", botId, guildId });
     }
 
     return res.json({
@@ -367,6 +405,24 @@ advancedModulesRouter.post("/:botId/:guildId/police-reports/publish", async (req
       return res.status(409).json({ message: "Configure a categoria para onde o canal sera enviado depois de finalizado." });
     }
     emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "publish", botId, guildId });
+    return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+advancedModulesRouter.post("/:botId/:guildId/police-flight/publish", async (req, res, next) => {
+  try {
+    const botId = botIdSchema.parse(req.params.botId);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const user = res.locals.dashboardAuth.user as AuthSessionUser;
+    if (!(await canUseDevBotModule(user, botId, guildId, "police-flight"))) {
+      return res.status(403).json({ message: "Este modulo nao foi liberado para este bot ou servidor." });
+    }
+    const module = await getBotGuildModuleConfig(botId, guildId, "police-flight");
+    const config = policeFlightConfigSchema.parse(module.config);
+    if (!config.panelChannelId) return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "publish", botId, guildId });
     return res.json({ ok: true });
   } catch (error) {
     return next(error);
@@ -493,6 +549,10 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
     }
 
     return result.data;
+  }
+
+  if (moduleId === "police-flight") {
+    return policeFlightConfigSchema.parse(config);
   }
 
   if (moduleId === "police-reports") {

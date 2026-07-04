@@ -32,6 +32,16 @@ const tagVerificationStatusSchema = z.object({
 const policeReportsPanelStateSchema = z.object({
   messageId: z.string().regex(/^\d{5,32}$/).nullable()
 });
+const policeFlightStateSchema = z.object({
+  panelMessageId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  status: z.enum(["open", "closed"]).optional(),
+  openedBy: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  openedAt: z.string().datetime().nullable().optional(),
+  closedBy: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  closedAt: z.string().datetime().nullable().optional(),
+  pilotIds: z.array(z.string().regex(/^\d{5,32}$/)).max(5).optional(),
+  shooterIds: z.array(z.string().regex(/^\d{5,32}$/)).max(5).optional()
+});
 
 botDevApiRouter.use(requireBot);
 
@@ -119,6 +129,29 @@ botDevApiRouter.post("/runtime/guilds/:guildId/police-reports/panel-state", asyn
       guildName: current.guildName,
       moduleId: "police-reports",
       config: { ...currentConfig, panelMessageId: input.messageId }
+    });
+    return res.json({ module });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.post("/runtime/guilds/:guildId/police-flight/state", async (req, res, next) => {
+  try {
+    const botId = await resolveRequestBotId(req);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const input = policeFlightStateSchema.parse(req.body ?? {});
+    const authorization = await authorizeBotRuntimeModule({ botId, guildId, moduleId: "police-flight" });
+    if (!authorization.allowed || !botId) return res.status(403).json({ message: authorization.reason });
+    const current = await getBotGuildConfig(botId, guildId);
+    const modules = current.modules as Record<string, Record<string, unknown>>;
+    const currentConfig = modules["police-flight"] ?? {};
+    const module = await updateBotGuildModuleConfig({
+      botId,
+      guildId,
+      guildName: current.guildName,
+      moduleId: "police-flight",
+      config: { ...currentConfig, ...input }
     });
     return res.json({ module });
   } catch (error) {

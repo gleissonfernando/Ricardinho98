@@ -22,6 +22,7 @@ import { handlePolicePatrolInteraction } from "../services/policePatrolReportSer
 import { handleManualPaymentInteraction } from "../services/manualPaymentService";
 import { handlePriceTableInteraction } from "../services/priceTableService";
 import { handlePoliceReportsInteraction } from "../services/policeReportsService";
+import { handlePoliceFlightInteraction } from "../services/policeFlightService";
 
 export async function handleInteractionCreate(interaction: Interaction, context: BotContext) {
   try {
@@ -98,6 +99,7 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
   if (await handleFivemActionInteraction(interaction, context)) return;
   if (await handlePolicePatrolInteraction(interaction, context)) return;
   if (await handlePoliceReportsInteraction(interaction, context)) return;
+  if (await handlePoliceFlightInteraction(interaction, context)) return;
 
   if (await handlePriceTableInteraction(interaction, context)) {
     return;

@@ -117,6 +117,7 @@ import {
   patchGuildSettings,
   publishFivemGoalPanel,
   publishFivemHierarchyPanel,
+  publishPoliceFlightPanel,
   publishPoliceReportsPanel,
   publishManualRegistrationPanel,
   publishRulesPanel,
@@ -593,6 +594,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "police-actions": "police-actions",
   "police-patrol-reports": "police-patrol-reports",
   "police-reports": "police-reports",
+  "police-flight": "police-flight",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -1323,6 +1325,13 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           <PoliceReportsPanel
             botId={activeBotId}
             canManage={canManageModule(selectedBot, "police-reports", canManageDashboard)}
+            guild={selectedGuild}
+          />
+        ) : null}
+        {activeView === "police-flight" ? (
+          <PoliceFlightPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "police-flight", canManageDashboard)}
             guild={selectedGuild}
           />
         ) : null}
@@ -2851,6 +2860,167 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   panelMessageId: null,
   complaintTypes: defaultPoliceReportComplaintTypes
 };
+
+type PoliceFlightConfig = {
+  enabled: boolean;
+  panelChannelId: string | null;
+  logChannelId: string | null;
+  allowedRoleIds: string[];
+  pilotRoleIds: string[];
+  shooterRoleIds: string[];
+  closeRoleIds: string[];
+  adminRoleIds: string[];
+  titleText: string;
+  descriptionText: string;
+  pilotText: string;
+  shooterText: string;
+  enterButtonText: string;
+  closeButtonText: string;
+  enterButtonEmoji: string;
+  closeButtonEmoji: string;
+  embedColor: string;
+  allowReplaceOccupiedRole: boolean;
+  maxPilots: number;
+  maxShooters: number;
+};
+
+const defaultPoliceFlightConfig: PoliceFlightConfig = {
+  enabled: false,
+  panelChannelId: null,
+  logChannelId: null,
+  allowedRoleIds: [],
+  pilotRoleIds: [],
+  shooterRoleIds: [],
+  closeRoleIds: [],
+  adminRoleIds: [],
+  titleText: "🚁 PAINEL DE ESCALACAO DE VOO — DAF",
+  descriptionText: "Use os botoes abaixo para abrir uma nova escalacao de voo.\nApos aberto, os membros assumem as posicoes de Piloto e Atirador.\n\nAo finalizar, clique em Fechar Escalacao para encerrar e registrar.",
+  pilotText: "Responsavel pelo voo",
+  shooterText: "Responsavel pela cobertura",
+  enterButtonText: "Abrir Escalacao de Voo",
+  closeButtonText: "Fechar Escalacao",
+  enterButtonEmoji: "🛫",
+  closeButtonEmoji: "🔒",
+  embedColor: "#3b82f6",
+  allowReplaceOccupiedRole: false,
+  maxPilots: 1,
+  maxShooters: 1
+};
+
+function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
+  const [config, setConfig] = useState<PoliceFlightConfig>(defaultPoliceFlightConfig);
+  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
+  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!botId || !guild) return;
+    setLoading(true);
+    Promise.all([getAdvancedModuleConfig(botId, guild.id, "police-flight"), getGuildLiveOptions(guild.id, botId)])
+      .then(([module, options]) => {
+        if (!active) return;
+        setConfig({ ...defaultPoliceFlightConfig, ...(module.config as Partial<PoliceFlightConfig>) });
+        setChannels(options.channels);
+        setRoles(options.roles);
+      })
+      .catch((error) => active && setMessage(readResponseMessage(error) ?? "Nao foi possivel carregar a Escalacao DAF."))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [botId, guild?.id]);
+
+  function patch(value: Partial<PoliceFlightConfig>) {
+    setConfig((current) => ({ ...current, ...value }));
+  }
+
+  async function save() {
+    if (!botId || !guild) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-flight", { config: config as unknown as Record<string, unknown>, guildName: guild.name });
+      setConfig({ ...defaultPoliceFlightConfig, ...(saved.config as Partial<PoliceFlightConfig>) });
+      setMessage("Escalacao de voo salva.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Nao foi possivel salvar a Escalacao DAF.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function publish() {
+    if (!botId || !guild) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      await saveAdvancedModuleConfig(botId, guild.id, "police-flight", { config: config as unknown as Record<string, unknown>, guildName: guild.name });
+      await publishPoliceFlightPanel(botId, guild.id);
+      setMessage("Painel DAF enviado para atualizacao no Discord.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Nao foi possivel publicar o painel DAF.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!guild) return <Card><CardContent className="p-6 text-sm text-zinc-500">Selecione um servidor.</CardContent></Card>;
+
+  return (
+    <div className="space-y-4">
+      {message ? <div className="rounded-md border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100">{message}</div> : null}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Radio className="h-5 w-5 text-sky-300" /> Escalacao de Voo DAF</CardTitle>
+          <CardDescription>Painel policial em Components V2 para Piloto e Atirador.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2">
+            <span className="text-sm font-medium text-zinc-200">Sistema ativo</span>
+            <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
+            <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Opcional" value={config.logChannelId} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <TicketField disabled={!canManage || loading} label="Titulo" onChange={(titleText) => patch({ titleText })} value={config.titleText} />
+            <TicketField disabled={!canManage || loading} label="Cor do painel" onChange={(embedColor) => patch({ embedColor })} value={config.embedColor} />
+            <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(descriptionText) => patch({ descriptionText })} value={config.descriptionText} />
+            <TicketArea disabled={!canManage || loading} label="Texto do Piloto" onChange={(pilotText) => patch({ pilotText })} value={config.pilotText} />
+            <TicketArea disabled={!canManage || loading} label="Texto do Atirador" onChange={(shooterText) => patch({ shooterText })} value={config.shooterText} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <TicketField disabled={!canManage || loading} label="Texto botao entrar" onChange={(enterButtonText) => patch({ enterButtonText })} value={config.enterButtonText} />
+            <TicketField disabled={!canManage || loading} label="Texto botao fechar" onChange={(closeButtonText) => patch({ closeButtonText })} value={config.closeButtonText} />
+            <TicketField disabled={!canManage || loading} label="Emoji entrar" onChange={(enterButtonEmoji) => patch({ enterButtonEmoji })} value={config.enterButtonEmoji} />
+            <TicketField disabled={!canManage || loading} label="Emoji fechar" onChange={(closeButtonEmoji) => patch({ closeButtonEmoji })} value={config.closeButtonEmoji} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <FivemRoleMulti disabled={!canManage || loading} label="Cargos que podem usar" onChange={(allowedRoleIds) => patch({ allowedRoleIds })} roles={roles} values={config.allowedRoleIds} />
+            <FivemRoleMulti disabled={!canManage || loading} label="Cargos de Piloto" onChange={(pilotRoleIds) => patch({ pilotRoleIds })} roles={roles} values={config.pilotRoleIds} />
+            <FivemRoleMulti disabled={!canManage || loading} label="Cargos de Atirador" onChange={(shooterRoleIds) => patch({ shooterRoleIds })} roles={roles} values={config.shooterRoleIds} />
+            <FivemRoleMulti disabled={!canManage || loading} label="Cargos para fechar" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
+            <FivemRoleMulti disabled={!canManage || loading} label="Administradores" onChange={(adminRoleIds) => patch({ adminRoleIds })} roles={roles} values={config.adminRoleIds} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <TicketField disabled={!canManage || loading} label="Limite de pilotos" onChange={(value) => patch({ maxPilots: Math.max(1, Number(value) || 1) })} value={String(config.maxPilots)} />
+            <TicketField disabled={!canManage || loading} label="Limite de atiradores" onChange={(value) => patch({ maxShooters: Math.max(1, Number(value) || 1) })} value={String(config.maxShooters)} />
+            <label className="flex items-center gap-2 rounded-md border border-zinc-800 px-3 py-2 text-sm text-zinc-300">
+              <input checked={config.allowReplaceOccupiedRole} disabled={!canManage || loading} onChange={(event) => patch({ allowReplaceOccupiedRole: event.target.checked })} type="checkbox" />
+              Permitir substituir funcao ocupada
+            </label>
+          </div>
+          <PanelImageSettings botId={botId} canManage={canManage} guildId={guild.id} panelId="police-flight" panelLabel="Escalacao DAF" />
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={!canManage || loading} onClick={() => void save()} variant="outline">Salvar</Button>
+            <Button disabled={!canManage || loading || !config.enabled || !config.panelChannelId} onClick={() => void publish()}>Enviar painel</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
   const [config, setConfig] = useState<PoliceReportsConfig>(defaultPoliceReportsConfig);
