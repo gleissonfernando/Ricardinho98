@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Image, Loader2, Save, Trash2, Upload } from "lucide-react";
-import { getPanelImageSettings, listPanelImageSettings, removePanelImage, savePanelImageSettings, uploadPanelImage } from "../../lib/api";
+import { API_URL, getPanelImageSettings, listPanelImageSettings, removePanelImage, savePanelImageSettings, uploadPanelImage } from "../../lib/api";
 import type {
   PanelImageLayoutMode,
   PanelImagePosition,
@@ -529,9 +529,10 @@ function PreviewImage({
 
 function dashboardImageUrl(imageUrl: string) {
   try {
-    const url = new URL(imageUrl);
+    const url = new URL(imageUrl, window.location.origin);
     if (url.pathname.startsWith("/api/persistent-images/")) {
-      return `${url.pathname}${url.search}`;
+      const apiOrigin = new URL(API_URL, window.location.origin).origin;
+      return `${apiOrigin}${url.pathname}${url.search}`;
     }
   } catch {
     // Relative URLs are already safe for the current dashboard origin.

@@ -61,8 +61,14 @@ export function renderComponentsV2Panel(input: {
 
 export function resolvePanelImageUrl(value: string | null) {
   if (!value) return null;
-  if (/^https?:\/\//i.test(value)) return value;
   const origin = env.BACKEND_API_URL ? new URL(env.BACKEND_API_URL).origin : "";
+  try {
+    const parsed = new URL(value, origin || undefined);
+    if (origin && parsed.pathname.startsWith("/api/persistent-images/")) return `${origin}${parsed.pathname}${parsed.search}`;
+  } catch {
+    // A valid relative URL is handled below.
+  }
+  if (/^https?:\/\//i.test(value)) return value;
   return origin ? `${origin}${value.startsWith("/") ? value : `/${value}`}` : null;
 }
 
