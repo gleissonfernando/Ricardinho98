@@ -3018,7 +3018,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
             panelLabel="Denuncias IAB"
             panelSlots={[
               { id: "police-reports", label: "Painel principal" },
-              { id: "police-reports-banner-2", label: "Canal temporario" },
+              { id: "police-reports-banner-2", label: "Imagem grande / canal temporario" },
               { id: "police-reports-banner-3", label: "Rodape" }
             ]}
           />

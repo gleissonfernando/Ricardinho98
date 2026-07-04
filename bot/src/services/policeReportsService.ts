@@ -117,6 +117,8 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
       await interaction.reply({ content: "Este tipo de denuncia nao esta mais disponivel.", ephemeral: true });
       return true;
     }
+    const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
+    await interaction.update(createPanelPayload(config, page));
     await showIdentitySelection(interaction, selected);
     return true;
   }
@@ -145,7 +147,7 @@ async function showIdentitySelection(interaction: StringSelectMenuInteraction, s
     new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji("👤").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji("🕵️").setStyle(ButtonStyle.Secondary)
   );
-  await interaction.reply({
+  await interaction.followUp({
     components: [{
       type: 17,
       accent_color: 0x7c3aed,
@@ -238,7 +240,7 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
     description: `${config.panelDescription}${pageCount > 1 ? `\n\nPagina ${page + 1} de ${pageCount}` : ""}`,
     fields: [],
     image: config.panelVisual,
-    extraImages: [config.footerVisual],
+    extraImages: [config.channelVisual, config.footerVisual],
     moduleId: MODULE_ID,
     title: config.panelTitle
   });
