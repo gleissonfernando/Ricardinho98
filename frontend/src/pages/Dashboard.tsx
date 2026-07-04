@@ -2778,6 +2778,14 @@ type PoliceReportsConfig = {
   categoryId: string | null;
   logChannelId: string | null;
   responsibleRoleId: string | null;
+  responsibleRoleIds: string[];
+  maxChannelMinutes: number;
+  initialMessage: string;
+  procedureText: string;
+  panelImageUrl: string;
+  channelImageUrl: string;
+  footerImageUrl: string;
+  imagePosition: "banner" | "thumbnail" | "top" | "below_title" | "middle" | "bottom" | "side" | "footer" | "before_buttons" | "below_text" | "above_buttons" | "none";
   panelTitle: string;
   panelDescription: string;
   buttonLabel: string;
@@ -2793,6 +2801,14 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   categoryId: null,
   logChannelId: null,
   responsibleRoleId: null,
+  responsibleRoleIds: [],
+  maxChannelMinutes: 1440,
+  initialMessage: "A equipe responsavel vai dar continuidade ao procedimento por este canal.",
+  procedureText: "Descreva o ocorrido com detalhes e aguarde a analise da equipe responsavel.",
+  panelImageUrl: "",
+  channelImageUrl: "",
+  footerImageUrl: "",
+  imagePosition: "banner",
   panelTitle: "Sistema de Denuncias EAB",
   panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
   buttonLabel: "Abrir denuncia",
@@ -2851,6 +2867,14 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
     setError(null);
     setMessage(null);
     try {
+      if (config.enabled && !config.panelChannelId) {
+        setError("Selecione o canal onde o painel sera enviado.");
+        return;
+      }
+      if (config.enabled && !config.categoryId) {
+        setError("Selecione a categoria onde os canais temporarios serao criados.");
+        return;
+      }
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
       setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
       setMessage("Configuracao do EAB salva.");
@@ -2869,6 +2893,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
     }
     if (config.complaintTypes.some((item) => !item.name.trim())) {
       setError("Informe o nome de todos os tipos de denuncia.");
+      return;
+    }
+    if (!config.panelChannelId || !config.categoryId) {
+      setError("Configure o canal do painel e a categoria dos canais temporarios antes de publicar.");
       return;
     }
     setSaving(true);
@@ -2911,15 +2939,49 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
-          <RoleSelect disabled={!canManage || loading} label="Cargo responsavel" onChange={(responsibleRoleId) => patch({ responsibleRoleId })} roles={roles} value={config.responsibleRoleId ?? ""} />
+          <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds?.length ? config.responsibleRoleIds : config.responsibleRoleId ? [config.responsibleRoleId] : []} />
           <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
           <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
           <TicketField disabled={!canManage || loading} label="Cor" onChange={(color) => patch({ color })} type="color" value={config.color} />
-          <TicketField disabled={!canManage || loading} label="URL da thumbnail" onChange={(thumbnailUrl) => patch({ thumbnailUrl })} value={config.thumbnailUrl} />
+          <TicketField disabled={!canManage || loading} label="Tempo maximo do canal (min)" onChange={(maxChannelMinutes) => patch({ maxChannelMinutes: Number(maxChannelMinutes) || 1440 })} value={String(config.maxChannelMinutes)} />
+          <TicketField disabled={!canManage || loading} label="Banner do painel principal" onChange={(panelImageUrl) => patch({ panelImageUrl, thumbnailUrl: panelImageUrl })} value={config.panelImageUrl || config.thumbnailUrl} />
+          <TicketField disabled={!canManage || loading} label="Banner do canal temporario" onChange={(channelImageUrl) => patch({ channelImageUrl })} value={config.channelImageUrl} />
+          <TicketField disabled={!canManage || loading} label="Imagem de rodape" onChange={(footerImageUrl) => patch({ footerImageUrl })} value={config.footerImageUrl} />
+          <label className="block text-xs font-medium text-zinc-400">
+            Posicao da imagem
+            <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none transition focus:border-purple-500/50 disabled:opacity-60" disabled={!canManage || loading} onChange={(event) => patch({ imagePosition: event.target.value as PoliceReportsConfig["imagePosition"] })} value={config.imagePosition}>
+              <option value="banner">Banner acima</option>
+              <option value="thumbnail">Lateral/thumbnail</option>
+              <option value="below_title">Abaixo do titulo</option>
+              <option value="middle">Meio do texto</option>
+              <option value="before_buttons">Acima dos botoes</option>
+              <option value="footer">Rodape</option>
+              <option value="none">Sem imagem</option>
+            </select>
+          </label>
           <div className="md:col-span-2">
             <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
           </div>
+          <div className="md:col-span-2">
+            <TicketArea disabled={!canManage || loading} label="Mensagem inicial do canal" onChange={(initialMessage) => patch({ initialMessage })} value={config.initialMessage} />
+          </div>
+          <div className="md:col-span-2">
+            <TicketArea disabled={!canManage || loading} label="Texto explicativo do procedimento" onChange={(procedureText) => patch({ procedureText })} value={config.procedureText} />
+          </div>
         </div>
+        {guild && botId ? (
+          <PanelImageSettings
+            botId={botId}
+            canManage={canManage}
+            guildId={guild.id}
+            panelLabel="Denuncias EAB"
+            panelSlots={[
+              { id: "police-reports", label: "Painel principal" },
+              { id: "police-reports-banner-2", label: "Canal temporario" },
+              { id: "police-reports-banner-3", label: "Rodape" }
+            ]}
+          />
+        ) : null}
         <div className="space-y-3 border-t border-zinc-800 pt-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-white">Tipos de denuncia</p>
