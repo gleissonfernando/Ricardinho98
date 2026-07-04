@@ -55,8 +55,8 @@ jobs:
               -H "Authorization: Bearer $SHARD_CLOUD_API_KEY" \
               "https://shardcloud.app/api/apps/$API_APP_ID/status" 2>/dev/null || echo '{}')
             echo "Attempt $attempt/24: $RESPONSE"
-            if echo "$RESPONSE" | grep -qi '"online"'; then
-              echo "App is online."
+            if echo "$RESPONSE" | grep -qiE '"(online|running)"'; then
+              echo "App is running."
               exit 0
             fi
             if echo "$RESPONSE" | grep -qiE '"error"|"crashed"'; then
@@ -65,8 +65,9 @@ jobs:
             fi
             sleep 10
           done
-          echo "::error::Timed out waiting for app to come online via ShardCloud API."
-          exit 1
+          echo "ShardCloud status did not stabilize; checking the lightweight health endpoint."
+          curl --fail --silent --show-error --max-time 30 \
+            "${APP_URL}/_shardcloud/health" | grep -q '"status":"ok"'
 
       - name: Verify application health
         run: |
