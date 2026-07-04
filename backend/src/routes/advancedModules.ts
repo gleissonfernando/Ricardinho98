@@ -253,8 +253,12 @@ advancedModulesRouter.get("/:botId/:guildId/:moduleId", async (req, res, next) =
       });
     }
 
+    const module = await getBotGuildModuleConfig(botId, guildId, moduleId);
+
     return res.json({
-      module: await getBotGuildModuleConfig(botId, guildId, moduleId)
+      module: moduleId === "police-reports"
+        ? { ...module, config: normalizeModuleConfig(moduleId, module.config) }
+        : module
     });
   } catch (error) {
     return next(error);
