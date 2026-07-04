@@ -133,7 +133,7 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await createTemporaryProcedureChannel(interaction, context, config, selected, mode === "anonymous");
     return true;
   }
-  if (["approve", "reject", "finish", "close"].includes(action ?? "")) {
+  if (["assume", "ping", "finish", "archive"].includes(action ?? "")) {
     await handleProcedureAction(interaction, context, config, action!);
     return true;
   }
@@ -303,7 +303,7 @@ async function createTemporaryProcedureChannel(
     const channel = await interaction.guild.channels.create({
       name: safeChannelName(anonymous ? `denuncia-anonima-${interaction.user.id.slice(-4)}` : `denuncia-${interaction.user.username}`),
       parent: category.id,
-      topic: `${PREFIX}|ticket|${anonymous ? "anonymous" : "identified"}|${selected.id}|${Date.now() + config.maxChannelMinutes * 60_000}`.slice(0, 1024),
+      topic: `${PREFIX}|ticket|${anonymous ? "anonymous" : "identified"}|${selected.id}|${Date.now() + config.maxChannelMinutes * 60_000}|${interaction.user.id}`.slice(0, 1024),
       type: ChannelType.GuildText,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -358,19 +358,47 @@ async function handleProcedureAction(
   const topic = parsePoliceReportTopic(String(interaction.channel.topic ?? ""));
   if (!topic) return;
   const { anonymous, selectedId } = topic;
-  const requesterId = findRequesterId(interaction.channel, interaction.guild.members.me?.id);
+  const requesterId = topic.requesterId ?? findRequesterId(interaction.channel, interaction.guild.members.me?.id);
   if (!requesterId) {
     await interaction.reply({ content: "Nao foi possivel identificar internamente o autor desta denuncia.", ephemeral: true });
     return;
   }
   const selected = config.complaintTypes.find((item) => item.id === selectedId) ?? { id: selectedId, name: "Denuncia", description: null, emoji: null, order: 0 };
-  const status = action === "approve" ? "Aprovado" : action === "reject" ? "Recusado" : action === "finish" ? "Finalizado" : "Fechado";
+  const status = action === "assume" ? "Em analise" : action === "finish" ? "Finalizado" : action === "archive" ? "Arquivado" : "Em analise";
   await writeLog(context, interaction.guild.id, interaction.user.id, `police-reports.${action}`, `Procedimento ${status.toLowerCase()}.`, {
     channelId: interaction.channel.id,
     requesterId,
     anonymous,
     typeName: selected.name
   });
+  if (action === "assume") {
+    await interaction.channel.send({
+      allowedMentions: { parse: [] },
+      components: [{
+        type: 17,
+        accent_color: Number.parseInt(config.color.replace("#", ""), 16) || 0x22c55e,
+        components: [{ type: 10, content: "## ✅ Atendimento assumido\nA equipe EAB assumiu esta denuncia e dara continuidade a analise." }]
+      }],
+      flags: MessageFlags.IsComponentsV2
+    }).catch(() => null);
+    await interaction.update(createProcedurePanel(config, selected, requesterId, anonymous, status));
+    return;
+  }
+  if (action === "ping") {
+    const dmText = anonymous
+      ? "🔔 A equipe EAB solicitou sua atencao em uma denuncia anonima.\n\nVoce pode responder normalmente pelo canal do ticket. Sua identidade continuara oculta."
+      : `🔔 A equipe EAB solicitou sua atencao na denuncia ${interaction.channel}.\n\nAcesse o canal do ticket para continuar o atendimento.`;
+    const user = await interaction.client.users.fetch(requesterId).catch(() => null);
+    const dmSent = Boolean(await user?.send({ allowedMentions: { parse: [] }, content: dmText }).then(() => true).catch(() => false));
+    await interaction.reply({
+      content: anonymous
+        ? `🔔 O denunciante anonimo foi notificado pela equipe EAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
+        : `🔔 O denunciante foi notificado pela equipe EAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
+      ephemeral: false,
+      allowedMentions: { parse: [] }
+    });
+    return;
+  }
   if (action === "finish") {
     if (!config.archiveCategoryId) {
       await interaction.reply({ content: "Configure a categoria de denuncias finalizadas na dashboard antes de finalizar.", ephemeral: true });
@@ -407,9 +435,17 @@ async function handleProcedureAction(
     await interaction.update(createProcedurePanel(config, selected, requesterId, anonymous, status));
     return;
   }
-  if (action === "close") {
-    await interaction.reply({ content: "Canal sera deletado.", ephemeral: true });
-    await interaction.channel.delete(`Denuncia IAB fechada por ${interaction.user.tag}`).catch(() => null);
+  if (action === "archive") {
+    const target = config.logChannelId
+      ? await interaction.guild.channels.fetch(config.logChannelId).catch(() => null)
+      : interaction.channel;
+    const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel);
+    if (target && "send" in target && !target.isDMBased()) {
+      await target.send(payload).catch(async (error) => {
+        await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.archive_failed", "Falha ao enviar painel de arquivamento.", { channelId: interaction.channel!.id, error: error instanceof Error ? error.message : String(error) });
+      });
+    }
+    await interaction.update(createProcedurePanel(config, selected, requesterId, anonymous, status));
     return;
   }
   await interaction.update(createProcedurePanel(config, selected, requesterId, anonymous, status));
@@ -417,14 +453,13 @@ async function handleProcedureAction(
 
 function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintType, userId: string, anonymous: boolean, status: string) {
   const createdAt = Math.floor(Date.now() / 1000);
-  const approved = status === "Aprovado";
-  const rejected = status === "Recusado";
   const finished = status === "Finalizado";
+  const archived = status === "Arquivado";
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Aprovar").setStyle(ButtonStyle.Success).setDisabled(approved || rejected || finished),
-    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setLabel("Recusar").setStyle(ButtonStyle.Danger).setDisabled(rejected || finished),
-    new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setStyle(ButtonStyle.Primary).setDisabled(finished),
-    new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel("Fechar").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(finished || archived),
+    new ButtonBuilder().setCustomId(`${PREFIX}:ping`).setLabel("Toque").setEmoji("🔔").setStyle(ButtonStyle.Primary).setDisabled(finished || archived),
+    new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji("🔒").setStyle(ButtonStyle.Danger).setDisabled(finished || archived),
+    new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji("🗄️").setStyle(ButtonStyle.Secondary).setDisabled(archived)
   );
   return renderComponentsV2Panel({
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
@@ -438,6 +473,48 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
     extraImages: [config.footerVisual],
     moduleId: MODULE_ID,
     title: "Procedimento IAB"
+  });
+}
+
+async function createArchivePanel(
+  config: PoliceReportsConfig,
+  selected: ComplaintType,
+  requesterId: string,
+  anonymous: boolean,
+  channel: ButtonInteraction["channel"]
+) {
+  const fetched = channel && "messages" in channel
+    ? await channel.messages.fetch({ limit: 50 }).catch(() => null)
+    : null;
+  const messages = fetched
+    ? [...fetched.values()].reverse().filter((message) => !message.author.bot || message.attachments.size || message.content)
+    : [];
+  const evidence = uniqueStrings(messages.flatMap((message) => [
+    ...message.attachments.map((attachment) => attachment.url),
+    ...extractUrls(message.content)
+  ])).slice(0, 10);
+  const history = messages
+    .filter((message) => message.content && !message.content.startsWith(`<@&`))
+    .slice(-8)
+    .map((message) => `- ${message.author.bot ? "Bot" : anonymous && message.author.id === requesterId ? "Denunciante Anonimo" : "Equipe EAB"}: ${message.content.replace(/\s+/g, " ").slice(0, 180)}`)
+    .join("\n");
+  const createdAt = Math.floor(Date.now() / 1000);
+  return renderComponentsV2Panel({
+    accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
+    description: `:info1: Denuncia - ${selected.name}`,
+    fields: [
+      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\nEquipe EAB`,
+      `**Data / Horario**\n<t:${createdAt}:F>\n\n**Evidencias**\n${evidence.length ? evidence.join("\n") : "Nenhuma evidencia encontrada no historico recente."}`,
+      `**Historico recente**\n${history || "Sem mensagens textuais recentes."}`
+    ],
+    footerIcon: config.footerVisual,
+    footerText: `**NPD - Contra Oficial** · denuncia arquivada · <t:${createdAt}:f>`,
+    headerIcon: config.footerVisual,
+    headerText: "**🏛️ North Police Department - Contra Oficial**",
+    image: config.channelVisual ?? config.panelVisual,
+    extraImages: [config.footerVisual],
+    moduleId: MODULE_ID,
+    title: `Denuncia - ${selected.name}`
   });
 }
 
@@ -465,9 +542,9 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
 }
 
 function parsePoliceReportTopic(topic: string) {
-  const [prefix, kind, mode, selectedId] = topic.split("|");
+  const [prefix, kind, mode, selectedId, , requesterId] = topic.split("|");
   if (prefix !== PREFIX || kind !== "ticket" || (mode !== "anonymous" && mode !== "identified") || !selectedId) return null;
-  return { anonymous: mode === "anonymous", selectedId };
+  return { anonymous: mode === "anonymous", requesterId: requesterId && /^\d{5,32}$/.test(requesterId) ? requesterId : null, selectedId };
 }
 
 function findRequesterId(channel: { permissionOverwrites?: { cache: { find: (predicate: (overwrite: { id: string; type: number }) => boolean) => { id: string } | undefined } } }, botMemberId?: string) {
@@ -506,6 +583,8 @@ function readImagePosition(value: unknown): PanelVisualPosition {
 }
 function panelImage(imageUrl: string, imagePosition: PanelVisualPosition) { return imageUrl ? { imageEnabled: true, imagePosition, imageUrl } : null; }
 function uniqueIds(ids: string[]) { return [...new Set(ids.filter((id) => /^\d{5,32}$/.test(id)))]; }
+function uniqueStrings(values: string[]) { return [...new Set(values.filter((value) => value.trim()))]; }
+function extractUrls(value: string) { return value.match(/https?:\/\/\S+/gi) ?? []; }
 function safeChannelName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 90) || "denuncia-eab"; }
 async function writeLog(context: BotContext, guildId: string, userId: string | null, type: string, message: string, metadata?: unknown) {
   await context.api.postLog({ guildId, userId, type, message, metadata }).catch((error) => {
