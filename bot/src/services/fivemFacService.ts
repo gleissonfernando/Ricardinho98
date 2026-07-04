@@ -53,6 +53,11 @@ type PendingAbsenceRequest = {
   username: string | null;
 };
 
+type RoleChangeResult = {
+  ok: boolean;
+  reason?: string;
+};
+
 let dueCheckRunning = false;
 let panelRequestCheckRunning = false;
 let serviceStarted = false;
@@ -467,16 +472,14 @@ async function approveAbsence(interaction: ButtonInteraction, context: BotContex
       moderatorRoleIds: interactionRoleIds(interaction)
     });
 
-    const roleAdded = await addAbsenceRole(guild, settings, absence).catch(async (error) => {
-      await sendFacLog(guild, settings, "Falha ao adicionar cargo", absence, interaction.user.id, errorMessage(error));
-      return false;
-    });
-    absence = await context.api.markFivemFacAbsenceStarted(absence.id, roleAdded);
-    await sendFacLog(guild, settings, roleAdded ? "Cargo adicionado" : "Ausencia aprovada sem cargo", absence, interaction.user.id);
+    const roleResult = await addAbsenceRole(guild, settings, absence);
+    absence = await context.api.markFivemFacAbsenceStarted(absence.id, roleResult.ok);
+    await sendFacLog(guild, settings, roleResult.ok ? "Cargo adicionado" : "Falha ao adicionar cargo", absence, interaction.user.id, roleResult.reason);
+    await sendFacLog(guild, settings, roleResult.ok ? "Ausencia aprovada com cargo" : "Ausencia aprovada sem cargo", absence, interaction.user.id, roleResult.reason);
 
     await updateAbsenceMessage(interaction, settings, absence);
     await sendFacLog(guild, settings, "Solicitacao aprovada", absence, interaction.user.id);
-    await notifyAbsenceUser(guild, absence, settings.messages.approved);
+    await notifyAbsenceUser(guild, absence, `${settings.messages.approved}${roleResult.ok ? "\n\nCargo de ausencia aplicado automaticamente." : `\n\nNao foi possivel aplicar o cargo de ausencia: ${roleResult.reason ?? "motivo nao informado"}.`}`);
     await interaction.editReply("Ausencia aprovada.");
   } catch (error) {
     await interaction.editReply(readRequestErrorMessage(error) ?? "Nao foi possivel aprovar essa ausencia.");
@@ -540,15 +543,15 @@ async function closeAbsence(interaction: ButtonInteraction, context: BotContext,
     }
 
     const current = await context.api.getFivemFacAbsence(absenceId);
-    const roleRemoved = await removeAbsenceRole(guild, settings, current);
+    const roleResult = await removeAbsenceRole(guild, settings, current);
     const absence = await context.api.closeFivemFacAbsence(absenceId, {
       moderatorId: interaction.user.id,
       moderatorRoleIds: interactionRoleIds(interaction),
-      roleRemoved
+      roleRemoved: roleResult.ok
     });
 
     await updateAbsenceMessage(interaction, settings, absence);
-    await sendFacLog(guild, settings, roleRemoved ? "Cargo removido" : "Ausencia encerrada", absence, interaction.user.id);
+    await sendFacLog(guild, settings, roleResult.ok ? "Cargo removido" : "Ausencia encerrada sem remover cargo", absence, interaction.user.id, roleResult.reason);
     await notifyAbsenceUser(guild, absence, "Sua ausencia foi encerrada pela equipe.");
     await interaction.editReply("Ausencia encerrada.");
   } catch (error) {
@@ -723,60 +726,83 @@ async function processDueAbsence(client: Client, context: BotContext, absence: F
   let current = absence;
 
   if (current.status === "approved" && current.startDate <= today) {
-    const roleAdded = await addAbsenceRole(guild, settings, current);
-    current = await context.api.markFivemFacAbsenceStarted(current.id, roleAdded);
-    await sendFacLog(guild, settings, roleAdded ? "Cargo adicionado" : "Ausencia iniciada sem cargo", current, null);
+    const roleResult = await addAbsenceRole(guild, settings, current);
+    current = await context.api.markFivemFacAbsenceStarted(current.id, roleResult.ok);
+    await sendFacLog(guild, settings, roleResult.ok ? "Cargo adicionado" : "Falha ao adicionar cargo", current, null, roleResult.reason);
+    await sendFacLog(guild, settings, roleResult.ok ? "Ausencia iniciada com cargo" : "Ausencia iniciada sem cargo", current, null, roleResult.reason);
     await sendFacLog(guild, settings, "Ausencia iniciada", current, null);
     await notifyAbsenceUser(guild, current, settings.messages.started);
     await updateStoredAbsenceMessage(guild, current);
   }
 
   if ((current.status === "active" || current.status === "approved") && current.endDate <= today) {
-    const roleRemoved = await removeAbsenceRole(guild, settings, current);
-    current = await context.api.markFivemFacAbsenceFinished(current.id, roleRemoved);
-    await sendFacLog(guild, settings, roleRemoved ? "Cargo removido" : "Ausencia finalizada sem cargo", current, null);
+    const roleResult = settings.autoRemoveAbsenceRole
+      ? await removeAbsenceRole(guild, settings, current)
+      : { ok: false, reason: "Remocao automatica do cargo desativada na dashboard." };
+    current = await context.api.markFivemFacAbsenceFinished(current.id, roleResult.ok);
+    await sendFacLog(guild, settings, roleResult.ok ? "Cargo removido" : "Ausencia finalizada sem remover cargo", current, null, roleResult.reason);
     await sendFacLog(guild, settings, "Ausencia finalizada", current, null);
-    await notifyAbsenceUser(guild, current, settings.messages.finished);
+    await notifyAbsenceFinishedUser(guild, current, roleResult.ok, roleResult.reason);
     await updateStoredAbsenceMessage(guild, current);
   }
 }
 
-async function addAbsenceRole(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence) {
+async function addAbsenceRole(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence): Promise<RoleChangeResult> {
   if (!settings.absenceRoleId) {
-    return false;
+    return { ok: false, reason: "Cargo de ausencia nao configurado." };
+  }
+
+  const role = await guild.roles.fetch(settings.absenceRoleId).catch(() => null);
+
+  if (!role) {
+    return { ok: false, reason: "Cargo de ausencia nao existe ou nao foi encontrado." };
+  }
+
+  if (!role.editable) {
+    return { ok: false, reason: "Bot sem permissao para gerenciar o cargo de ausencia ou cargo acima do bot." };
   }
 
   const member = await guild.members.fetch(absence.userId).catch(() => null);
 
   if (!member) {
-    return false;
+    return { ok: false, reason: "Usuario saiu do servidor ou nao foi encontrado." };
   }
 
   if (member.roles.cache.has(settings.absenceRoleId)) {
-    return true;
+    return { ok: true };
   }
 
   await member.roles.add(settings.absenceRoleId, "Inicio de ausencia FAC");
-  return true;
+  return { ok: true };
 }
 
-async function removeAbsenceRole(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence) {
+async function removeAbsenceRole(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence): Promise<RoleChangeResult> {
   if (!settings.absenceRoleId) {
-    return false;
+    return { ok: false, reason: "Cargo de ausencia nao configurado." };
+  }
+
+  const role = await guild.roles.fetch(settings.absenceRoleId).catch(() => null);
+
+  if (!role) {
+    return { ok: false, reason: "Cargo de ausencia nao existe ou nao foi encontrado." };
+  }
+
+  if (!role.editable) {
+    return { ok: false, reason: "Bot sem permissao para gerenciar o cargo de ausencia ou cargo acima do bot." };
   }
 
   const member = await guild.members.fetch(absence.userId).catch(() => null);
 
   if (!member) {
-    return false;
+    return { ok: false, reason: "Usuario saiu do servidor ou nao foi encontrado." };
   }
 
   if (!member.roles.cache.has(settings.absenceRoleId)) {
-    return true;
+    return { ok: true };
   }
 
   await member.roles.remove(settings.absenceRoleId, "Fim de ausencia FAC");
-  return true;
+  return { ok: true };
 }
 
 async function updateAbsenceMessage(interaction: ButtonInteraction | ModalSubmitInteraction, settings: FivemFacSettings, absence: FivemFacAbsence) {
@@ -839,38 +865,37 @@ async function sendFacLog(
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(0x2b2d31)
-    .setTitle(`FAC - ${title}`)
-    .setTimestamp(new Date());
-
+  const lines = [`# FAC - ${title}`];
   if (absence) {
-    embed.addFields(
-      { name: "Usuario", value: `<@${absence.userId}>`, inline: true },
-      { name: "ID Discord", value: absence.userId, inline: true },
-      { name: "Status", value: statusLabel(absence.status), inline: true },
-      { name: "Inicio", value: formatDateOnly(absence.startDate), inline: true },
-      { name: "Termino", value: formatDateOnly(absence.endDate), inline: true },
-      { name: "Moderador", value: actorId ? `<@${actorId}>` : absence.moderatorId ? `<@${absence.moderatorId}>` : "Automatico", inline: true },
-      { name: "Motivo", value: truncate(absence.reason, 1024), inline: false }
+    lines.push(
+      `**Usuario:** <@${absence.userId}>`,
+      `**ID Discord:** ${absence.userId}`,
+      `**Status:** ${statusLabel(absence.status)}`,
+      `**Inicio:** ${formatDateOnly(absence.startDate)}`,
+      `**Termino:** ${formatDateOnly(absence.endDate)}`,
+      `**Moderador:** ${actorId ? `<@${actorId}>` : absence.moderatorId ? `<@${absence.moderatorId}>` : "Automatico"}`,
+      `**Motivo:** ${truncate(absence.reason, 900)}`
     );
 
     if (reason || absence.rejectionReason) {
-      embed.addFields({ name: "Detalhe", value: truncate(reason ?? absence.rejectionReason ?? "", 1024), inline: false });
+      lines.push(`**Detalhe:** ${truncate(reason ?? absence.rejectionReason ?? "", 900)}`);
     }
   } else if (actorId) {
-    embed.addFields({ name: "Responsavel", value: `<@${actorId}>`, inline: true });
+    lines.push(`**Responsavel:** <@${actorId}>`);
   }
+  lines.push(`**Data:** <t:${Math.floor(Date.now() / 1000)}:F>`);
 
   await channel.send({
-    embeds: [embed]
+    allowedMentions: { parse: [] },
+    components: [{ type: 17, accent_color: 0x2b2d31, components: [{ type: 10, content: lines.join("\n") }] }],
+    flags: MessageFlags.IsComponentsV2
   }).catch(() => null);
 }
 
 async function notifyAbsenceUser(guild: Guild, absence: FivemFacAbsence, message: string) {
   const user = await guild.client.users.fetch(absence.userId).catch(() => null);
 
-  await user?.send(message).catch(() => null);
+  await user?.send(buildAbsenceDmPayload("📅 Ausencia", message, statusLabel(absence.status), 0x2b2d31)).catch(() => null);
 
   if (!absence.privateChannelId) {
     return;
@@ -881,6 +906,57 @@ async function notifyAbsenceUser(guild: Guild, absence: FivemFacAbsence, message
   if (channel?.isTextBased()) {
     await channel.send(`<@${absence.userId}> ${message}`).catch(() => null);
   }
+}
+
+async function notifyAbsenceFinishedUser(guild: Guild, absence: FivemFacAbsence, roleRemoved: boolean, reason?: string | null) {
+  const user = await guild.client.users.fetch(absence.userId).catch(() => null);
+  const message = roleRemoved
+    ? [
+        "Sua ausencia chegou ao fim.",
+        "",
+        "O cargo de ausencia foi removido automaticamente.",
+        "",
+        "Voce ja esta liberado para voltar ao trabalho e retornar ao RP."
+      ].join("\n")
+    : [
+        "Sua ausencia chegou ao fim.",
+        "",
+        "O cargo de ausencia nao foi removido automaticamente.",
+        reason ? `Motivo: ${reason}` : null,
+        ""
+      ].filter(Boolean).join("\n");
+
+  await user?.send(buildAbsenceDmPayload("📅 Ausencia Finalizada", message, "✅ Retorno liberado", roleRemoved ? 0x22c55e : 0xf59e0b)).catch(() => null);
+
+  if (!absence.privateChannelId) {
+    return;
+  }
+
+  const channel = await guild.channels.fetch(absence.privateChannelId).catch(() => null);
+
+  if (channel?.isTextBased()) {
+    await channel.send(`<@${absence.userId}> ${message}`).catch(() => null);
+  }
+}
+
+function buildAbsenceDmPayload(title: string, message: string, status: string, accentColor: number) {
+  return {
+    allowedMentions: { parse: [] as never[] },
+    components: [{
+      type: 17,
+      accent_color: accentColor,
+      components: [{
+        type: 10,
+        content: [
+          `# ${title}`,
+          message,
+          "",
+          `**Status:** ${status}`
+        ].join("\n")
+      }]
+    }],
+    flags: MessageFlags.IsComponentsV2 as const
+  };
 }
 
 function buildPanelPayload(settings: FivemFacSettings) {

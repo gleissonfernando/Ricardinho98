@@ -942,6 +942,7 @@ export type FivemFacSettings = {
   panelChannelId: string | null;
   panelMessageId: string | null;
   absenceRoleId: string | null;
+  autoRemoveAbsenceRole: boolean;
   viewerRoleIds: string[];
   approverRoleIds: string[];
   memberRoleIds: string[];

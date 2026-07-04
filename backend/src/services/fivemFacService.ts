@@ -26,6 +26,7 @@ export type FivemFacSettingsDto = {
   panelChannelId: string | null;
   panelMessageId: string | null;
   absenceRoleId: string | null;
+  autoRemoveAbsenceRole: boolean;
   viewerRoleIds: string[];
   approverRoleIds: string[];
   memberRoleIds: string[];
@@ -73,6 +74,7 @@ export type SaveFivemFacSettingsInput = {
   enabled?: boolean;
   panelChannelId?: string | null;
   absenceRoleId?: string | null;
+  autoRemoveAbsenceRole?: boolean;
   viewerRoleIds?: string[];
   approverRoleIds?: string[];
   memberRoleIds?: string[];
@@ -166,6 +168,7 @@ export function defaultFivemFacSettings(botId: string, guildId: string): FivemFa
     panelChannelId: null,
     panelMessageId: null,
     absenceRoleId: null,
+    autoRemoveAbsenceRole: true,
     viewerRoleIds: [],
     approverRoleIds: [],
     memberRoleIds: [],
@@ -223,6 +226,7 @@ export async function saveFivemFacSettings(guildId: string, botId: string, input
     enabled: input.enabled ?? current.enabled,
     panelChannelId: normalizeNullableSnowflake(input.panelChannelId, current.panelChannelId),
     absenceRoleId: normalizeNullableSnowflake(input.absenceRoleId, current.absenceRoleId),
+    autoRemoveAbsenceRole: input.autoRemoveAbsenceRole ?? current.autoRemoveAbsenceRole,
     viewerRoleIds: input.viewerRoleIds ? normalizeSnowflakes(input.viewerRoleIds) : current.viewerRoleIds,
     approverRoleIds: input.approverRoleIds ? normalizeSnowflakes(input.approverRoleIds) : current.approverRoleIds,
     memberRoleIds: input.memberRoleIds ? normalizeSnowflakes(input.memberRoleIds) : current.memberRoleIds,
@@ -1203,6 +1207,7 @@ function toSettingsDto(settings: MongoFivemFacSettings): FivemFacSettingsDto {
     panelChannelId: settings.panelChannelId ?? null,
     panelMessageId: settings.panelMessageId ?? null,
     absenceRoleId: settings.absenceRoleId ?? null,
+    autoRemoveAbsenceRole: settings.autoRemoveAbsenceRole !== false,
     viewerRoleIds: normalizeSnowflakes(settings.viewerRoleIds ?? []),
     approverRoleIds: normalizeSnowflakes(settings.approverRoleIds ?? []),
     memberRoleIds: normalizeSnowflakes(settings.memberRoleIds ?? []),

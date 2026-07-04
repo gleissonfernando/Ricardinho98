@@ -62,6 +62,7 @@ const emptySettings: FivemFacSettings = {
   panelChannelId: null,
   panelMessageId: null,
   absenceRoleId: null,
+  autoRemoveAbsenceRole: true,
   viewerRoleIds: [],
   approverRoleIds: [],
   memberRoleIds: [],
@@ -180,6 +181,7 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
     try {
       const saved = await saveFivemFacSettings(guild.id, botId, {
         absenceRoleId: settings.absenceRoleId,
+        autoRemoveAbsenceRole: settings.autoRemoveAbsenceRole,
         approverRoleIds: settings.approverRoleIds,
         enabled: settings.enabled,
         logChannelId: settings.logChannelId,
@@ -298,10 +300,21 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
                 options={assignableRoles.map((role) => ({ label: role.name, value: role.id }))}
                 value={settings.absenceRoleId}
               />
+              <label className="flex min-h-[76px] items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm">
+                <span>
+                  <span className="block font-medium text-zinc-200">Remover cargo automaticamente</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Remove somente o cargo de ausencia configurado na data de retorno.</span>
+                </span>
+                <Switch
+                  checked={settings.autoRemoveAbsenceRole}
+                  disabled={!canManage}
+                  onCheckedChange={(checked) => updateSetting("autoRemoveAbsenceRole", checked)}
+                />
+              </label>
               <SelectField
                 disabled={!canManage}
                 icon={MessageSquareText}
-                label="Canal de logs"
+                label="Canal de logs de entrada/saida"
                 onChange={(value) => updateSetting("logChannelId", value)}
                 options={channels.map((channel) => ({ label: `#${channel.name}`, value: channel.id }))}
                 value={settings.logChannelId}

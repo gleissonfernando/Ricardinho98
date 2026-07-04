@@ -64,6 +64,7 @@ const facSettingsSchema = z.object({
   enabled: z.boolean().optional(),
   panelChannelId: optionalSnowflakeSchema,
   absenceRoleId: optionalSnowflakeSchema,
+  autoRemoveAbsenceRole: z.boolean().optional(),
   viewerRoleIds: z.array(snowflakeSchema).optional(),
   approverRoleIds: z.array(snowflakeSchema).optional(),
   memberRoleIds: z.array(snowflakeSchema).optional(),
