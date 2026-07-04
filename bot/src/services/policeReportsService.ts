@@ -377,7 +377,7 @@ async function handleProcedureAction(
       components: [{
         type: 17,
         accent_color: Number.parseInt(config.color.replace("#", ""), 16) || 0x22c55e,
-        components: [{ type: 10, content: "## ✅ Atendimento assumido\nA equipe EAB assumiu esta denuncia e dara continuidade a analise." }]
+        components: [{ type: 10, content: "## ✅ Atendimento assumido\nA equipe IAB assumiu esta denuncia e dara continuidade a analise." }]
       }],
       flags: MessageFlags.IsComponentsV2
     }).catch(() => null);
@@ -386,14 +386,14 @@ async function handleProcedureAction(
   }
   if (action === "ping") {
     const dmText = anonymous
-      ? "🔔 A equipe EAB solicitou sua atencao em uma denuncia anonima.\n\nVoce pode responder normalmente pelo canal do ticket. Sua identidade continuara oculta."
-      : `🔔 A equipe EAB solicitou sua atencao na denuncia ${interaction.channel}.\n\nAcesse o canal do ticket para continuar o atendimento.`;
+      ? "🔔 A equipe IAB solicitou sua atencao em uma denuncia anonima.\n\nVoce pode responder normalmente pelo canal do ticket. Sua identidade continuara oculta."
+      : `🔔 A equipe IAB solicitou sua atencao na denuncia ${interaction.channel}.\n\nAcesse o canal do ticket para continuar o atendimento.`;
     const user = await interaction.client.users.fetch(requesterId).catch(() => null);
     const dmSent = Boolean(await user?.send({ allowedMentions: { parse: [] }, content: dmText }).then(() => true).catch(() => false));
     await interaction.reply({
       content: anonymous
-        ? `🔔 O denunciante anonimo foi notificado pela equipe EAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
-        : `🔔 O denunciante foi notificado pela equipe EAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
+        ? `🔔 O denunciante anonimo foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
+        : `🔔 O denunciante foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
       ephemeral: false,
       allowedMentions: { parse: [] }
     });
@@ -496,14 +496,14 @@ async function createArchivePanel(
   const history = messages
     .filter((message) => message.content && !message.content.startsWith(`<@&`))
     .slice(-8)
-    .map((message) => `- ${message.author.bot ? "Bot" : anonymous && message.author.id === requesterId ? "Denunciante Anonimo" : "Equipe EAB"}: ${message.content.replace(/\s+/g, " ").slice(0, 180)}`)
+    .map((message) => `- ${message.author.bot ? "Bot" : anonymous && message.author.id === requesterId ? "Denunciante Anonimo" : "Equipe IAB"}: ${message.content.replace(/\s+/g, " ").slice(0, 180)}`)
     .join("\n");
   const createdAt = Math.floor(Date.now() / 1000);
   return renderComponentsV2Panel({
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     description: `:info1: Denuncia - ${selected.name}`,
     fields: [
-      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\nEquipe EAB`,
+      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\nEquipe IAB`,
       `**Data / Horario**\n<t:${createdAt}:F>\n\n**Evidencias**\n${evidence.length ? evidence.join("\n") : "Nenhuma evidencia encontrada no historico recente."}`,
       `**Historico recente**\n${history || "Sem mensagens textuais recentes."}`
     ],
@@ -585,7 +585,7 @@ function panelImage(imageUrl: string, imagePosition: PanelVisualPosition) { retu
 function uniqueIds(ids: string[]) { return [...new Set(ids.filter((id) => /^\d{5,32}$/.test(id)))]; }
 function uniqueStrings(values: string[]) { return [...new Set(values.filter((value) => value.trim()))]; }
 function extractUrls(value: string) { return value.match(/https?:\/\/\S+/gi) ?? []; }
-function safeChannelName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 90) || "denuncia-eab"; }
+function safeChannelName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 90) || "denuncia-iab"; }
 async function writeLog(context: BotContext, guildId: string, userId: string | null, type: string, message: string, metadata?: unknown) {
   await context.api.postLog({ guildId, userId, type, message, metadata }).catch((error) => {
     console.warn("[police-reports] falha ao registrar log:", error instanceof Error ? error.message : error);
