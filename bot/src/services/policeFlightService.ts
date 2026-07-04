@@ -305,6 +305,7 @@ function hasAnyRole(interaction: ButtonInteraction | StringSelectMenuInteraction
   if (!roleIds.length) return true;
   const memberRoles = interaction.member?.roles;
   if (!memberRoles || typeof memberRoles === "string") return false;
+  if (Array.isArray(memberRoles)) return roleIds.some((id) => memberRoles.includes(id));
   return roleIds.some((id) => memberRoles.cache.has(id));
 }
 async function replyHidden(interaction: ButtonInteraction | StringSelectMenuInteraction | Interaction, content: string) {

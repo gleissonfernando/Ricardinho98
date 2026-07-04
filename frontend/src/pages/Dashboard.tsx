@@ -2997,11 +2997,11 @@ function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null;
             <TicketField disabled={!canManage || loading} label="Emoji fechar" onChange={(closeButtonEmoji) => patch({ closeButtonEmoji })} value={config.closeButtonEmoji} />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <FivemRoleMulti disabled={!canManage || loading} label="Cargos que podem usar" onChange={(allowedRoleIds) => patch({ allowedRoleIds })} roles={roles} values={config.allowedRoleIds} />
-            <FivemRoleMulti disabled={!canManage || loading} label="Cargos de Piloto" onChange={(pilotRoleIds) => patch({ pilotRoleIds })} roles={roles} values={config.pilotRoleIds} />
-            <FivemRoleMulti disabled={!canManage || loading} label="Cargos de Atirador" onChange={(shooterRoleIds) => patch({ shooterRoleIds })} roles={roles} values={config.shooterRoleIds} />
-            <FivemRoleMulti disabled={!canManage || loading} label="Cargos para fechar" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
-            <FivemRoleMulti disabled={!canManage || loading} label="Administradores" onChange={(adminRoleIds) => patch({ adminRoleIds })} roles={roles} values={config.adminRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Cargos que podem usar" onChange={(allowedRoleIds) => patch({ allowedRoleIds })} roles={roles} values={config.allowedRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Piloto" onChange={(pilotRoleIds) => patch({ pilotRoleIds })} roles={roles} values={config.pilotRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Atirador" onChange={(shooterRoleIds) => patch({ shooterRoleIds })} roles={roles} values={config.shooterRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Cargos para fechar" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Administradores" onChange={(adminRoleIds) => patch({ adminRoleIds })} roles={roles} values={config.adminRoleIds} />
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             <TicketField disabled={!canManage || loading} label="Limite de pilotos" onChange={(value) => patch({ maxPilots: Math.max(1, Number(value) || 1) })} value={String(config.maxPilots)} />
