@@ -34,6 +34,7 @@ type PoliceReportsConfig = {
   color: string;
   thumbnailUrl: string;
   categoryId: string | null;
+  archiveCategoryId: string | null;
   logChannelId: string | null;
   responsibleRoleIds: string[];
   responsibleRoleId: string | null;
@@ -144,6 +145,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     color: readString(raw.color) ?? "#7c3aed",
     thumbnailUrl: readString(raw.thumbnailUrl) ?? "",
     categoryId: readString(raw.categoryId),
+    archiveCategoryId: readString(raw.archiveCategoryId),
     logChannelId: readString(raw.logChannelId),
     responsibleRoleId: readString(raw.responsibleRoleId),
     responsibleRoleIds: readStringArray(raw.responsibleRoleIds),
@@ -283,6 +285,35 @@ async function handleProcedureAction(
     requesterId,
     typeName
   });
+  if (action === "finish") {
+    if (!config.archiveCategoryId) {
+      await interaction.reply({ content: "Configure a categoria de denuncias finalizadas na dashboard antes de finalizar.", ephemeral: true });
+      await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao nao configurada.", { channelId: interaction.channel.id });
+      return;
+    }
+    const archiveCategory = await interaction.guild.channels.fetch(config.archiveCategoryId).catch(() => null);
+    if (!archiveCategory || archiveCategory.type !== ChannelType.GuildCategory || !("setParent" in interaction.channel)) {
+      await interaction.reply({ content: "A categoria de finalizacao configurada nao foi encontrada ou o canal nao pode ser movido.", ephemeral: true });
+      await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao invalida.", { archiveCategoryId: config.archiveCategoryId, channelId: interaction.channel.id });
+      return;
+    }
+    if (requesterId && /^\d{5,32}$/.test(requesterId) && "permissionOverwrites" in interaction.channel) {
+      await interaction.channel.permissionOverwrites.edit(requesterId, {
+        SendMessages: false,
+        ViewChannel: false
+      }, { reason: `Denuncia EAB finalizada por ${interaction.user.tag}` }).catch(async (error) => {
+        await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.requester_remove_failed", "Erro ao remover o autor do canal finalizado.", { channelId: interaction.channel!.id, error: error instanceof Error ? error.message : String(error), requesterId });
+      });
+    }
+    await interaction.channel.setParent(archiveCategory.id, { lockPermissions: false, reason: `Denuncia EAB finalizada por ${interaction.user.tag}` });
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.channel_moved", "Canal de denuncia movido para categoria finalizada.", {
+      archiveCategoryId: archiveCategory.id,
+      channelId: interaction.channel.id,
+      requesterId
+    });
+    await interaction.update(createProcedurePanel(config, { id: "", name: typeName || "Denuncia", description: null, emoji: null, order: 0 }, requesterId || "desconhecido", requesterId || "Usuario", status));
+    return;
+  }
   if (action === "close") {
     await interaction.reply({ content: "Canal sera deletado.", ephemeral: true });
     await interaction.channel.delete(`Denuncia EAB fechada por ${interaction.user.tag}`).catch(() => null);
@@ -293,10 +324,13 @@ async function handleProcedureAction(
 
 function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintType, userId: string, username: string, status: string) {
   const createdAt = Math.floor(Date.now() / 1000);
+  const approved = status === "Aprovado";
+  const rejected = status === "Recusado";
+  const finished = status === "Finalizado";
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Aprovar").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setLabel("Recusar").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Aprovar").setStyle(ButtonStyle.Success).setDisabled(approved || rejected || finished),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setLabel("Recusar").setStyle(ButtonStyle.Danger).setDisabled(rejected || finished),
+    new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setStyle(ButtonStyle.Primary).setDisabled(finished),
     new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel("Fechar").setStyle(ButtonStyle.Secondary)
   );
   return renderComponentsV2Panel({

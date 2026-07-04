@@ -2776,6 +2776,7 @@ type PoliceReportsConfig = {
   enabled: boolean;
   panelChannelId: string | null;
   categoryId: string | null;
+  archiveCategoryId: string | null;
   logChannelId: string | null;
   responsibleRoleId: string | null;
   responsibleRoleIds: string[];
@@ -2799,6 +2800,7 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
   panelChannelId: null,
   categoryId: null,
+  archiveCategoryId: null,
   logChannelId: null,
   responsibleRoleId: null,
   responsibleRoleIds: [],
@@ -2875,6 +2877,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         setError("Selecione a categoria onde os canais temporarios serao criados.");
         return;
       }
+      if (config.enabled && !config.archiveCategoryId) {
+        setError("Selecione a categoria para onde as denuncias finalizadas serao movidas.");
+        return;
+      }
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
       setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
       setMessage("Configuracao do EAB salva.");
@@ -2895,8 +2901,8 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       setError("Informe o nome de todos os tipos de denuncia.");
       return;
     }
-    if (!config.panelChannelId || !config.categoryId) {
-      setError("Configure o canal do painel e a categoria dos canais temporarios antes de publicar.");
+    if (!config.panelChannelId || !config.categoryId || !config.archiveCategoryId) {
+      setError("Configure o canal do painel, a categoria temporaria e a categoria de finalizacao antes de publicar.");
       return;
     }
     setSaving(true);
@@ -2938,6 +2944,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         <div className="grid gap-3 md:grid-cols-2">
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
+          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias finalizadas" onChange={(archiveCategoryId) => patch({ archiveCategoryId })} placeholder="Selecione" value={config.archiveCategoryId} />
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
           <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds?.length ? config.responsibleRoleIds : config.responsibleRoleId ? [config.responsibleRoleId] : []} />
           <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />

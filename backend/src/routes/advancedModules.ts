@@ -64,6 +64,7 @@ const policeReportsConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),
   categoryId: snowflakeSchema.nullable().default(null),
+  archiveCategoryId: snowflakeSchema.nullable().default(null),
   logChannelId: snowflakeSchema.nullable().default(null),
   responsibleRoleId: snowflakeSchema.nullable().default(null),
   responsibleRoleIds: z.array(snowflakeSchema).max(100).default([]),
