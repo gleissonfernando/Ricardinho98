@@ -1099,7 +1099,13 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
 }
 
 function isPoliceModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "patrol-reports" || moduleId === "police-reports";
+  return moduleId === "fivem-hierarchy"
+    || moduleId === "police-actions"
+    || moduleId === "police-patrol-reports"
+    || moduleId === "patrol-reports"
+    || moduleId === "police-reports"
+    || moduleId === "dm-system"
+    || moduleId === "summons-system";
 }
 
 function isFiveMManagerModule(moduleId: string) {

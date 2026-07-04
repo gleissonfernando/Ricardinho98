@@ -4,6 +4,7 @@ import { advertirCommand } from "./advertir";
 import { clearCommand } from "./clear";
 import { configCommand } from "./config";
 import { deleteServeCommand } from "./deleteServe";
+import { dmCommand } from "./dm";
 import { emojiClonerCommand } from "./emojiCloner";
 import { gravarCommand } from "./gravar";
 import { fivemOrdersCommand } from "./fivemOrders";
@@ -16,6 +17,7 @@ import { pingCommand } from "./ping";
 import { serverClonerCommand } from "./serverCloner";
 import { serverGeneratorCommand } from "./serverGenerator";
 import { ticketCommand } from "./ticket";
+import { summonsCommand } from "./summons";
 import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./policePatrolReports";
 import { policeReportsCommand } from "../services/policeReportsService";
 import type { BotCommand } from "../types";
@@ -30,6 +32,7 @@ export function createCommandCollection() {
     clearCommand,
     configCommand,
     deleteServeCommand,
+    dmCommand,
     emojiClonerCommand,
     gravarCommand,
     fivemFinanceCommand,
@@ -40,6 +43,7 @@ export function createCommandCollection() {
     missionPanelCommand,
     ...musicCommands,
     ticketCommand,
+    summonsCommand,
     policePatrolReportCommand,
     viewPolicePatrolReportCommand,
     policeReportsCommand,

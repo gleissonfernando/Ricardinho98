@@ -51,6 +51,7 @@ import type { ViewId } from "../components/layout/sidebar";
 import { ClipsPanel } from "../components/clips/ClipsPanel";
 import { FacAbsencePanel } from "../components/fivem/FacAbsencePanel";
 import { FivemActionsPanel } from "../components/fivem/FivemActionsPanel";
+import { CommunicationPanel } from "../components/communication/CommunicationPanel";
 import { PolicePatrolReportsPanel } from "../components/fivem/PolicePatrolReportsPanel";
 import { FivemFinancePanel } from "../components/fivem/FivemFinancePanel";
 import { FivemOrdersManager } from "../components/fivem/FivemOrdersPanel";
@@ -605,6 +606,8 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-finance": "fivem-finance",
   "fivem-goals": "fivem-goals",
   "manual-registration": "manual-registration",
+  "dm-system": "dm-system",
+  "summons-system": "summons-system",
   "voice-recorder": "voice-recorder",
   music: "music",
   "self-bot-protection": "safe-bot",
@@ -1383,6 +1386,12 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             goalsEnabled={enabledModules.includes("fivem-goals")}
             guild={selectedGuild}
           />
+        ) : null}
+        {activeView === "dm-system" ? (
+          <CommunicationPanel type="dm" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "dm-system", canManageDashboard)} />
+        ) : null}
+        {activeView === "summons-system" ? (
+          <CommunicationPanel type="summons" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)} />
         ) : null}
         {activeView === "settings" ? (
           <SettingsView

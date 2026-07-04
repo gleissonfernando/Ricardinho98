@@ -20,7 +20,7 @@ const settingsSchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), imageUrl: z.string().max(2048).nullable().optional(),
   imagePosition: z.enum(["top", "center", "bottom", "none"]).optional()
 });
-const actionSchema = z.object({ name: z.string().min(1).max(80), description: z.string().max(1000).default(""), emoji: z.string().max(80).nullable().default(null), imageUrl: z.string().max(2048).nullable().default(null), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"), maxParticipants: z.coerce.number().int().min(1).max(100), enabled: z.boolean().default(true), order: z.coerce.number().int().min(0).max(10000).default(0) });
+const actionSchema = z.object({ name: z.string().min(1).max(80), description: z.string().max(1000).default(""), emoji: z.string().max(80).nullable().default(null), imageUrl: z.string().max(2048).nullable().default(null), bannerUrl: z.string().max(2048).nullable().default(null), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"), authorizedRoleIds: z.array(snowflake).max(50).default([]), destinationSystem: z.string().max(100).nullable().default(null), maxParticipants: z.coerce.number().int().min(1).max(100), enabled: z.boolean().default(true), order: z.coerce.number().int().min(0).max(10000).default(0) });
 
 export const fivemActionsRouter = Router();
 

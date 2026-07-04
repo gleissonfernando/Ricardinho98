@@ -92,6 +92,8 @@ export type ViewId =
   | "fivem-finance"
   | "fivem-goals"
   | "manual-registration"
+  | "dm-system"
+  | "summons-system"
   | "notifications"
   | "entry-leave"
   | "auto-roles"
@@ -170,6 +172,8 @@ const navItems: NavItem[] = [
   { id: "fivem-finance", label: "Financeiro", icon: CircleDollarSign, moduleId: "fivem-finance" },
   { id: "fivem-goals", label: "Metas", icon: ListChecks, moduleId: "fivem-goals" },
   { id: "manual-registration", label: "Pedido de Set", icon: ListChecks, moduleId: "manual-registration" },
+  { id: "dm-system", label: "Sistema de DM", icon: AtSign, moduleId: "dm-system" },
+  { id: "summons-system", label: "Intimacoes", icon: ShieldAlert, moduleId: "summons-system" },
   { id: "entry-leave", label: "Entrada/Saida", icon: UserPlus, moduleIds: ["welcome", "leave"] },
   { id: "auto-roles", label: "Cargos automaticos", icon: Users, moduleId: "roles" },
   { id: "media-library", label: "Emojis & Sons", icon: Archive, moduleId: "emoji-cloner" },
@@ -185,11 +189,15 @@ function navSectionForItem(item: NavItem): NavSectionId {
     || item.id === "police-patrol-reports"
     || item.id === "police-reports"
     || item.id === "police-flight"
+    || item.id === "dm-system"
+    || item.id === "summons-system"
     || item.moduleId === "fivem-hierarchy"
     || item.moduleId === "police-actions"
     || item.moduleId === "police-patrol-reports"
     || item.moduleId === "police-reports"
     || item.moduleId === "police-flight"
+    || item.moduleId === "dm-system"
+    || item.moduleId === "summons-system"
   ) {
     return "police";
   }

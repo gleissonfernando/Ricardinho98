@@ -1239,12 +1239,93 @@ export type MongoFivemActionDefinition = {
   emoji: string | null;
   imageUrl: string | null;
   color: string;
+  authorizedRoleIds: string[];
+  destinationSystem: string | null;
+  bannerUrl: string | null;
   maxParticipants: number;
   enabled: boolean;
   order: number;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string | null;
+};
+
+export type MongoDmButton = {
+  id: string;
+  label: string;
+  style: "primary" | "secondary" | "success" | "danger" | "link";
+  url: string | null;
+};
+
+export type MongoDmSettings = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  enabled: boolean;
+  authorizedRoleIds: string[];
+  logChannelId: string | null;
+  bannerUrl: string | null;
+  color: string;
+  defaultTitle: string;
+  defaultText: string;
+  footerText: string | null;
+  buttons: MongoDmButton[];
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
+};
+
+export type MongoDmLog = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  senderId: string;
+  targetId: string;
+  title: string;
+  description: string;
+  button: MongoDmButton | null;
+  status: "sent" | "failed";
+  error: string | null;
+  createdAt: Date;
+};
+
+export type MongoSummonsSettings = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  enabled: boolean;
+  categoryId: string | null;
+  temporaryCategoryId: string | null;
+  authorizedRoleIds: string[];
+  moderatorRoleIds: string[];
+  logChannelId: string | null;
+  bannerUrl: string | null;
+  color: string;
+  defaultMessage: string;
+  deleteDelaySeconds: number;
+  transcriptEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
+};
+
+export type MongoSummons = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  targetId: string;
+  requesterId: string;
+  reason: string;
+  notes: string | null;
+  channelId: string | null;
+  panelMessageId: string | null;
+  status: "creating" | "active" | "closing" | "closed" | "failed";
+  transcript: string | null;
+  createdAt: Date;
+  closedAt: Date | null;
+  closedBy: string | null;
+  deleteAt: Date | null;
+  updatedAt: Date;
 };
 
 export type MongoFivemActionParticipant = {
@@ -2681,6 +2762,10 @@ export async function getMongoCollections() {
     fivemActionSettings: db.collection<MongoFivemActionSettings>("fivem_action_settings"),
     fivemActionDefinitions: db.collection<MongoFivemActionDefinition>("fivem_action_definitions"),
     fivemActionSessions: db.collection<MongoFivemActionSession>("fivem_action_sessions"),
+    dmSettings: db.collection<MongoDmSettings>("dm_settings"),
+    dmLogs: db.collection<MongoDmLog>("dm_logs"),
+    summonsSettings: db.collection<MongoSummonsSettings>("summons_settings"),
+    summons: db.collection<MongoSummons>("summons"),
     policePatrolSettings: db.collection<MongoPolicePatrolSettings>("police_patrol_settings"),
     policePatrolReports: db.collection<MongoPolicePatrolReport>("police_patrol_reports"),
     policePatrolMessages: db.collection<MongoPolicePatrolMessage>("police_patrol_messages"),
@@ -3239,6 +3324,11 @@ async function ensureFivemModuleIndexes(db: Db) {
     db.collection<MongoFivemActionDefinition>("fivem_action_definitions").createIndex({ botId: 1, guildId: 1, architecture: 1, order: 1 }),
     db.collection<MongoFivemActionSession>("fivem_action_sessions").createIndex({ botId: 1, guildId: 1, architecture: 1, createdAt: -1 }),
     db.collection<MongoFivemActionSession>("fivem_action_sessions").createIndex({ botId: 1, guildId: 1, status: 1 }),
+    db.collection<MongoDmSettings>("dm_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
+    db.collection<MongoDmLog>("dm_logs").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
+    db.collection<MongoSummonsSettings>("summons_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
+    db.collection<MongoSummons>("summons").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
+    db.collection<MongoSummons>("summons").createIndex({ botId: 1, channelId: 1, status: 1 }),
     db.collection<MongoPolicePatrolSettings>("police_patrol_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
     db.collection<MongoPolicePatrolReport>("police_patrol_reports").createIndex({ botId: 1, guildId: 1, officerId: 1, createdAt: -1 }),
     db.collection<MongoPolicePatrolReport>("police_patrol_reports").createIndex({ openKey: 1 }, { unique: true, partialFilterExpression: { openKey: { $type: "string" } } }),

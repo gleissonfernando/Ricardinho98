@@ -16,7 +16,8 @@ export type ActionSettingsInput = Partial<Pick<MongoFivemActionSettings,
 >>;
 
 export type ActionDefinitionInput = Partial<Pick<MongoFivemActionDefinition,
-  "name" | "description" | "emoji" | "imageUrl" | "color" | "maxParticipants" | "enabled" | "order"
+  "name" | "description" | "emoji" | "imageUrl" | "bannerUrl" | "color" | "authorizedRoleIds" |
+  "destinationSystem" | "maxParticipants" | "enabled" | "order"
 >>;
 
 export async function getFivemActionDashboard(botId: string, guildId: string, architecture: MongoFivemActionArchitecture) {
@@ -62,19 +63,21 @@ export async function updateFivemActionPanelState(botId: string, guildId: string
 }
 
 export async function saveFivemActionDefinition(botId: string, guildId: string, architecture: MongoFivemActionArchitecture, actionId: string | null, input: ActionDefinitionInput, actorId: string) {
-  const { fivemActionDefinitions } = await getMongoCollections();
+  const { fivemActionDefinitions, fivemActionSettings } = await getMongoCollections();
   const now = new Date();
   const id = actionId ?? randomUUID();
   await fivemActionDefinitions.updateOne({ _id: id, botId, guildId, architecture }, {
     $set: { ...input, updatedAt: now },
-    $setOnInsert: { _id: id, botId, guildId, architecture, name: input.name ?? "Nova ação", description: input.description ?? "", emoji: input.emoji ?? null, imageUrl: input.imageUrl ?? null, color: input.color ?? "#7c3aed", maxParticipants: input.maxParticipants ?? 6, enabled: input.enabled ?? true, order: input.order ?? 0, createdAt: now, createdBy: actorId }
+    $setOnInsert: { _id: id, botId, guildId, architecture, name: input.name ?? "Nova ação", description: input.description ?? "", emoji: input.emoji ?? null, imageUrl: input.imageUrl ?? null, bannerUrl: input.bannerUrl ?? null, color: input.color ?? "#7c3aed", authorizedRoleIds: input.authorizedRoleIds ?? [], destinationSystem: input.destinationSystem ?? null, maxParticipants: input.maxParticipants ?? 6, enabled: input.enabled ?? true, order: input.order ?? 0, createdAt: now, createdBy: actorId }
   }, { upsert: true });
+  await fivemActionSettings.updateOne({ botId, guildId, architecture, panelMessageId: { $ne: null } }, { $set: { lastPanelRequestedAt: now, updatedAt: now, updatedBy: actorId } });
   return actionDto((await fivemActionDefinitions.findOne({ _id: id, botId, guildId, architecture }))!);
 }
 
 export async function deleteFivemActionDefinition(botId: string, guildId: string, architecture: MongoFivemActionArchitecture, actionId: string) {
-  const { fivemActionDefinitions } = await getMongoCollections();
+  const { fivemActionDefinitions, fivemActionSettings } = await getMongoCollections();
   const deleted = await fivemActionDefinitions.findOneAndDelete({ _id: actionId, botId, guildId, architecture });
+  if (deleted) await fivemActionSettings.updateOne({ botId, guildId, architecture, panelMessageId: { $ne: null } }, { $set: { lastPanelRequestedAt: new Date(), updatedAt: new Date() } });
   return deleted ? actionDto(deleted) : null;
 }
 

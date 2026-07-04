@@ -1428,6 +1428,11 @@ export async function deleteFivemAction(guildId: string, architecture: import(".
 export async function publishFivemActionsPanel(guildId: string, architecture: import("../types").FivemActionArchitecture, botId: string) {
   const { data } = await api.post<{ settings: import("../types").FivemActionSettings }>(`/fivem-actions/${guildId}/${architecture}/publish`, undefined, { params: botParams(botId) }); return data.settings;
 }
+
+export async function getDmDashboard(guildId: string, botId: string) { const { data } = await api.get<import("../types").DmDashboard>(`/communication/dm/${guildId}`, { params: botParams(botId) }); return data; }
+export async function saveDmDashboard(guildId: string, botId: string, payload: Partial<import("../types").DmSettings>) { const { data } = await api.patch<{ settings: import("../types").DmSettings }>(`/communication/dm/${guildId}`, payload, { params: botParams(botId) }); return data.settings; }
+export async function getSummonsDashboard(guildId: string, botId: string) { const { data } = await api.get<import("../types").SummonsDashboard>(`/communication/summons/${guildId}`, { params: botParams(botId) }); return data; }
+export async function saveSummonsDashboard(guildId: string, botId: string, payload: Partial<import("../types").SummonsSettings>) { const { data } = await api.patch<{ settings: import("../types").SummonsSettings }>(`/communication/summons/${guildId}`, payload, { params: botParams(botId) }); return data.settings; }
 export async function getPolicePatrolDashboard(guildId: string, botId: string) { const { data } = await api.get<import("../types").PolicePatrolDashboard>(`/police-patrol-reports/${guildId}`, { params: botParams(botId) }); return data; }
 export async function savePolicePatrolSettings(guildId: string, botId: string, payload: Partial<import("../types").PolicePatrolSettings>) { const { data } = await api.patch<{ settings: import("../types").PolicePatrolSettings }>(`/police-patrol-reports/${guildId}/settings`, payload, { params: botParams(botId) }); return data.settings; }
 export async function deletePolicePatrolReport(guildId: string, botId: string, reportId: string) { await api.delete(`/police-patrol-reports/${guildId}/reports/${reportId}`, { params: botParams(botId) }); }

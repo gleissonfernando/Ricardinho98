@@ -79,6 +79,12 @@ async function openAction(interaction: StringSelectMenuInteraction, context: Bot
   if (!actionId || !["fac", "police"].includes(architecture)) return void await interaction.editReply("Ação inválida.");
   if (!isFivemActionRuntimeEnabled(architecture)) return void await interaction.editReply(architecture === "police" ? "Acoes policiais nao liberadas para este bot." : "Acoes FAC nao liberadas para este bot.");
   const dashboard = await context.api.getFivemActionDashboard(interaction.guildId!, architecture);
+  const action = dashboard.actions.find((item) => item.id === actionId);
+  const member = interaction.member as GuildMember;
+  if (!action) return void await interaction.editReply("Ação não encontrada.");
+  if (action.authorizedRoleIds?.length && !action.authorizedRoleIds.some((roleId) => member.roles.cache.has(roleId))) {
+    return void await interaction.editReply("Você não possui o cargo autorizado para esta ação.");
+  }
   const channelId = dashboard.settings.actionChannelId;
   if (!channelId) return void await interaction.editReply("Canal de ações não configurado.");
   const channel = await interaction.guild!.channels.fetch(channelId);
@@ -86,7 +92,7 @@ async function openAction(interaction: StringSelectMenuInteraction, context: Bot
   const session = await context.api.createFivemActionSession({ guildId: interaction.guildId!, architecture, actionId, openerId: interaction.user.id, openerName: displayName(interaction.member) });
   const message = await channel.send(sessionPayload(session));
   await context.api.updateFivemActionSessionMessage(session.id, { channelId: channel.id, messageId: message.id });
-  await interaction.editReply(`Painel de **${session.actionName}** criado em <#${channel.id}>.`);
+  await interaction.editReply(`Painel de **${session.actionName}** criado em <#${channel.id}>.${action.destinationSystem ? `\nDestino configurado: **${action.destinationSystem}**.` : ""}`);
 }
 
 async function showActionPage(interaction: any, context: BotContext, token: string) {

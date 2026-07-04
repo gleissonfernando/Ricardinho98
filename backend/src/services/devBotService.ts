@@ -52,6 +52,8 @@ export const DEV_MODULES = [
   { id: "roles", label: "Sistema de Cargos" },
   { id: "tickets", label: "Sistema de Tickets" },
   { id: "manual-registration", label: "Pedido de Set" },
+  { id: "dm-system", label: "Sistema de DM" },
+  { id: "summons-system", label: "Sistema de Intimacao" },
   { id: "moderation", label: "Sistema de Moderacao" },
   { id: "rules", label: "Sistema de Regras" },
   { id: "mission-tools", label: "Mission Tools" },
