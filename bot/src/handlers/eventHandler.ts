@@ -138,7 +138,7 @@ export function registerEvents(client: Client, context: BotContext) {
     client.on(Events.GuildRoleUpdate, (oldRole, newRole) => {
       if (isMaintenanceModeActive()) return;
       if (isBotModuleEnabled("fivem-hierarchy")) {
-        runEvent("guildRoleUpdate.fivemHierarchy", () => {
+        runEvent("guildRoleUpdate.fivemHierarchy", async () => {
           scheduleHierarchyRefresh(newRole.guild, context);
         });
       }
@@ -160,7 +160,7 @@ export function registerEvents(client: Client, context: BotContext) {
   if (!managedRuntimeBot && !isBotModuleEnabled("anti-ban") && isBotModuleEnabled("fivem-hierarchy")) {
     client.on(Events.GuildRoleUpdate, (_oldRole, newRole) => {
       if (isMaintenanceModeActive()) return;
-      runEvent("guildRoleUpdate.fivemHierarchy", () => {
+      runEvent("guildRoleUpdate.fivemHierarchy", async () => {
         scheduleHierarchyRefresh(newRole.guild, context);
       });
     });

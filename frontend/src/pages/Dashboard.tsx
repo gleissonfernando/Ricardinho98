@@ -3556,7 +3556,7 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
     globalFooterIconUrl: null,
     globalFooterText: "NPD - North Police Department",
     guildId,
-    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: template.swat ? "•" : null, emptyText: "Nenhum membro", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
+    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: "swat" in template && template.swat ? "•" : null, emptyText: "Nenhum membro", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
     id: `hierarchy-${template.unitId}`,
     imagePosition: "thumbnail",
     imageUrl: null,

@@ -214,7 +214,7 @@ function defaultPanelDto(guildId: string, botId: string | null, id: string, unit
       active: true,
       color: null,
       description: null,
-      emoji: unit.swat ? "•" : null,
+      emoji: "swat" in unit && unit.swat ? "•" : null,
       emptyText: "Nenhum membro",
       id: slugId(name),
       limit: null,
@@ -318,7 +318,11 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     globalFooterIconUrl: row.globalFooterIconUrl ?? null,
     globalFooterText: row.globalFooterText ?? "NPD - North Police Department",
     guildId: row.guildId,
-    hierarchies: (row.hierarchies ?? []).map((item) => ({ emptyText: null, showWhenEmpty: true, ...item })),
+    hierarchies: (row.hierarchies ?? []).map((item) => ({
+      ...item,
+      emptyText: item.emptyText ?? null,
+      showWhenEmpty: item.showWhenEmpty !== false
+    })),
     id: row._id,
     imagePosition: row.imagePosition ?? "none",
     imageUrl: row.imageUrl ?? null,
