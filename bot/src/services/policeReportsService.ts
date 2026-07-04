@@ -239,8 +239,12 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
     actions,
     description: `${config.panelDescription}${pageCount > 1 ? `\n\nPagina ${page + 1} de ${pageCount}` : ""}`,
     fields: [],
+    footerIcon: config.footerVisual,
+    footerText: `**NPD - IAB** · Selecione o tipo abaixo · <t:${Math.floor(Date.now() / 1000)}:f>`,
+    headerIcon: config.footerVisual,
+    headerText: "**North Police Department - Corregedoria**",
     image: config.panelVisual,
-    extraImages: [config.channelVisual, config.footerVisual],
+    extraImages: [config.channelVisual],
     moduleId: MODULE_ID,
     title: config.panelTitle
   });

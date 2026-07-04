@@ -15,6 +15,10 @@ export function renderComponentsV2Panel(input: {
   description: string;
   extraImages?: Array<PanelVisualConfig | null | undefined>;
   fields?: string[];
+  footerIcon?: PanelVisualConfig | null;
+  footerText?: string;
+  headerIcon?: PanelVisualConfig | null;
+  headerText?: string;
   image?: PanelVisualConfig | null;
   moduleId: string;
   title: string;
@@ -30,6 +34,9 @@ export function renderComponentsV2Panel(input: {
   const components: unknown[] = [];
   const media = imageUrl ? mediaBlock(imageUrl, input.title) : null;
   const titleText = `# ${input.title}\n${input.description}`;
+  const headerIconUrl = input.headerIcon?.imageEnabled ? resolvePanelImageUrl(input.headerIcon.imageUrl ?? null) : null;
+  const footerIconUrl = input.footerIcon?.imageEnabled ? resolvePanelImageUrl(input.footerIcon.imageUrl ?? null) : null;
+  if (input.headerText) components.push(compactSection(input.headerText, headerIconUrl));
   const pushMedia = (positions: PanelVisualPosition[]) => {
     if (media && positions.includes(position)) components.push(media);
     components.push(...extraMedia.filter((item) => positions.includes(item.position)).map((item) => item.block));
@@ -49,8 +56,12 @@ export function renderComponentsV2Panel(input: {
   pushMedia(["middle"]);
   fields.slice(split).forEach((content) => components.push({ type: 10, content }));
   pushMedia(["before_buttons", "above_buttons"]);
-  components.push(...actions);
   pushMedia(["bottom", "footer"]);
+  if (input.footerText) {
+    components.push({ type: 14, divider: true, spacing: 1 });
+    components.push(compactSection(input.footerText, footerIconUrl));
+  }
+  components.push(...actions);
 
   return {
     allowedMentions: { parse: [] as never[] },
@@ -73,4 +84,9 @@ export function resolvePanelImageUrl(value: string | null) {
 }
 
 function mediaBlock(url: string, description: string) { return { type: 12, items: [{ media: { url }, description }] }; }
+function compactSection(content: string, iconUrl: string | null) {
+  return iconUrl
+    ? { type: 9, components: [{ type: 10, content }], accessory: { type: 11, media: { url: iconUrl }, description: content.replace(/[*_#]/g, "").slice(0, 100) } }
+    : { type: 10, content };
+}
 function normalizePosition(position: PanelVisualPosition | undefined): PanelVisualPosition { return position && position !== "none" ? position : "none"; }
