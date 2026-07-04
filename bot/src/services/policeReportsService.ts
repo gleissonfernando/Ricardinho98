@@ -496,7 +496,7 @@ async function createArchivePanel(
   const history = messages
     .filter((message) => message.content && !message.content.startsWith(`<@&`))
     .slice(-8)
-    .map((message) => `- ${message.author.bot ? "Bot" : anonymous && message.author.id === requesterId ? "Denunciante Anonimo" : "Equipe IAB"}: ${message.content.replace(/\s+/g, " ").slice(0, 180)}`)
+    .map((message) => `- ${archiveHistoryAuthorLabel(message, requesterId, anonymous)}: ${message.content.replace(/\s+/g, " ").slice(0, 180)}`)
     .join("\n");
   const createdAt = Math.floor(Date.now() / 1000);
   return renderComponentsV2Panel({
@@ -518,14 +518,22 @@ async function createArchivePanel(
   });
 }
 
+function archiveHistoryAuthorLabel(message: Message, requesterId: string, anonymous: boolean) {
+  if (message.author.id === requesterId) return anonymous ? "Denunciante Anonimo" : "Denunciante";
+  if (message.content.includes("**Equipe IAB**")) return "Equipe IAB";
+  if (message.content.includes("**Denunciante Anonimo**")) return "Denunciante Anonimo";
+  return message.author.bot ? "Bot" : "Equipe IAB";
+}
+
 export async function handlePoliceReportsMessage(message: Message, context: BotContext) {
   if (message.author.bot || !message.guild || !("topic" in message.channel)) return false;
   const ticket = parsePoliceReportTopic(String(message.channel.topic ?? ""));
-  if (!ticket || !ticket.anonymous) return false;
+  if (!ticket) return false;
   if (!("send" in message.channel)) return false;
-  const requesterId = findRequesterId(message.channel, message.guild.members.me?.id);
+  const requesterId = ticket.requesterId ?? findRequesterId(message.channel, message.guild.members.me?.id);
   const isAuthor = message.author.id === requesterId;
   const isStaff = !isAuthor;
+  if (isAuthor && !ticket.anonymous) return false;
 
   const files = message.attachments.map((attachment) => ({ attachment: attachment.url, name: attachment.name ?? undefined }));
   const content = [
@@ -535,9 +543,9 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
   ].filter(Boolean).join("\n");
   const deleted = await message.delete().then(() => true).catch(() => false);
   await message.channel.send({ allowedMentions: { parse: [] }, content: content || "*Anexo enviado*", files }).catch(async (error) => {
-    await writeLog(context, message.guild!.id, message.author.id, "police-reports.anonymous_relay_failed", "Falha ao retransmitir mensagem anonima.", { channelId: message.channel.id, error: error instanceof Error ? error.message : String(error) });
+    await writeLog(context, message.guild!.id, message.author.id, "police-reports.relay_failed", "Falha ao retransmitir mensagem protegida.", { anonymous: ticket.anonymous, channelId: message.channel.id, error: error instanceof Error ? error.message : String(error), isStaff });
   });
-  await writeLog(context, message.guild.id, message.author.id, "police-reports.anonymous_message", "Mensagem retransmitida em denuncia anonima.", { attachmentCount: message.attachments.size, channelId: message.channel.id, deleted, isStaff, selectedType: ticket.selectedId });
+  await writeLog(context, message.guild.id, message.author.id, "police-reports.protected_message", "Mensagem retransmitida sem expor identidade no canal.", { anonymous: ticket.anonymous, attachmentCount: message.attachments.size, channelId: message.channel.id, deleted, isStaff, selectedType: ticket.selectedId });
   return true;
 }
 
