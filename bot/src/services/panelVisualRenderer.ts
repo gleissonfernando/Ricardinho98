@@ -20,38 +20,37 @@ export function renderComponentsV2Panel(input: {
   title: string;
 }) {
   const imageUrl = input.image?.imageEnabled ? resolvePanelImageUrl(input.image.imageUrl ?? null) : null;
-  const extraMedia = (input.extraImages ?? [])
-    .map((image) => image?.imageEnabled ? resolvePanelImageUrl(image.imageUrl ?? null) : null)
-    .filter((url): url is string => Boolean(url))
-    .slice(0, 2)
-    .map((url) => mediaBlock(url, input.title));
-  const position = imageUrl ? normalizePosition(input.image?.imagePosition) : extraMedia.length ? "banner" : "none";
+  const position = imageUrl ? normalizePosition(input.image?.imagePosition) : "none";
+  const extraMedia = (input.extraImages ?? []).flatMap((image) => {
+    const url = image?.imageEnabled ? resolvePanelImageUrl(image.imageUrl ?? null) : null;
+    return url ? [{ block: mediaBlock(url, input.title), position: normalizePosition(image?.imagePosition) }] : [];
+  }).slice(0, 2);
   const actions = input.actions ?? [];
   const fields = input.fields ?? [];
   const components: unknown[] = [];
   const media = imageUrl ? mediaBlock(imageUrl, input.title) : null;
   const titleText = `# ${input.title}\n${input.description}`;
-  const pushMedia = () => {
-    if (media) components.push(media);
-    components.push(...extraMedia);
+  const pushMedia = (positions: PanelVisualPosition[]) => {
+    if (media && positions.includes(position)) components.push(media);
+    components.push(...extraMedia.filter((item) => positions.includes(item.position)).map((item) => item.block));
   };
 
-  if ((media || extraMedia.length) && ["top", "banner"].includes(position)) pushMedia();
+  pushMedia(["top", "banner"]);
   if (media && ["thumbnail", "side"].includes(position)) {
     components.push({ type: 9, components: [{ type: 10, content: titleText }], accessory: { type: 11, media: { url: imageUrl }, description: input.title } });
-    components.push(...extraMedia);
   } else {
     components.push({ type: 10, content: titleText });
   }
-  if ((media || extraMedia.length) && ["below_title", "below_text"].includes(position)) pushMedia();
+  components.push(...extraMedia.filter((item) => ["thumbnail", "side"].includes(item.position)).map((item) => item.block));
+  pushMedia(["below_title", "below_text"]);
 
   const split = Math.ceil(fields.length / 2);
   fields.slice(0, split).forEach((content) => components.push({ type: 10, content }));
-  if ((media || extraMedia.length) && position === "middle") pushMedia();
+  pushMedia(["middle"]);
   fields.slice(split).forEach((content) => components.push({ type: 10, content }));
-  if ((media || extraMedia.length) && ["before_buttons", "above_buttons"].includes(position)) pushMedia();
+  pushMedia(["before_buttons", "above_buttons"]);
   components.push(...actions);
-  if ((media || extraMedia.length) && ["bottom", "footer"].includes(position)) pushMedia();
+  pushMedia(["bottom", "footer"]);
 
   return {
     allowedMentions: { parse: [] as never[] },

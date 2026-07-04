@@ -18,7 +18,7 @@ import {
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
 import { renderComponentsV2Panel } from "./panelVisualRenderer";
-import type { PanelVisualPosition } from "./panelVisualRenderer";
+import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
 
 const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
@@ -46,6 +46,9 @@ type PoliceReportsConfig = {
   channelImageUrl: string;
   footerImageUrl: string;
   imagePosition: PanelVisualPosition;
+  panelVisual: PanelVisualConfig | null;
+  channelVisual: PanelVisualConfig | null;
+  footerVisual: PanelVisualConfig | null;
   complaintTypes: ComplaintType[];
 };
 
@@ -207,6 +210,9 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     channelImageUrl: readString(raw.channelImageUrl) ?? readEnabledImageUrl(channelVisual) ?? "",
     footerImageUrl: readString(raw.footerImageUrl) ?? readEnabledImageUrl(footerVisual) ?? "",
     imagePosition: readImagePosition(raw.imagePosition ?? mainVisual?.imagePosition),
+    panelVisual: enabledVisual(mainVisual) ?? panelImage(readString(raw.panelImageUrl) ?? readString(raw.thumbnailUrl) ?? "", readImagePosition(raw.imagePosition)),
+    channelVisual: enabledVisual(channelVisual) ?? panelImage(readString(raw.channelImageUrl) ?? "", readImagePosition(channelVisual?.imagePosition ?? raw.imagePosition)),
+    footerVisual: enabledVisual(footerVisual) ?? panelImage(readString(raw.footerImageUrl) ?? "", "footer"),
     complaintTypes: mergeDefaultComplaintTypes(complaintTypes)
   };
 }
@@ -231,8 +237,8 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
     actions,
     description: `${config.panelDescription}${pageCount > 1 ? `\n\nPagina ${page + 1} de ${pageCount}` : ""}`,
     fields: [],
-    image: panelImage(config.panelImageUrl || config.thumbnailUrl, config.imagePosition),
-    extraImages: [panelImage(config.footerImageUrl, "footer")],
+    image: config.panelVisual,
+    extraImages: [config.footerVisual],
     moduleId: MODULE_ID,
     title: config.panelTitle
   });
@@ -422,8 +428,8 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
       `${anonymous ? "**Modo:** Denuncia Anonima" : `**Modo:** Denuncia Identificada\n**Usuario:** <@${userId}>\n**ID:** ${userId}`}\n**Tipo:** ${selected.name}\n**Status:** ${status}\n**Solicitado em:** <t:${createdAt}:F>`,
       config.procedureText
     ],
-    image: panelImage(config.channelImageUrl || config.panelImageUrl || config.thumbnailUrl, config.imagePosition),
-    extraImages: [panelImage(config.footerImageUrl, "footer")],
+    image: config.channelVisual ?? config.panelVisual,
+    extraImages: [config.footerVisual],
     moduleId: MODULE_ID,
     title: "Procedimento IAB"
   });
@@ -487,6 +493,7 @@ function isComplaintType(value: unknown): value is ComplaintType {
 
 function readString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function readEnabledImageUrl(value: { imageEnabled?: boolean; imageUrl?: string | null } | null) { return value?.imageEnabled && value.imageUrl ? value.imageUrl : null; }
+function enabledVisual(value: PanelVisualConfig | null) { return value?.imageEnabled && value.imageUrl ? value : null; }
 function readStringArray(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
 function readImagePosition(value: unknown): PanelVisualPosition {
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : "banner";
