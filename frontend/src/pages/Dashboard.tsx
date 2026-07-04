@@ -583,6 +583,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-actions": "fivem-actions",
   "police-actions": "police-actions",
   "police-patrol-reports": "police-patrol-reports",
+  "police-reports": "police-reports",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -1303,6 +1304,13 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           <PolicePatrolReportsPanel
             botId={activeBotId}
             canManage={canManageModule(selectedBot, "police-patrol-reports", canManageDashboard)}
+            guild={selectedGuild}
+          />
+        ) : null}
+        {activeView === "police-reports" ? (
+          <PoliceReportsPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "police-reports", canManageDashboard)}
             guild={selectedGuild}
           />
         ) : null}
@@ -2762,6 +2770,116 @@ function FivemView({
   );
 }
 
+type PoliceReportsConfig = {
+  enabled: boolean;
+  panelChannelId: string | null;
+  categoryId: string | null;
+  logChannelId: string | null;
+  responsibleRoleId: string | null;
+  panelTitle: string;
+  panelDescription: string;
+  buttonLabel: string;
+  color: string;
+  thumbnailUrl: string;
+};
+
+const defaultPoliceReportsConfig: PoliceReportsConfig = {
+  enabled: false,
+  panelChannelId: null,
+  categoryId: null,
+  logChannelId: null,
+  responsibleRoleId: null,
+  panelTitle: "Sistema de Denuncias IAB",
+  panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
+  buttonLabel: "Abrir denuncia",
+  color: "#7c3aed",
+  thumbnailUrl: ""
+};
+
+function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
+  const [config, setConfig] = useState<PoliceReportsConfig>(defaultPoliceReportsConfig);
+  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
+  const [categories, setCategories] = useState<GuildChannelOption[]>([]);
+  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!botId || !guild) return;
+    let active = true;
+    setLoading(true);
+    Promise.all([getAdvancedModuleConfig(botId, guild.id, "police-reports"), getGuildLiveOptions(guild.id, botId)])
+      .then(([module, options]) => {
+        if (!active) return;
+        setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
+        setChannels(options.channels);
+        setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
+        setRoles(options.roles);
+      })
+      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias IAB."))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [botId, guild?.id]);
+
+  function patch(value: Partial<PoliceReportsConfig>) {
+    setConfig((current) => ({ ...current, ...value }));
+  }
+
+  async function save() {
+    if (!botId || !guild) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
+      setConfig({ ...defaultPoliceReportsConfig, ...(module.config as Partial<PoliceReportsConfig>) });
+      setMessage("Configuracao do IAB salva.");
+    } catch {
+      setError("Nao foi possivel salvar a configuracao do IAB.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="border-violet-500/15 bg-zinc-950/75">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias IAB</CardTitle>
+            <CardDescription>Configuracao exclusiva da area Policia.</CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
+            <Button disabled={!canManage || !botId || !guild || loading || saving} onClick={() => void save()} size="sm" type="button">
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error ? <div className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
+        {message ? <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
+          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
+          <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
+          <RoleSelect disabled={!canManage || loading} label="Cargo responsavel" onChange={(responsibleRoleId) => patch({ responsibleRoleId })} roles={roles} value={config.responsibleRoleId ?? ""} />
+          <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
+          <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
+          <TicketField disabled={!canManage || loading} label="Cor" onChange={(color) => patch({ color })} type="color" value={config.color} />
+          <TicketField disabled={!canManage || loading} label="URL da thumbnail" onChange={(thumbnailUrl) => patch({ thumbnailUrl })} value={config.thumbnailUrl} />
+          <div className="md:col-span-2">
+            <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
   const [panels, setPanels] = useState<FivemHierarchyPanelType[]>([]);
   const [draft, setDraft] = useState<FivemHierarchyPanelType | null>(null);
@@ -3521,7 +3639,8 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Painel automatico de hierarquia policial por cargos.", id: "fivem-hierarchy", permissions: "Admin Policia", title: "Hierarquia Policial" },
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
-    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" }
+    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
+    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Sistema de Denuncias IAB" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -3531,7 +3650,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     .filter((module) => {
       if (mode === "orders") return module.id === "fivem-orders";
       if (mode === "goals") return module.id === "fivem-goals";
-      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && module.id !== "police-actions" && module.id !== "police-patrol-reports";
+      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && module.id !== "police-actions" && module.id !== "police-patrol-reports" && module.id !== "police-reports";
     })
     .map((module) => ({
       description: module.description,
@@ -3554,7 +3673,8 @@ function fivemIconForModule(moduleId: string) {
     "fivem-drugs": Boxes,
     "fivem-hierarchy": Users,
     "fivem-orders": ListChecks,
-    "police-actions": Activity
+    "police-actions": Activity,
+    "police-reports": ShieldAlert
   };
 
   return icons[moduleId] ?? Boxes;
@@ -3636,6 +3756,7 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "fivem-actions",
       "police-actions",
       "police-patrol-reports",
+      "police-reports",
       "fivem-fac"
     ].includes(moduleId);
   }
@@ -8256,12 +8377,12 @@ function visualPanelIdForView(view: ViewId) {
 }
 
 function policePanelImageSlotsForView(view: ViewId) {
-  if (view !== "fivem-hierarchy" && view !== "police-actions" && view !== "police-patrol-reports") {
+  if (view !== "fivem-hierarchy" && view !== "police-actions" && view !== "police-patrol-reports" && view !== "police-reports") {
     return null;
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias IAB" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },

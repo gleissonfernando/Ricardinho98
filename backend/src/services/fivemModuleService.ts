@@ -92,6 +92,13 @@ export const BUILTIN_FIVEM_MODULES: FivemModuleDefinition[] = [
     id: "police-actions",
     permissions: "Admin Policia, Operador",
     title: "Acoes Policiais"
+  },
+  {
+    builtIn: true,
+    description: "Denuncias internas com sigilo, evidencias e acompanhamento da corregedoria.",
+    id: "police-reports",
+    permissions: "Admin Policia, IAB",
+    title: "Sistema de Denuncias IAB"
   }
 ];
 

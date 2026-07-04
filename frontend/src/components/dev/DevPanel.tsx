@@ -26,6 +26,7 @@ import {
     Server,
     Sparkles,
     Settings,
+    ShieldAlert,
     ShieldCheck,
     SlidersHorizontal,
     Star,
@@ -161,6 +162,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "fivem-actions", label: "FiveM - Acoes FAC" },
   { id: "police-actions", label: "Policia - Acoes" },
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
+  { id: "police-reports", label: "Policia - Denuncias IAB" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalização" }
 ];
@@ -212,6 +214,7 @@ type BotMenuId =
   | "fivem-actions"
   | "police-actions"
   | "police-patrol-reports"
+  | "police-reports"
   | "fivem-production"
   | "integrations";
 
@@ -485,6 +488,13 @@ const botMenuItems: BotMenuItem[] = [
         moduleIds: ["police-patrol-reports"]
       },
       {
+        id: "police-reports",
+        label: "Denuncias IAB",
+        description: "Denuncias internas e corregedoria",
+        icon: ShieldAlert,
+        moduleIds: ["police-reports"]
+      },
+      {
         id: "fivem-production",
         label: "Producao",
         description: "Produção e corporações",
@@ -498,7 +508,7 @@ const botMenuItems: BotMenuItem[] = [
     label: "Policia",
     description: "Hierarquia, acoes e relatorios policiais",
     icon: ShieldCheck,
-    moduleIds: ["fivem-hierarchy", "police-actions", "police-patrol-reports"]
+    moduleIds: ["fivem-hierarchy", "police-actions", "police-patrol-reports", "police-reports"]
   },
   {
     id: "integrations",
@@ -4287,6 +4297,7 @@ function modulesForMenu(item: BotMenuItem, modules: DevModuleDefinition[], inclu
     moduleIds.delete("fivem-hierarchy");
     moduleIds.delete("police-actions");
     moduleIds.delete("police-patrol-reports");
+    moduleIds.delete("police-reports");
   }
 
   return modules.filter((module) => moduleIds.has(module.id));
@@ -4299,7 +4310,7 @@ function visibleBotMenuItems(items: BotMenuItem[], modules: DevModuleDefinition[
     }
 
     const children = item.children
-      ? visibleBotMenuItems(item.children, modules, enabledModules).filter((child) => item.id !== "fivem" || !["fivem-hierarchy", "police-actions", "police-patrol-reports"].includes(child.id))
+      ? visibleBotMenuItems(item.children, modules, enabledModules).filter((child) => item.id !== "fivem" || !["fivem-hierarchy", "police-actions", "police-patrol-reports", "police-reports"].includes(child.id))
       : undefined;
     const ownEnabled = modulesForMenu(item, modules).some((module) => enabledModules.includes(module.id));
 
@@ -4346,7 +4357,7 @@ function moduleManagerGroups(modules: DevModuleDefinition[]) {
       }
 
       for (const child of item.children) {
-        if (item.id === "fivem" && ["fivem-hierarchy", "police-actions", "police-patrol-reports"].includes(child.id)) {
+        if (item.id === "fivem" && ["fivem-hierarchy", "police-actions", "police-patrol-reports", "police-reports"].includes(child.id)) {
           continue;
         }
 
@@ -4401,7 +4412,7 @@ function isFiveMModule(moduleId: string) {
 }
 
 function isPoliceReleaseModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports";
+  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "police-reports";
 }
 
 function StatusBadge({ status }: { status: DevBotStatus }) {

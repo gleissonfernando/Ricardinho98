@@ -92,6 +92,7 @@ export const DEV_MODULES = [
   { id: "fivem-actions", label: "FiveM - Acoes FAC" },
   { id: "police-actions", label: "Policia - Acoes" },
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
+  { id: "police-reports", label: "Policia - Denuncias IAB" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalizacao" }
 ] as const;
