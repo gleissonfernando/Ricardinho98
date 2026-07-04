@@ -7,15 +7,18 @@ export type TicketDto = {
   guildId: string;
   channelId?: string | null;
   openerId: string;
+  authorId?: string;
+  anonymous?: boolean;
+  ticketType?: string;
   subject: string;
-  status: "OPEN" | "PENDING" | "CLOSED";
+  status: "OPEN" | "PENDING" | "CLOSED" | "aberto" | "finalizado";
   createdAt: string;
   closedAt?: string | null;
 };
 
 const memoryTickets: TicketDto[] = [];
 
-type CreateTicketInput = Pick<TicketDto, "guildId" | "channelId" | "openerId" | "subject"> & {
+type CreateTicketInput = Pick<TicketDto, "guildId" | "channelId" | "openerId" | "subject"> & Partial<Pick<TicketDto, "anonymous" | "authorId" | "status" | "ticketType">> & {
   botId?: string | null;
 };
 
@@ -26,8 +29,11 @@ export async function createTicket(input: CreateTicketInput) {
     guildId: input.guildId,
     channelId: input.channelId,
     openerId: input.openerId,
+    authorId: input.authorId ?? input.openerId,
+    anonymous: input.anonymous ?? false,
+    ticketType: input.ticketType,
     subject: input.subject,
-    status: "OPEN",
+    status: input.status ?? "OPEN",
     createdAt: new Date().toISOString(),
     closedAt: null
   };
@@ -44,8 +50,11 @@ export async function createTicket(input: CreateTicketInput) {
       guildId: input.guildId,
       channelId: input.channelId ?? null,
       openerId: input.openerId,
+      authorId: input.authorId ?? input.openerId,
+      anonymous: input.anonymous ?? false,
+      ticketType: input.ticketType,
       subject: input.subject,
-      status: "OPEN",
+      status: input.status ?? "OPEN",
       createdAt: new Date(),
       closedAt: null
     };
@@ -85,6 +94,9 @@ export async function listTickets(guildId?: string, botId?: string | null) {
       guildId: ticket.guildId,
       channelId: ticket.channelId,
       openerId: ticket.openerId,
+      authorId: ticket.authorId ?? ticket.openerId,
+      anonymous: ticket.anonymous ?? false,
+      ticketType: ticket.ticketType,
       subject: ticket.subject,
       status: ticket.status,
       createdAt: ticket.createdAt.toISOString(),
@@ -94,6 +106,25 @@ export async function listTickets(guildId?: string, botId?: string | null) {
     return memoryTickets
       .filter((ticket) => (!guildId || ticket.guildId === guildId) && ticket.botId === normalizedBotId)
       .slice(0, 50);
+  }
+}
+
+export async function updateTicketStatusByChannel(input: { botId?: string | null; channelId: string; guildId: string; status: "finalizado" }) {
+  const botId = normalizeBotId(input.botId);
+  const closedAt = new Date();
+  const memoryTicket = memoryTickets.find((ticket) => ticket.botId === botId && ticket.guildId === input.guildId && ticket.channelId === input.channelId);
+  if (memoryTicket) {
+    memoryTicket.status = input.status;
+    memoryTicket.closedAt = closedAt.toISOString();
+  }
+  try {
+    const { tickets } = await getMongoCollections();
+    await tickets.updateOne(
+      { ...scopedQuery(input.guildId, botId), channelId: input.channelId },
+      { $set: { closedAt, status: input.status } }
+    );
+  } catch (error) {
+    console.warn("[mongo] status do ticket mantido em memoria:", error instanceof Error ? error.message : error);
   }
 }
 

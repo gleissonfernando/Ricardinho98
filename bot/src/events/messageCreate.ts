@@ -12,6 +12,7 @@ import type { BotContext } from "../types";
 import { isBotModuleEnabled } from "../config/env";
 import { canModerateMessage } from "../services/moderationChannelPolicy";
 import { capturePolicePatrolMessage } from "../services/policePatrolReportService";
+import { handlePoliceReportsMessage } from "../services/policeReportsService";
 
 const MUSIC_PREFIX_COMMANDS = new Set(["music", "play", "artist", "pause", "resume", "skip", "stop", "queue", "clearqueue", "nowplaying", "volume", "loop", "shuffle"]);
 
@@ -47,6 +48,10 @@ export async function handleMessageCreate(message: Message, context: BotContext)
   }
 
   if (isBotModuleEnabled("fivem-hierarchy") && await handleFivemHierarchyMessage(message, context)) {
+    return;
+  }
+
+  if (isBotModuleEnabled("police-reports") && await handlePoliceReportsMessage(message, context)) {
     return;
   }
 

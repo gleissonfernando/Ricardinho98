@@ -1403,8 +1403,13 @@ export class ApiClient {
     return data;
   }
 
-  async createTicket(input: { guildId: string; channelId?: string | null; openerId: string; subject: string }) {
+  async createTicket(input: { anonymous?: boolean; authorId?: string; guildId: string; channelId?: string | null; openerId: string; status?: "OPEN" | "aberto"; subject: string; ticketType?: string }) {
     const { data } = await this.http.post("/tickets", input);
+    return data;
+  }
+
+  async updateTicketStatus(input: { channelId: string; guildId: string; status: "finalizado" }) {
+    const { data } = await this.http.patch("/tickets/status", input);
     return data;
   }
 

@@ -129,8 +129,11 @@ export type MongoTicket = {
   guildId: string;
   channelId: string | null;
   openerId: string;
+  authorId?: string;
+  anonymous?: boolean;
+  ticketType?: string;
   subject: string;
-  status: "OPEN" | "PENDING" | "CLOSED";
+  status: "OPEN" | "PENDING" | "CLOSED" | "aberto" | "finalizado";
   createdAt: Date;
   closedAt: Date | null;
 };

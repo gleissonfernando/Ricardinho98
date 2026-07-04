@@ -6,13 +6,17 @@ import { emitRealtime } from "../realtime/events";
 import { canManageDashboardGuild, canReadDashboardGuild, getAccessibleGuildIds } from "../services/dashboardGuildAccessService";
 import { canReadDevBotModule, canUseDevBotModule } from "../services/devBotService";
 import { createLog } from "../services/logService";
-import { createTicket, listTickets } from "../services/ticketService";
+import { createTicket, listTickets, updateTicketStatusByChannel } from "../services/ticketService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
 
 const ticketSchema = z.object({
   guildId: z.string().min(1),
   channelId: z.string().optional().nullable(),
   openerId: z.string().min(1),
+  authorId: z.string().min(1).optional(),
+  anonymous: z.boolean().optional(),
+  ticketType: z.string().min(1).max(40).optional(),
+  status: z.enum(["OPEN", "aberto"]).optional(),
   subject: z.string().min(1).default("Atendimento")
 });
 
@@ -76,6 +80,20 @@ ticketsRouter.post("/", async (req, res, next) => {
     return res.status(201).json({
       ticket
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+ticketsRouter.patch("/status", async (req, res, next) => {
+  try {
+    const input = z.object({ channelId: z.string().min(1), guildId: z.string().min(1), status: z.literal("finalizado") }).parse(req.body);
+    const botId = await resolveRequestBotId(req);
+    if (!isBotRequest(req) && !(await canManageScopedGuild(req, input.guildId, botId))) {
+      return res.status(403).json({ message: "Servidor nao encontrado ou sem o bot." });
+    }
+    await updateTicketStatusByChannel({ ...input, botId });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }
