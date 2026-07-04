@@ -570,11 +570,13 @@ export type MongoFivemHierarchyEntry = {
   color: string | null;
   description: string | null;
   emoji: string | null;
+  emptyText: string | null;
   id: string;
   limit: number | null;
   name: string;
   order: number;
   roleId: string;
+  showWhenEmpty: boolean;
 };
 
 export type MongoFivemHierarchyPanel = {
@@ -588,10 +590,15 @@ export type MongoFivemHierarchyPanel = {
   color: string;
   createdAt: Date;
   description: string | null;
+  displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
+  emptyText: string;
   enabled: boolean;
   footerEnabled: boolean;
   footerIconUrl: string | null;
+  footerScope: "unit" | "global";
   footerText: string | null;
+  globalFooterIconUrl: string | null;
+  globalFooterText: string | null;
   guildId: string;
   hierarchies: MongoFivemHierarchyEntry[];
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
@@ -607,6 +614,8 @@ export type MongoFivemHierarchyPanel = {
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;
+  unitId: string;
+  useGlobalFooter: boolean;
   updatedAt: Date;
   updatedBy?: string | null;
 };

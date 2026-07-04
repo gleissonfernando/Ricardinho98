@@ -21,7 +21,7 @@ export async function handleGuildMemberUpdate(oldMember: GuildMember, newMember:
     .filter((role) => !newMember.roles.cache.has(role.id))
     .map((role) => role.name);
 
-  if (isBotModuleEnabled("fivem-hierarchy") && (added.length || removed.length)) {
+  if (isBotModuleEnabled("fivem-hierarchy") && (added.length || removed.length || oldMember.displayName !== newMember.displayName || oldMember.nickname !== newMember.nickname)) {
     scheduleHierarchyRefresh(newMember.guild, context);
   }
 

@@ -3217,6 +3217,16 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
   );
 }
 
+const hierarchyUnitTemplates = [
+  { unitId: "du", name: "DU", title: "Hierarquia - DU", description: "Lista de membros da unidade DU", color: "#1d4ed8", ranks: ["Chief of Detectives", "Assistant Chief", "Detective III", "Detective II", "Detective I", "DU Probationary"] },
+  { unitId: "cbp", name: "CBP", title: "Hierarquia - CBP", description: "Lista de membros da unidade CBP", color: "#16a34a", ranks: ["CBP Commander", "CBP Deputy Commander", "CBP Customs Coordinator", "CBP Defense Agent III", "CBP Defense Agent II", "CBP Defense Agent I", "CBP Probationary Agent"] },
+  { unitId: "traffic", name: "TRAFFIC", title: "Hierarquia - TRAFFIC", description: "Lista de membros da unidade TRAFFIC", color: "#7c3aed", ranks: ["Chief Of Traffic Enforcement", "Assistant Chief", "Coordinator", "Traffic Senior", "Traffic Officer", "Traffic Probationary"] },
+  { unitId: "mary", name: "MARY", title: "Hierarquia - MARY", description: "Lista de membros da unidade MARY", color: "#52525b", ranks: ["MARY Commander", "MARY Deputy Commander", "MARY Coordinator", "MARY Veteran", "MARY Senior", "MARY Officer", "MARY Probationary"] },
+  { unitId: "fast", name: "FAST", title: "Hierarquia - FAST", description: "Lista de membros da unidade FAST", color: "#eab308", ranks: ["Commander FAST", "FAST Deputy Commander", "FAST Coordinator", "FAST Veteran", "FAST Senior", "FAST Officer", "FAST Probationary"] },
+  { unitId: "daf", name: "DAF", title: "Hierarquia - DAF", description: "Lista de membros da unidade DAF", color: "#d4d4d8", ranks: ["Commander D.A.F", "DAF Deputy Commander", "DAF Coordinator", "DAF Veteran", "DAF Senior", "DAF Officer", "DAF Probationary"] },
+  { unitId: "swat", name: "SWAT", title: "HIERARQUIA SWAT", description: "Lista de membros da unidade SWAT", color: "#0f172a", ranks: ["COMMANDER", "DEPUTY COMMANDER", "COORDINATOR", "INSTRUCTOR", "OPERATOR", "PROBATORY"], swat: true }
+] as const;
+
 function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
   const [panels, setPanels] = useState<FivemHierarchyPanelType[]>([]);
   const [draft, setDraft] = useState<FivemHierarchyPanelType | null>(null);
@@ -3266,7 +3276,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   function addHierarchy() {
     setDraft((current) => current ? {
       ...current,
-      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: null, id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "" }]
+      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: null, emptyText: "Nenhum membro", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
     } : current);
   }
 
@@ -3282,10 +3292,9 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   function hierarchyValidationError(panel: FivemHierarchyPanelType, requireChannel = false) {
     const selectedRoleIds = panel.hierarchies.map((item) => item.roleId).filter(Boolean);
     if (!panel.hierarchies.length) return "Adicione pelo menos um cargo ao painel.";
-    if (panel.hierarchies.some((item) => !item.roleId || !item.name.trim())) return "Escolha o cargo e informe o que ele representa em todas as linhas.";
+    if (panel.hierarchies.some((item) => !item.name.trim())) return "Informe o nome exibido em todas as patentes.";
     if (new Set(selectedRoleIds).size !== selectedRoleIds.length) return "O mesmo cargo nao pode aparecer duas vezes no painel.";
     if (requireChannel && !panel.panelChannelId) return "Escolha o canal onde o painel sera publicado.";
-    if (requireChannel && !panel.ticketCategoryId) return "Escolha a categoria onde os tickets de hierarquia serao criados.";
     return null;
   }
 
@@ -3345,18 +3354,32 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     }
   }
 
+  function resetDraftToTemplate() {
+    if (!guild || !draft) return;
+    const template = hierarchyUnitTemplates.find((unit) => unit.unitId === draft.unitId) ?? hierarchyUnitTemplates[0];
+    setDraft({
+      ...createHierarchyPanelFromTemplate(guild.id, botId, template),
+      id: draft.id,
+      createdAt: draft.createdAt,
+      panelChannelId: draft.panelChannelId,
+      panelMessageId: draft.panelMessageId,
+      updatedAt: draft.updatedAt
+    });
+  }
+
   return (
     <Card className="border-emerald-500/10 bg-zinc-950/75">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-emerald-300" /> Hierarquia Policial</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-emerald-300" /> Sistema de Hierarquia</CardTitle>
             <CardDescription>Painel fixo com membros agrupados por cargos, atualizado automaticamente quando a hierarquia muda.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={!canManage || !guild} onClick={() => setDraft(createEmptyHierarchyPanel(guild?.id ?? "", botId))} size="sm" type="button" variant="outline">Novo painel</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
+            <Button disabled={!canManage || !draft || saving} onClick={resetDraftToTemplate} size="sm" type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Resetar modelo</Button>
           </div>
         </div>
       </CardHeader>
@@ -3381,6 +3404,19 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal de logs" onChange={(value) => patchDraft({ logChannelId: value })} placeholder="Sem logs" value={draft.logChannelId} />
                 <FivemChannelSelect channels={categories} disabled={!canManage} label="Categoria dos tickets" onChange={(value) => patchDraft({ ticketCategoryId: value })} placeholder="Selecione" prefix="" value={draft.ticketCategoryId} />
                 <TicketField disabled={!canManage} label="Cor" onChange={(value) => patchDraft({ color: value })} type="color" value={draft.color} />
+                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
+                  Unidade ativa
+                  <Switch checked={draft.enabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ enabled: checked })} />
+                </label>
+                <label className="block text-xs font-medium text-zinc-400">Formato dos membros
+                  <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ displayMode: event.target.value as FivemHierarchyPanelType["displayMode"] })} value={draft.displayMode}>
+                    <option value="mention">Mencao do usuario</option>
+                    <option value="display_name">Nome de exibicao</option>
+                    <option value="nickname">Nickname</option>
+                    <option value="name_with_id">Nome + ID funcional</option>
+                  </select>
+                </label>
+                <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro" })} value={draft.emptyText} />
                 <label className="block text-xs font-medium text-zinc-400">Imagem
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ imagePosition: event.target.value as FivemHierarchyPanelType["imagePosition"] })} value={draft.imagePosition}>
                     <option value="none">Sem imagem</option>
@@ -3391,9 +3427,16 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 </label>
                 <TicketField disabled={!canManage} label="URL da thumbnail/icone" onChange={(value) => patchDraft({ imageUrl: value || null })} value={draft.imageUrl ?? ""} />
                 <TicketField disabled={!canManage} label="Texto do rodape" onChange={(value) => patchDraft({ footerText: value || null })} value={draft.footerText ?? ""} />
+                <TicketField disabled={!canManage} label="Icone do rodape" onChange={(value) => patchDraft({ footerIconUrl: value || null })} value={draft.footerIconUrl ?? ""} />
+                <TicketField disabled={!canManage} label="Rodape global" onChange={(value) => patchDraft({ globalFooterText: value || null })} value={draft.globalFooterText ?? ""} />
+                <TicketField disabled={!canManage} label="Icone global" onChange={(value) => patchDraft({ globalFooterIconUrl: value || null })} value={draft.globalFooterIconUrl ?? ""} />
                 <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
                   Exibir rodape
                   <Switch checked={draft.footerEnabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ footerEnabled: checked })} />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
+                  Usar rodape global
+                  <Switch checked={draft.useGlobalFooter} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ useGlobalFooter: checked, footerScope: checked ? "global" : "unit" })} />
                 </label>
                 <div className="md:col-span-2">
                   <TicketArea disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
@@ -3430,11 +3473,15 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   <Button disabled={!canManage} onClick={addHierarchy} size="sm" type="button" variant="outline">Adicionar cargo</Button>
                 </div>
                 {draft.hierarchies.map((item, index) => (
-                  <div className="grid gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1.2fr_1fr_80px_90px_auto]" key={item.id}>
+                  <div className="grid gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1.2fr_1fr_80px_90px_1fr_auto]" key={item.id}>
                     <RoleSelect disabled={!canManage} label="Cargo do Discord" onChange={(value) => patchHierarchy(index, { roleId: value })} roles={roles} value={item.roleId} />
                     <TicketField disabled={!canManage} label="Exibir como" onChange={(value) => patchHierarchy(index, { name: value })} value={item.name} />
                     <TicketField disabled={!canManage} label="Emoji" onChange={(value) => patchHierarchy(index, { emoji: value })} value={item.emoji ?? ""} />
                     <TicketField disabled={!canManage} label="Ordem" onChange={(value) => patchHierarchy(index, { order: Number(value) || index + 1 })} value={String(item.order)} />
+                    <div className="space-y-2">
+                      <TicketField disabled={!canManage} label="Texto vazio" onChange={(value) => patchHierarchy(index, { emptyText: value || null })} value={item.emptyText ?? ""} />
+                      <label className="flex items-center gap-2 text-xs text-zinc-300"><input checked={item.showWhenEmpty} disabled={!canManage} onChange={(event) => patchHierarchy(index, { showWhenEmpty: event.target.checked })} type="checkbox" />Mostrar vazia</label>
+                    </div>
                     <div className="flex items-end">
                       <Button disabled={!canManage} onClick={() => removeHierarchy(index)} size="icon" title="Remover cargo" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
                     </div>
@@ -3445,6 +3492,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
               </div>
+              <HierarchyPreview panel={draft} roles={roles} />
               {draft.id !== "new" ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
           </div>
@@ -3454,7 +3502,39 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   );
 }
 
+function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; roles: GuildRoleOption[] }) {
+  const footer = panel.useGlobalFooter ? panel.globalFooterText : panel.footerText;
+  return (
+    <section className="rounded-lg border border-zinc-800 bg-[#111214] p-4">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold text-white">{panel.title}</h3>
+          <p className="mt-1 text-sm text-zinc-400">{panel.description}</p>
+          <div className="mt-4 space-y-4 text-sm text-zinc-200">
+            {panel.hierarchies.filter((item) => item.active).sort((a, b) => a.order - b.order).map((item) => {
+              const role = roles.find((option) => option.id === item.roleId);
+              const empty = item.emptyText || panel.emptyText || "Nenhum membro";
+              return (
+                <div key={item.id}>
+                  <p className="font-bold text-white">{[item.emoji, item.name].filter(Boolean).join(" ")}</p>
+                  <p className="mt-1 whitespace-pre-line text-zinc-300">{role ? `@${role.name}` : empty}</p>
+                </div>
+              );
+            })}
+          </div>
+          {panel.footerEnabled && footer ? <p className="mt-4 border-t border-zinc-700 pt-3 text-xs text-zinc-400">{footer}</p> : null}
+        </div>
+        {panel.imageUrl ? <img alt="" className="h-20 w-20 rounded-md object-cover" src={panel.imageUrl} /> : <div className="h-20 w-20 rounded-md border border-zinc-700 bg-zinc-900" />}
+      </div>
+    </section>
+  );
+}
+
 function createEmptyHierarchyPanel(guildId: string, botId?: string | null): FivemHierarchyPanelType {
+  return createHierarchyPanelFromTemplate(guildId, botId, hierarchyUnitTemplates[0]);
+}
+
+function createHierarchyPanelFromTemplate(guildId: string, botId: string | null | undefined, template: typeof hierarchyUnitTemplates[number]): FivemHierarchyPanelType {
   const now = new Date().toISOString();
   return {
     allowedRoleIds: [],
@@ -3463,21 +3543,26 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
     anonymousUserAvatarUrl: null,
     anonymousUserName: "Solicitante Anonimo",
     botId: botId ?? null,
-    color: "#8b5cf6",
+    color: template.color,
     createdAt: now,
-    description: "Lista de membros da unidade TRAFFIC",
+    description: template.description,
+    displayMode: "mention",
+    emptyText: "Nenhum membro",
     enabled: true,
     footerEnabled: true,
     footerIconUrl: null,
+    footerScope: "unit",
     footerText: "NPD - North Police Department",
+    globalFooterIconUrl: null,
+    globalFooterText: "NPD - North Police Department",
     guildId,
-    hierarchies: [],
-    id: "new",
+    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: template.swat ? "•" : null, emptyText: "Nenhum membro", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
+    id: `hierarchy-${template.unitId}`,
     imagePosition: "thumbnail",
     imageUrl: null,
     linkedToFivem: true,
     logChannelId: null,
-    name: "TRAFFIC",
+    name: template.name,
     staffAnonymousEnabled: true,
     ticketAnonymousEnabled: true,
     ticketCategoryId: null,
@@ -3485,7 +3570,9 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
     ticketResponderRoleIds: [],
     panelChannelId: null,
     panelMessageId: null,
-    title: "Hierarquia - TRAFFIC",
+    title: template.title,
+    unitId: template.unitId,
+    useGlobalFooter: false,
     updatedAt: now
   };
 }

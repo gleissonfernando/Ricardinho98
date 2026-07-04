@@ -256,11 +256,13 @@ export type FivemHierarchyEntry = {
   color: string | null;
   description: string | null;
   emoji: string | null;
+  emptyText: string | null;
   id: string;
   limit: number | null;
   name: string;
   order: number;
   roleId: string;
+  showWhenEmpty: boolean;
 };
 
 export type FivemHierarchyPanel = {
@@ -271,10 +273,15 @@ export type FivemHierarchyPanel = {
   anonymousUserName: string;
   color: string;
   description: string | null;
+  displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
+  emptyText: string;
   enabled: boolean;
   footerEnabled: boolean;
   footerIconUrl: string | null;
+  footerScope: "unit" | "global";
   footerText: string | null;
+  globalFooterIconUrl: string | null;
+  globalFooterText: string | null;
   guildId: string;
   hierarchies: FivemHierarchyEntry[];
   id: string;
@@ -290,6 +297,8 @@ export type FivemHierarchyPanel = {
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;
+  unitId: string;
+  useGlobalFooter: boolean;
 };
 
 export type SafeBotMessageState = {

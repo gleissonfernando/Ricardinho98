@@ -193,11 +193,13 @@ const hierarchyEntrySchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
   description: z.string().max(300).nullable().optional(),
   emoji: z.string().max(40).nullable().optional(),
+  emptyText: z.string().max(80).nullable().optional(),
   id: z.string().max(80).optional(),
   limit: z.coerce.number().int().min(1).max(100).nullable().optional(),
   name: z.string().min(1).max(80),
   order: z.coerce.number().int().min(0).max(1000),
-  roleId: snowflakeSchema
+  roleId: optionalSnowflakeSchema.default(""),
+  showWhenEmpty: z.boolean().optional()
 });
 const hierarchyPanelSchema = z.object({
   allowedRoleIds: z.array(snowflakeSchema).max(100).optional(),
@@ -207,10 +209,15 @@ const hierarchyPanelSchema = z.object({
   anonymousUserName: z.string().max(80).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   description: z.string().max(1200).nullable().optional(),
+  displayMode: z.enum(["mention", "display_name", "nickname", "name_with_id"]).optional(),
+  emptyText: z.string().max(80).optional(),
   enabled: z.boolean().optional(),
   footerEnabled: z.boolean().optional(),
   footerIconUrl: z.string().max(2048).nullable().optional(),
+  footerScope: z.enum(["unit", "global"]).optional(),
   footerText: z.string().max(200).nullable().optional(),
+  globalFooterIconUrl: z.string().max(2048).nullable().optional(),
+  globalFooterText: z.string().max(200).nullable().optional(),
   hierarchies: z.array(hierarchyEntrySchema).max(50).optional(),
   id: z.string().max(80).optional(),
   imagePosition: z.enum(["top", "bottom", "thumbnail", "none"]).optional(),
@@ -225,7 +232,9 @@ const hierarchyPanelSchema = z.object({
   ticketResponderRoleIds: z.array(snowflakeSchema).max(100).optional(),
   panelChannelId: optionalSnowflakeSchema,
   panelMessageId: optionalSnowflakeSchema,
-  title: z.string().min(1).max(120).optional()
+  title: z.string().min(1).max(120).optional(),
+  unitId: z.string().min(1).max(40).optional(),
+  useGlobalFooter: z.boolean().optional()
 });
 const userAbsenceSchema = z.object({
   guildId: guildIdSchema,
@@ -1151,7 +1160,7 @@ async function validateHierarchyResources(guildId: string, botId: string, input:
     ...(input.allowedRoleIds ?? []),
     ...(input.ticketResponderRoleIds ?? []),
     ...(input.hierarchies ?? []).map((item) => item.roleId)
-  ].filter(Boolean);
+  ].filter((roleId): roleId is string => typeof roleId === "string" && Boolean(roleId));
 
   if (roleIds.length && !(await areGuildRoles(guildId, [...new Set(roleIds)], botToken))) {
     throw createRouteError("Um dos cargos selecionados nao pertence a este servidor.", 400);
@@ -1240,11 +1249,13 @@ function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPan
       color: item.color ?? null,
       description: item.description ?? null,
       emoji: item.emoji ?? null,
+      emptyText: item.emptyText ?? null,
       id: item.id ?? `hierarquia-${index + 1}`,
       limit: item.limit ?? null,
       name: item.name,
       order: item.order,
-      roleId: item.roleId
+      roleId: normalizeOptionalId(item.roleId) ?? "",
+      showWhenEmpty: item.showWhenEmpty !== false
     })),
     logChannelId: normalizeOptionalId(input.logChannelId),
     ticketCategoryId: normalizeOptionalId(input.ticketCategoryId),

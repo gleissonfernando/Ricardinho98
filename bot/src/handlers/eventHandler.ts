@@ -23,6 +23,7 @@ import { handleVoiceLogStateUpdate } from "../services/voiceLogService";
 import type { BotContext } from "../types";
 import { handleAntiBanDetection, recoverDeletedProtectedRole, recoverMemberProtectedRoles, recoverUpdatedProtectedRole } from "../services/antiBanService";
 import { BoundedTaskQueue } from "../services/boundedTaskQueue";
+import { scheduleHierarchyRefresh } from "../services/fivemHierarchyService";
 
 const eventQueue = new BoundedTaskQueue(env.BOT_EVENT_CONCURRENCY, env.BOT_EVENT_QUEUE_MAX, (name, error) => {
   console.error(JSON.stringify({
@@ -136,6 +137,11 @@ export function registerEvents(client: Client, context: BotContext) {
     });
     client.on(Events.GuildRoleUpdate, (oldRole, newRole) => {
       if (isMaintenanceModeActive()) return;
+      if (isBotModuleEnabled("fivem-hierarchy")) {
+        runEvent("guildRoleUpdate.fivemHierarchy", () => {
+          scheduleHierarchyRefresh(newRole.guild, context);
+        });
+      }
       runEvent("guildRoleUpdate.antiBan", () => handleAntiBanDetection(context, {
         actionType: "role_update",
         auditType: AuditLogEvent.RoleUpdate,
@@ -148,6 +154,15 @@ export function registerEvents(client: Client, context: BotContext) {
     client.on(Events.GuildUpdate, (_oldGuild, newGuild) => {
       if (isMaintenanceModeActive()) return;
       runEvent("guildUpdate.antiBan", () => handleAntiBanDetection(context, { actionType: "guild_update", auditType: AuditLogEvent.GuildUpdate, guild: newGuild, targetId: newGuild.id }));
+    });
+  }
+
+  if (!managedRuntimeBot && !isBotModuleEnabled("anti-ban") && isBotModuleEnabled("fivem-hierarchy")) {
+    client.on(Events.GuildRoleUpdate, (_oldRole, newRole) => {
+      if (isMaintenanceModeActive()) return;
+      runEvent("guildRoleUpdate.fivemHierarchy", () => {
+        scheduleHierarchyRefresh(newRole.guild, context);
+      });
     });
   }
 
