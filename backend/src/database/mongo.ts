@@ -581,11 +581,6 @@ export type MongoFivemHierarchyEntry = {
 
 export type MongoFivemHierarchyPanel = {
   _id: string;
-  allowedRoleIds: string[];
-  anonymousStaffAvatarUrl: string | null;
-  anonymousStaffName: string;
-  anonymousUserAvatarUrl: string | null;
-  anonymousUserName: string;
   botId: string | null;
   color: string;
   createdAt: Date;
@@ -604,13 +599,7 @@ export type MongoFivemHierarchyPanel = {
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
   linkedToFivem: boolean;
-  logChannelId: string | null;
   name: string;
-  staffAnonymousEnabled: boolean;
-  ticketAnonymousEnabled: boolean;
-  ticketCategoryId: string | null;
-  ticketMessageDeleteDelayMs: number;
-  ticketResponderRoleIds: string[];
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;

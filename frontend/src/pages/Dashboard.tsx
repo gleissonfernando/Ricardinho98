@@ -3231,7 +3231,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   const [panels, setPanels] = useState<FivemHierarchyPanelType[]>([]);
   const [draft, setDraft] = useState<FivemHierarchyPanelType | null>(null);
   const [channels, setChannels] = useState<GuildChannelOption[]>([]);
-  const [categories, setCategories] = useState<GuildChannelOption[]>([]);
   const [roles, setRoles] = useState<GuildRoleOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3248,7 +3247,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
         setPanels(dashboard.panels);
         setDraft(dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId));
         setChannels(options.channels);
-        setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
       })
       .catch(() => {
@@ -3401,8 +3399,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 <TicketField disabled={!canManage} label="Nome interno" onChange={(value) => patchDraft({ name: value })} value={draft.name} />
                 <TicketField disabled={!canManage} label="Titulo do painel" onChange={(value) => patchDraft({ title: value })} value={draft.title} />
                 <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal do painel" onChange={(value) => patchDraft({ panelChannelId: value })} placeholder="Selecione" value={draft.panelChannelId} />
-                <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal de logs" onChange={(value) => patchDraft({ logChannelId: value })} placeholder="Sem logs" value={draft.logChannelId} />
-                <FivemChannelSelect channels={categories} disabled={!canManage} label="Categoria dos tickets" onChange={(value) => patchDraft({ ticketCategoryId: value })} placeholder="Selecione" prefix="" value={draft.ticketCategoryId} />
                 <TicketField disabled={!canManage} label="Cor" onChange={(value) => patchDraft({ color: value })} type="color" value={draft.color} />
                 <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
                   Unidade ativa
@@ -3440,28 +3436,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 </label>
                 <div className="md:col-span-2">
                   <TicketArea disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
-                </div>
-              </div>
-              <div className="space-y-3 rounded-lg border border-zinc-800 bg-black/20 p-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Ticket de Hierarquia</p>
-                  <p className="mt-1 text-xs text-zinc-500">O painel abre uma escolha entre modo normal e anonimo antes de criar o canal.</p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                    Permitir modo anonimo
-                    <Switch checked={draft.ticketAnonymousEnabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ ticketAnonymousEnabled: checked })} />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                    Anonimizar equipe
-                    <Switch checked={draft.staffAnonymousEnabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ staffAnonymousEnabled: checked })} />
-                  </label>
-                  <TicketField disabled={!canManage} label="Nome do usuario anonimo" onChange={(value) => patchDraft({ anonymousUserName: value })} value={draft.anonymousUserName} />
-                  <TicketField disabled={!canManage} label="Avatar do usuario anonimo" onChange={(value) => patchDraft({ anonymousUserAvatarUrl: value || null })} value={draft.anonymousUserAvatarUrl ?? ""} />
-                  <TicketField disabled={!canManage} label="Nome da equipe anonima" onChange={(value) => patchDraft({ anonymousStaffName: value })} value={draft.anonymousStaffName} />
-                  <TicketField disabled={!canManage} label="Avatar da equipe anonima" onChange={(value) => patchDraft({ anonymousStaffAvatarUrl: value || null })} value={draft.anonymousStaffAvatarUrl ?? ""} />
-                  <TicketField disabled={!canManage} label="Atraso para reenviar (ms)" onChange={(value) => patchDraft({ ticketMessageDeleteDelayMs: Math.max(0, Math.min(10000, Number(value) || 0)) })} value={String(draft.ticketMessageDeleteDelayMs)} />
-                  <MultiRoleSelect disabled={!canManage} label="Cargos autorizados no ticket" onChange={(value) => patchDraft({ ticketResponderRoleIds: value })} roles={roles} values={draft.ticketResponderRoleIds} />
                 </div>
               </div>
               <div className="space-y-3">
@@ -3537,11 +3511,6 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
 function createHierarchyPanelFromTemplate(guildId: string, botId: string | null | undefined, template: typeof hierarchyUnitTemplates[number]): FivemHierarchyPanelType {
   const now = new Date().toISOString();
   return {
-    allowedRoleIds: [],
-    anonymousStaffAvatarUrl: null,
-    anonymousStaffName: "Equipe de Hierarquia",
-    anonymousUserAvatarUrl: null,
-    anonymousUserName: "Solicitante Anonimo",
     botId: botId ?? null,
     color: template.color,
     createdAt: now,
@@ -3561,13 +3530,7 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
     imagePosition: "thumbnail",
     imageUrl: null,
     linkedToFivem: true,
-    logChannelId: null,
     name: template.name,
-    staffAnonymousEnabled: true,
-    ticketAnonymousEnabled: true,
-    ticketCategoryId: null,
-    ticketMessageDeleteDelayMs: 500,
-    ticketResponderRoleIds: [],
     panelChannelId: null,
     panelMessageId: null,
     title: template.title,

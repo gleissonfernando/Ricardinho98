@@ -266,11 +266,6 @@ export type FivemHierarchyEntry = {
 };
 
 export type FivemHierarchyPanel = {
-  allowedRoleIds: string[];
-  anonymousStaffAvatarUrl: string | null;
-  anonymousStaffName: string;
-  anonymousUserAvatarUrl: string | null;
-  anonymousUserName: string;
   color: string;
   description: string | null;
   displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
@@ -287,13 +282,7 @@ export type FivemHierarchyPanel = {
   id: string;
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
-  logChannelId: string | null;
   name: string;
-  staffAnonymousEnabled: boolean;
-  ticketAnonymousEnabled: boolean;
-  ticketCategoryId: string | null;
-  ticketMessageDeleteDelayMs: number;
-  ticketResponderRoleIds: string[];
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;

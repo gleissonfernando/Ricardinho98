@@ -202,11 +202,6 @@ const hierarchyEntrySchema = z.object({
   showWhenEmpty: z.boolean().optional()
 });
 const hierarchyPanelSchema = z.object({
-  allowedRoleIds: z.array(snowflakeSchema).max(100).optional(),
-  anonymousStaffAvatarUrl: z.string().max(2048).nullable().optional(),
-  anonymousStaffName: z.string().max(80).optional(),
-  anonymousUserAvatarUrl: z.string().max(2048).nullable().optional(),
-  anonymousUserName: z.string().max(80).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   description: z.string().max(1200).nullable().optional(),
   displayMode: z.enum(["mention", "display_name", "nickname", "name_with_id"]).optional(),
@@ -223,13 +218,7 @@ const hierarchyPanelSchema = z.object({
   imagePosition: z.enum(["top", "bottom", "thumbnail", "none"]).optional(),
   imageUrl: z.string().max(2048).nullable().optional(),
   linkedToFivem: z.boolean().optional(),
-  logChannelId: optionalSnowflakeSchema,
   name: z.string().min(1).max(100).optional(),
-  staffAnonymousEnabled: z.boolean().optional(),
-  ticketAnonymousEnabled: z.boolean().optional(),
-  ticketCategoryId: optionalSnowflakeSchema,
-  ticketMessageDeleteDelayMs: z.coerce.number().int().min(0).max(10000).optional(),
-  ticketResponderRoleIds: z.array(snowflakeSchema).max(100).optional(),
   panelChannelId: optionalSnowflakeSchema,
   panelMessageId: optionalSnowflakeSchema,
   title: z.string().min(1).max(120).optional(),
@@ -1141,7 +1130,7 @@ async function validateGoalConfigResources(guildId: string, botId: string, input
 
 async function validateHierarchyResources(guildId: string, botId: string, input: Partial<z.infer<typeof hierarchyPanelSchema>>) {
   const botToken = await getDevBotToken(botId);
-  const channelIds = [input.panelChannelId, input.logChannelId].filter((channelId): channelId is string => typeof channelId === "string" && Boolean(channelId));
+  const channelIds = [input.panelChannelId].filter((channelId): channelId is string => typeof channelId === "string" && Boolean(channelId));
   const channelChecks = await Promise.all([...new Set(channelIds)].map((channelId) => isGuildTextChannel(guildId, channelId, botToken)));
 
   if (!channelChecks.every(Boolean)) {
@@ -1152,13 +1141,7 @@ async function validateHierarchyResources(guildId: string, botId: string, input:
     await assertPanelChannelReady(guildId, botId, input.panelChannelId);
   }
 
-  if (input.ticketCategoryId && !(await isGuildCategoryChannel(guildId, input.ticketCategoryId, botToken))) {
-    throw createRouteError("A categoria de tickets de hierarquia nao pertence a este servidor.", 400);
-  }
-
   const roleIds = [
-    ...(input.allowedRoleIds ?? []),
-    ...(input.ticketResponderRoleIds ?? []),
     ...(input.hierarchies ?? []).map((item) => item.roleId)
   ].filter((roleId): roleId is string => typeof roleId === "string" && Boolean(roleId));
 
@@ -1257,8 +1240,6 @@ function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPan
       roleId: normalizeOptionalId(item.roleId) ?? "",
       showWhenEmpty: item.showWhenEmpty !== false
     })),
-    logChannelId: normalizeOptionalId(input.logChannelId),
-    ticketCategoryId: normalizeOptionalId(input.ticketCategoryId),
     panelChannelId: normalizeOptionalId(input.panelChannelId),
     panelMessageId: normalizeOptionalId(input.panelMessageId)
   };

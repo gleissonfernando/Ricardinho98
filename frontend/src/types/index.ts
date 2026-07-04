@@ -1076,11 +1076,6 @@ export type FivemHierarchyEntry = {
 };
 
 export type FivemHierarchyPanel = {
-  allowedRoleIds: string[];
-  anonymousStaffAvatarUrl: string | null;
-  anonymousStaffName: string;
-  anonymousUserAvatarUrl: string | null;
-  anonymousUserName: string;
   botId: string | null;
   color: string;
   createdAt: string;
@@ -1100,13 +1095,7 @@ export type FivemHierarchyPanel = {
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
   linkedToFivem: boolean;
-  logChannelId: string | null;
   name: string;
-  staffAnonymousEnabled: boolean;
-  ticketAnonymousEnabled: boolean;
-  ticketCategoryId: string | null;
-  ticketMessageDeleteDelayMs: number;
-  ticketResponderRoleIds: string[];
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;

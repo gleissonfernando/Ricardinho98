@@ -19,11 +19,6 @@ export type FivemHierarchyEntryDto = {
 };
 
 export type FivemHierarchyPanelDto = {
-  allowedRoleIds: string[];
-  anonymousStaffAvatarUrl: string | null;
-  anonymousStaffName: string;
-  anonymousUserAvatarUrl: string | null;
-  anonymousUserName: string;
   botId: string | null;
   color: string;
   createdAt: string;
@@ -43,13 +38,7 @@ export type FivemHierarchyPanelDto = {
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
   linkedToFivem: boolean;
-  logChannelId: string | null;
   name: string;
-  staffAnonymousEnabled: boolean;
-  ticketAnonymousEnabled: boolean;
-  ticketCategoryId: string | null;
-  ticketMessageDeleteDelayMs: number;
-  ticketResponderRoleIds: string[];
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;
@@ -124,7 +113,26 @@ export async function saveFivemHierarchyPanel(guildId: string, botId: string | n
   };
   const { fivemHierarchyPanels } = await getMongoCollections();
   await ensureGuild(guildId);
-  await fivemHierarchyPanels.updateOne({ _id: panelId, ...scopeQuery(guildId, normalizedBotId) }, { $set: next }, { upsert: true });
+  await fivemHierarchyPanels.updateOne(
+    { _id: panelId, ...scopeQuery(guildId, normalizedBotId) },
+    {
+      $set: next,
+      $unset: {
+        allowedRoleIds: "",
+        anonymousStaffAvatarUrl: "",
+        anonymousStaffName: "",
+        anonymousUserAvatarUrl: "",
+        anonymousUserName: "",
+        logChannelId: "",
+        staffAnonymousEnabled: "",
+        ticketAnonymousEnabled: "",
+        ticketCategoryId: "",
+        ticketMessageDeleteDelayMs: "",
+        ticketResponderRoleIds: ""
+      }
+    },
+    { upsert: true }
+  );
   await writeFivemHierarchyLog({ action: current ? "panel.updated" : "panel.created", botId: normalizedBotId, details: { title: next.title }, guildId, panelId, userId: actorId });
   emitRealtimeToRoom(devBotRealtimeRoom(normalizedBotId ?? ""), "fivem:hierarchy:panel_update", { action: "update", botId: normalizedBotId, guildId, panelId });
   return toPanelDto(next);
@@ -238,11 +246,6 @@ function defaultPanelDto(guildId: string, botId: string | null, id: string, unit
 
 function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: string, botId: string | null): Omit<MongoFivemHierarchyPanel, "_id" | "createdAt" | "guildId" | "panelMessageId" | "updatedAt" | "updatedBy"> {
   return {
-    allowedRoleIds: normalizeRoleIds(input.allowedRoleIds ?? []),
-    anonymousStaffAvatarUrl: normalizeText(input.anonymousStaffAvatarUrl, 2048),
-    anonymousStaffName: normalizeText(input.anonymousStaffName, 80) ?? "Equipe de Hierarquia",
-    anonymousUserAvatarUrl: normalizeText(input.anonymousUserAvatarUrl, 2048),
-    anonymousUserName: normalizeText(input.anonymousUserName, 80) ?? "Solicitante Anonimo",
     botId,
     color: /^#[0-9a-f]{6}$/i.test(input.color ?? "") ? input.color ?? "#22c55e" : "#22c55e",
     description: normalizeText(input.description, 1200) ?? "Hierarquia atualizada automaticamente pelos cargos do servidor.",
@@ -259,13 +262,7 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     imagePosition: input.imagePosition === "top" || input.imagePosition === "bottom" || input.imagePosition === "thumbnail" ? input.imagePosition : "none",
     imageUrl: normalizeText(input.imageUrl, 2048),
     linkedToFivem: input.linkedToFivem !== false,
-    logChannelId: normalizeSnowflake(input.logChannelId),
     name: normalizeText(input.name, 100) ?? "Hierarquia FAQ",
-    staffAnonymousEnabled: input.staffAnonymousEnabled === true,
-    ticketAnonymousEnabled: input.ticketAnonymousEnabled === true,
-    ticketCategoryId: normalizeSnowflake(input.ticketCategoryId),
-    ticketMessageDeleteDelayMs: typeof input.ticketMessageDeleteDelayMs === "number" && Number.isFinite(input.ticketMessageDeleteDelayMs) ? Math.max(0, Math.min(10_000, Math.trunc(input.ticketMessageDeleteDelayMs))) : 500,
-    ticketResponderRoleIds: normalizeRoleIds(input.ticketResponderRoleIds ?? []),
     panelChannelId: normalizeSnowflake(input.panelChannelId),
     title: normalizeText(input.title, 120) ?? "Hierarquia Policial",
     unitId: normalizeText(input.unitId, 40)?.toLowerCase() ?? "custom",
@@ -299,11 +296,6 @@ async function writeFivemHierarchyLog(input: Omit<MongoFivemHierarchyLog, "_id" 
 
 function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
   return {
-    allowedRoleIds: row.allowedRoleIds ?? [],
-    anonymousStaffAvatarUrl: row.anonymousStaffAvatarUrl ?? null,
-    anonymousStaffName: row.anonymousStaffName ?? "Equipe de Hierarquia",
-    anonymousUserAvatarUrl: row.anonymousUserAvatarUrl ?? null,
-    anonymousUserName: row.anonymousUserName ?? "Solicitante Anonimo",
     botId: normalizeBotId(row.botId),
     color: row.color,
     createdAt: row.createdAt.toISOString(),
@@ -327,13 +319,7 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     imagePosition: row.imagePosition ?? "none",
     imageUrl: row.imageUrl ?? null,
     linkedToFivem: row.linkedToFivem !== false,
-    logChannelId: row.logChannelId ?? null,
     name: row.name,
-    staffAnonymousEnabled: row.staffAnonymousEnabled === true,
-    ticketAnonymousEnabled: row.ticketAnonymousEnabled === true,
-    ticketCategoryId: row.ticketCategoryId ?? null,
-    ticketMessageDeleteDelayMs: row.ticketMessageDeleteDelayMs ?? 500,
-    ticketResponderRoleIds: row.ticketResponderRoleIds ?? [],
     panelChannelId: row.panelChannelId ?? null,
     panelMessageId: row.panelMessageId ?? null,
     title: row.title,
@@ -360,10 +346,6 @@ function normalizeBotId(botId: string | null | undefined) {
 function normalizeSnowflake(value: string | null | undefined) {
   const normalized = value?.trim() ?? "";
   return /^\d{5,32}$/.test(normalized) ? normalized : null;
-}
-
-function normalizeRoleIds(values: string[]) {
-  return [...new Set((Array.isArray(values) ? values : []).map(normalizeSnowflake).filter((value): value is string => Boolean(value)))].slice(0, 100);
 }
 
 function normalizeText(value: string | null | undefined, maxLength: number) {
