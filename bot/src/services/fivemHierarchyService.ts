@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
@@ -10,7 +11,7 @@ import {
 import { isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
 import type { FivemHierarchyPanel } from "./apiClient";
-import { renderComponentsV2Panel, type PanelVisualConfig } from "./panelVisualRenderer";
+import { resolvePanelImageUrl, type PanelVisualConfig, type PanelVisualPosition } from "./panelVisualRenderer";
 
 const scheduledGuilds = new Map<string, NodeJS.Timeout>();
 
@@ -113,7 +114,38 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
   const fallbackVisual: PanelVisualConfig | null = panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition === "bottom" ? "bottom" : panel.imagePosition, imageUrl: panel.imageUrl } : null;
   const footerText = panel.footerEnabled ? (panel.useGlobalFooter ? panel.globalFooterText : panel.footerText) : null;
   const footerIconUrl = panel.footerEnabled ? (panel.useGlobalFooter ? panel.globalFooterIconUrl : panel.footerIconUrl) : null;
-  return renderComponentsV2Panel({ accentColor: colorToInt(panel.color), description: panel.description ?? `Lista de membros da unidade ${panel.name}`, extraImages, fields: [renderHierarchyText(guild, panel)], footerIcon: footerIconUrl ? { imageEnabled: true, imagePosition: "footer", imageUrl: footerIconUrl } : null, footerText: footerText ?? undefined, image: visual?.imageEnabled ? visual : fallbackVisual, moduleId: "fivem-hierarchy", title: panel.title });
+  const mainVisual = visual?.imageEnabled ? visual : fallbackVisual;
+  const mainImageUrl = resolvePanelImageUrl(mainVisual?.imageUrl ?? null);
+  const mainImagePosition = normalizeHierarchyMainImagePosition(mainVisual?.imagePosition);
+  const sideImageUrl = mainImageUrl && ["side", "thumbnail"].includes(mainImagePosition) ? mainImageUrl : null;
+  const header = [`**${panel.title}**`, panel.description ?? `Lista de membros da unidade ${panel.name}`].filter(Boolean).join("\n");
+  const components: unknown[] = [];
+
+  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["top", "banner"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["top", "banner"], panel.title);
+
+  components.push(sideImageUrl
+    ? { type: 9, components: [{ type: 10, content: header }], accessory: { type: 11, media: { url: sideImageUrl }, description: panel.title } }
+    : { type: 10, content: header });
+
+  pushExtraHierarchyMedia(components, extraImages, ["below_title"], panel.title);
+  components.push({ type: 10, content: renderHierarchyText(guild, panel) });
+  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["bottom", "footer"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer", "below_text"], panel.title);
+
+  if (footerText) {
+    components.push({ type: 14, divider: true, spacing: 1 });
+    const resolvedFooterIconUrl = resolvePanelImageUrl(footerIconUrl);
+    components.push(resolvedFooterIconUrl
+      ? { type: 9, components: [{ type: 10, content: `-# **${footerText}**` }], accessory: { type: 11, media: { url: resolvedFooterIconUrl }, description: footerText.slice(0, 100) } }
+      : { type: 10, content: `-# **${footerText}**` });
+  }
+
+  return {
+    allowedMentions: { parse: [] as never[] },
+    components: [{ type: 17, accent_color: colorToInt(panel.color), components }],
+    flags: MessageFlags.IsComponentsV2 as const
+  };
 }
 
 export function getHierarchyPanelVisualIds(basePanelId: string) {
@@ -132,15 +164,19 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
 }
 
 function renderHierarchyText(guild: Guild, panel: FivemHierarchyPanel) {
+  const listedMemberIds = new Set<string>();
+
   return panel.hierarchies
     .filter((item) => item.active)
     .sort((a, b) => a.order - b.order)
     .map((item) => {
-      const members = item.roleId ? guild.members.cache
-        .filter((member: GuildMember) => member.roles.cache.has(item.roleId))
-        .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR"))
-        .map((member) => formatHierarchyMember(member, panel.displayMode))
-        .slice(0, item.limit ?? 50) : [];
+      const candidates = item.roleId ? Array.from(guild.members.cache.values())
+        .filter((member) => member.roles.cache.has(item.roleId) && !listedMemberIds.has(member.id))
+        .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR")) : [];
+      candidates.forEach((member) => listedMemberIds.add(member.id));
+      const members = candidates
+        .slice(0, item.limit ?? 50)
+        .map((member) => formatHierarchyMember(member, panel.displayMode));
       if (!members.length && item.showWhenEmpty === false) return null;
       const heading = [item.emoji, `**${item.name}**`].filter(Boolean).join(" ");
       return `${heading}\n${members.length ? members.join("\n") : (item.emptyText || panel.emptyText || "Nenhum membro")}`;
@@ -165,4 +201,34 @@ function formatHierarchyMember(member: GuildMember, mode: FivemHierarchyPanel["d
 
 function colorToInt(value: string) {
   return Number.parseInt(value.replace("#", ""), 16) || 0x22c55e;
+}
+
+function normalizeHierarchyImagePosition(position: PanelVisualPosition | undefined) {
+  if (!position || position === "none") return "none";
+  return position;
+}
+
+function normalizeHierarchyMainImagePosition(position: PanelVisualPosition | undefined) {
+  const normalized = normalizeHierarchyImagePosition(position);
+  return normalized === "banner" || normalized === "thumbnail" ? "side" : normalized;
+}
+
+function pushHierarchyMedia(components: unknown[], imageUrl: string | null, position: PanelVisualPosition | "none", acceptedPositions: string[], description: string) {
+  if (imageUrl && acceptedPositions.includes(position)) {
+    components.push(hierarchyMediaBlock(imageUrl, description));
+  }
+}
+
+function pushExtraHierarchyMedia(components: unknown[], images: PanelVisualConfig[], acceptedPositions: string[], description: string) {
+  images.forEach((image) => {
+    const imageUrl = image.imageEnabled ? resolvePanelImageUrl(image.imageUrl ?? null) : null;
+    const position = normalizeHierarchyImagePosition(image.imagePosition);
+    if (imageUrl && acceptedPositions.includes(position)) {
+      components.push(hierarchyMediaBlock(imageUrl, description));
+    }
+  });
+}
+
+function hierarchyMediaBlock(imageUrl: string, description: string) {
+  return { type: 12, items: [{ media: { url: imageUrl }, description }] };
 }

@@ -3413,15 +3413,15 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   </select>
                 </label>
                 <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro" })} value={draft.emptyText} />
-                <label className="block text-xs font-medium text-zinc-400">Imagem
+                <label className="block text-xs font-medium text-zinc-400">Imagem do painel
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ imagePosition: event.target.value as FivemHierarchyPanelType["imagePosition"] })} value={draft.imagePosition}>
                     <option value="none">Sem imagem</option>
                     <option value="top">Topo</option>
                     <option value="bottom">Rodape</option>
-                    <option value="thumbnail">Thumbnail</option>
+                    <option value="thumbnail">Imagem lateral</option>
                   </select>
                 </label>
-                <TicketField disabled={!canManage} label="URL da thumbnail/icone" onChange={(value) => patchDraft({ imageUrl: value || null })} value={draft.imageUrl ?? ""} />
+                <TicketField disabled={!canManage} label="URL da imagem lateral" onChange={(value) => patchDraft({ imageUrl: value || null })} value={draft.imageUrl ?? ""} />
                 <TicketField disabled={!canManage} label="Texto do rodape" onChange={(value) => patchDraft({ footerText: value || null })} value={draft.footerText ?? ""} />
                 <TicketField disabled={!canManage} label="Icone do rodape" onChange={(value) => patchDraft({ footerIconUrl: value || null })} value={draft.footerIconUrl ?? ""} />
                 <TicketField disabled={!canManage} label="Rodape global" onChange={(value) => patchDraft({ globalFooterText: value || null })} value={draft.globalFooterText ?? ""} />

@@ -214,12 +214,16 @@ export async function savePanelImageUpload(input: {
 
   return savePanelImageSettings(input.guildId, input.botId, input.panelId, {
     imageEnabled: true,
-    imagePosition: current.imagePosition === "none" ? "banner" : current.imagePosition,
+    imagePosition: current.imagePosition === "none" ? defaultUploadImagePosition(input.panelId) : current.imagePosition,
     imageSize: current.imageSize,
     imageUrl: stored.publicUrl,
     layoutMode: current.layoutMode,
     useGlobalDefault: false
   }, input.actorId);
+}
+
+function defaultUploadImagePosition(panelId: string): PanelImagePosition {
+  return panelId === "fivem-hierarchy" || /^hierarchy-/i.test(panelId) ? "side" : "banner";
 }
 
 export async function removePanelImageSettings(input: {
