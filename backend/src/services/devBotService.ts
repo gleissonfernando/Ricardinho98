@@ -102,7 +102,8 @@ const ALWAYS_ENABLED_MODULE_IDS = ["mission-tools"] as const;
 const LEGACY_MODULE_ALIASES: Record<string, (typeof DEV_MODULES)[number]["id"]> = {
   "fivem-fac": "fivem-absences",
   "image-anti-spam": "safe-bot",
-  "link-anti-spam": "safe-bot"
+  "link-anti-spam": "safe-bot",
+  "patrol-reports": "police-patrol-reports"
 };
 const RUNTIME_MODULE_RELEASE_ALIASES: Record<string, (typeof DEV_MODULES)[number]["id"]> = {
   "anti-flood": "safe-bot",
@@ -112,7 +113,8 @@ const RUNTIME_MODULE_RELEASE_ALIASES: Record<string, (typeof DEV_MODULES)[number
   "anti-spam": "safe-bot",
   "fivem-fac": "fivem-absences",
   "image-anti-spam": "safe-bot",
-  "link-anti-spam": "safe-bot"
+  "link-anti-spam": "safe-bot",
+  "patrol-reports": "police-patrol-reports"
 };
 const RUNTIME_INACTIVE_BOT_STATUSES = new Set<MongoDevBotStatus>(["error", "invalid_token"]);
 const RUNTIME_ACTIVE_LICENSE_STATUSES = new Set(["active", "ativo", "approved", "aprovado", "enabled", "liberado", "valid", "valido"]);

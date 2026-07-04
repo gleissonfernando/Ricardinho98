@@ -1091,6 +1091,7 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "fivem-hierarchy": Users,
     "police-actions": Activity,
     "police-patrol-reports": ShieldCheck,
+    "patrol-reports": ShieldCheck,
     "police-reports": ShieldAlert
   };
 
@@ -1098,7 +1099,7 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
 }
 
 function isPoliceModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "police-reports";
+  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "patrol-reports" || moduleId === "police-reports";
 }
 
 function isFiveMManagerModule(moduleId: string) {

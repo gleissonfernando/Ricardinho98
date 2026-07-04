@@ -514,6 +514,13 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "fivem-goals"
   },
   {
+    id: "police-patrol-reports",
+    title: "Relatorios Policiais",
+    description: "Sistema de relatorios de patrulhamento da Policia com canais temporarios e exportacao.",
+    icon: ShieldCheck,
+    view: "police-patrol-reports"
+  },
+  {
     id: "verification",
     title: "Usuarios",
     description: "Define quais usuários podem entrar e configurar este painel.",
@@ -685,7 +692,10 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
     selectedBot ? selectedBot.enabledModules.includes(moduleId) : canManageDashboard
   );
   const availableModules = useMemo(
-    () => moduleCatalog.filter((module) => enabledModules.includes(module.id)),
+    () => moduleCatalog.filter((module) => (
+      enabledModules.includes(module.id)
+      || (module.id === "police-patrol-reports" && enabledModules.includes("patrol-reports"))
+    )),
     [enabledModulesKey]
   );
 
@@ -3938,6 +3948,10 @@ function isModuleReleasedForBot(bot: DashboardBot, moduleId: string) {
   }
 
   const released = new Set(bot.enabledModules);
+
+  if (moduleId === "police-patrol-reports") {
+    return released.has("police-patrol-reports") || released.has("patrol-reports");
+  }
 
   if (moduleId === "fivem") {
     return [...released].some((enabledModule) => enabledModule === "fivem" || enabledModule.startsWith("fivem-"));
@@ -8604,6 +8618,10 @@ function isViewAllowed(view: ViewId, enabledModules: string[]) {
 
   if (view === "fivem-families") {
     return enabledModules.includes("fivem-orders") || enabledModules.includes("fivem-drugs") || enabledModules.includes("fivem-washing");
+  }
+
+  if (view === "police-patrol-reports") {
+    return enabledModules.includes("police-patrol-reports") || enabledModules.includes("patrol-reports");
   }
 
   const requiredModule = viewModuleIds[view];

@@ -485,7 +485,7 @@ const botMenuItems: BotMenuItem[] = [
         label: "Relatórios Policiais",
         description: "Relatórios profissionais de patrulhamento",
         icon: ShieldCheck,
-        moduleIds: ["police-patrol-reports"]
+        moduleIds: ["police-patrol-reports", "patrol-reports"]
       },
       {
         id: "police-reports",
@@ -508,7 +508,7 @@ const botMenuItems: BotMenuItem[] = [
     label: "Policia",
     description: "Hierarquia, acoes e relatorios policiais",
     icon: ShieldCheck,
-    moduleIds: ["fivem-hierarchy", "police-actions", "police-patrol-reports", "police-reports"]
+    moduleIds: ["fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports"]
   },
   {
     id: "integrations",
@@ -4297,6 +4297,7 @@ function modulesForMenu(item: BotMenuItem, modules: DevModuleDefinition[], inclu
     moduleIds.delete("fivem-hierarchy");
     moduleIds.delete("police-actions");
     moduleIds.delete("police-patrol-reports");
+    moduleIds.delete("patrol-reports");
     moduleIds.delete("police-reports");
   }
 
@@ -4412,7 +4413,7 @@ function isFiveMModule(moduleId: string) {
 }
 
 function isPoliceReleaseModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "police-reports";
+  return moduleId === "fivem-hierarchy" || moduleId === "police-actions" || moduleId === "police-patrol-reports" || moduleId === "patrol-reports" || moduleId === "police-reports";
 }
 
 function StatusBadge({ status }: { status: DevBotStatus }) {

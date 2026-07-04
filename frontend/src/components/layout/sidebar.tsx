@@ -156,7 +156,7 @@ const navItems: NavItem[] = [
   { id: "fivem-hierarchy", label: "Hierarquia", icon: ListTree, moduleId: "fivem-hierarchy" },
   { id: "fivem-actions", label: "Ações FAC", icon: Activity, moduleId: "fivem-actions" },
   { id: "police-actions", label: "Ações Policiais", icon: Activity, moduleId: "police-actions" },
-  { id: "police-patrol-reports", label: "Relatórios Policiais", icon: ShieldCheck, moduleId: "police-patrol-reports" },
+  { id: "police-patrol-reports", label: "Relatórios Policiais", icon: ShieldCheck, moduleIds: ["police-patrol-reports", "patrol-reports"] },
   { id: "police-reports", label: "Denuncias EAB", icon: ShieldAlert, moduleId: "police-reports" },
   { id: "fivem-orders", label: "Encomendas RP", icon: Archive, moduleId: "fivem-orders" },
   { id: "fivem-families", label: "Famílias", icon: Users, moduleIds: ["fivem-orders", "fivem-drugs", "fivem-washing"] },
