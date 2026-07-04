@@ -18,6 +18,10 @@ export type FivemHierarchyEntryDto = {
 
 export type FivemHierarchyPanelDto = {
   allowedRoleIds: string[];
+  anonymousStaffAvatarUrl: string | null;
+  anonymousStaffName: string;
+  anonymousUserAvatarUrl: string | null;
+  anonymousUserName: string;
   botId: string | null;
   color: string;
   createdAt: string;
@@ -34,6 +38,11 @@ export type FivemHierarchyPanelDto = {
   linkedToFivem: boolean;
   logChannelId: string | null;
   name: string;
+  staffAnonymousEnabled: boolean;
+  ticketAnonymousEnabled: boolean;
+  ticketCategoryId: string | null;
+  ticketMessageDeleteDelayMs: number;
+  ticketResponderRoleIds: string[];
   panelChannelId: string | null;
   panelMessageId: string | null;
   title: string;
@@ -116,6 +125,7 @@ export async function requestFivemHierarchyPanelPublish(guildId: string, botId: 
   if (!panel) throw new Error("Painel de hierarquia nao encontrado.");
   if (!panel.enabled) throw new Error("Ative o painel de hierarquia antes de publicar.");
   if (!panel.panelChannelId) throw new Error("Configure o canal do painel de hierarquia.");
+  if (!panel.ticketCategoryId) throw new Error("Configure a categoria dos tickets de hierarquia.");
   await writeFivemHierarchyLog({ action: "panel.publish_requested", botId, details: { channelId: panel.panelChannelId }, guildId, panelId, userId: actorId });
   emitRealtimeToRoom(devBotRealtimeRoom(botId), "fivem:hierarchy:panel_update", { action: "publish", botId, guildId, panelId });
   return panel;
@@ -145,6 +155,10 @@ async function getRawPanel(guildId: string, panelId: string, botId: string | nul
 function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: string, botId: string | null): Omit<MongoFivemHierarchyPanel, "_id" | "createdAt" | "guildId" | "panelMessageId" | "updatedAt" | "updatedBy"> {
   return {
     allowedRoleIds: normalizeRoleIds(input.allowedRoleIds ?? []),
+    anonymousStaffAvatarUrl: normalizeText(input.anonymousStaffAvatarUrl, 2048),
+    anonymousStaffName: normalizeText(input.anonymousStaffName, 80) ?? "Equipe de Hierarquia",
+    anonymousUserAvatarUrl: normalizeText(input.anonymousUserAvatarUrl, 2048),
+    anonymousUserName: normalizeText(input.anonymousUserName, 80) ?? "Solicitante Anonimo",
     botId,
     color: /^#[0-9a-f]{6}$/i.test(input.color ?? "") ? input.color ?? "#22c55e" : "#22c55e",
     description: normalizeText(input.description, 1200) ?? "Hierarquia atualizada automaticamente pelos cargos do servidor.",
@@ -158,6 +172,11 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     linkedToFivem: input.linkedToFivem !== false,
     logChannelId: normalizeSnowflake(input.logChannelId),
     name: normalizeText(input.name, 100) ?? "Hierarquia FAQ",
+    staffAnonymousEnabled: input.staffAnonymousEnabled === true,
+    ticketAnonymousEnabled: input.ticketAnonymousEnabled === true,
+    ticketCategoryId: normalizeSnowflake(input.ticketCategoryId),
+    ticketMessageDeleteDelayMs: typeof input.ticketMessageDeleteDelayMs === "number" && Number.isFinite(input.ticketMessageDeleteDelayMs) ? Math.max(0, Math.min(10_000, Math.trunc(input.ticketMessageDeleteDelayMs))) : 500,
+    ticketResponderRoleIds: normalizeRoleIds(input.ticketResponderRoleIds ?? []),
     panelChannelId: normalizeSnowflake(input.panelChannelId),
     title: normalizeText(input.title, 120) ?? "Hierarquia Policial"
   };
@@ -189,6 +208,10 @@ async function writeFivemHierarchyLog(input: Omit<MongoFivemHierarchyLog, "_id" 
 function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
   return {
     allowedRoleIds: row.allowedRoleIds ?? [],
+    anonymousStaffAvatarUrl: row.anonymousStaffAvatarUrl ?? null,
+    anonymousStaffName: row.anonymousStaffName ?? "Equipe de Hierarquia",
+    anonymousUserAvatarUrl: row.anonymousUserAvatarUrl ?? null,
+    anonymousUserName: row.anonymousUserName ?? "Solicitante Anonimo",
     botId: normalizeBotId(row.botId),
     color: row.color,
     createdAt: row.createdAt.toISOString(),
@@ -205,6 +228,11 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     linkedToFivem: row.linkedToFivem !== false,
     logChannelId: row.logChannelId ?? null,
     name: row.name,
+    staffAnonymousEnabled: row.staffAnonymousEnabled === true,
+    ticketAnonymousEnabled: row.ticketAnonymousEnabled === true,
+    ticketCategoryId: row.ticketCategoryId ?? null,
+    ticketMessageDeleteDelayMs: row.ticketMessageDeleteDelayMs ?? 500,
+    ticketResponderRoleIds: row.ticketResponderRoleIds ?? [],
     panelChannelId: row.panelChannelId ?? null,
     panelMessageId: row.panelMessageId ?? null,
     title: row.title,

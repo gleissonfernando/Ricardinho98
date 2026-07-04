@@ -200,6 +200,10 @@ const hierarchyEntrySchema = z.object({
 });
 const hierarchyPanelSchema = z.object({
   allowedRoleIds: z.array(snowflakeSchema).max(100).optional(),
+  anonymousStaffAvatarUrl: z.string().max(2048).nullable().optional(),
+  anonymousStaffName: z.string().max(80).optional(),
+  anonymousUserAvatarUrl: z.string().max(2048).nullable().optional(),
+  anonymousUserName: z.string().max(80).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   description: z.string().max(1200).nullable().optional(),
   enabled: z.boolean().optional(),
@@ -213,6 +217,11 @@ const hierarchyPanelSchema = z.object({
   linkedToFivem: z.boolean().optional(),
   logChannelId: optionalSnowflakeSchema,
   name: z.string().min(1).max(100).optional(),
+  staffAnonymousEnabled: z.boolean().optional(),
+  ticketAnonymousEnabled: z.boolean().optional(),
+  ticketCategoryId: optionalSnowflakeSchema,
+  ticketMessageDeleteDelayMs: z.coerce.number().int().min(0).max(10000).optional(),
+  ticketResponderRoleIds: z.array(snowflakeSchema).max(100).optional(),
   panelChannelId: optionalSnowflakeSchema,
   panelMessageId: optionalSnowflakeSchema,
   title: z.string().min(1).max(120).optional()
@@ -1133,8 +1142,13 @@ async function validateHierarchyResources(guildId: string, botId: string, input:
     await assertPanelChannelReady(guildId, botId, input.panelChannelId);
   }
 
+  if (input.ticketCategoryId && !(await isGuildCategoryChannel(guildId, input.ticketCategoryId, botToken))) {
+    throw createRouteError("A categoria de tickets de hierarquia nao pertence a este servidor.", 400);
+  }
+
   const roleIds = [
     ...(input.allowedRoleIds ?? []),
+    ...(input.ticketResponderRoleIds ?? []),
     ...(input.hierarchies ?? []).map((item) => item.roleId)
   ].filter(Boolean);
 
@@ -1232,6 +1246,7 @@ function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPan
       roleId: item.roleId
     })),
     logChannelId: normalizeOptionalId(input.logChannelId),
+    ticketCategoryId: normalizeOptionalId(input.ticketCategoryId),
     panelChannelId: normalizeOptionalId(input.panelChannelId),
     panelMessageId: normalizeOptionalId(input.panelMessageId)
   };

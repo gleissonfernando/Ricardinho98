@@ -111,6 +111,7 @@ async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allo
   if (!config.complaintTypes.length) throw new Error("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
   if (!config.panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
   if (!config.categoryId) throw new Error("Configure a categoria dos canais temporarios antes de publicar.");
+  if (!config.archiveCategoryId) throw new Error("Configure a categoria para onde o canal sera enviado depois de finalizado.");
   const channel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
   if (!channel || !("messages" in channel) || !("send" in channel)) throw new Error("O canal configurado nao aceita mensagens.");
   let message = config.panelMessageId ? await channel.messages.fetch(config.panelMessageId).catch(() => null) : null;

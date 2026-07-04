@@ -336,6 +336,12 @@ advancedModulesRouter.post("/:botId/:guildId/police-reports/publish", async (req
     if (!config.panelChannelId) {
       return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
     }
+    if (!config.categoryId) {
+      return res.status(409).json({ message: "Configure a categoria onde os canais de denuncia serao criados." });
+    }
+    if (!config.archiveCategoryId) {
+      return res.status(409).json({ message: "Configure a categoria para onde o canal sera enviado depois de finalizado." });
+    }
     emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "publish", botId, guildId });
     return res.json({ ok: true });
   } catch (error) {
