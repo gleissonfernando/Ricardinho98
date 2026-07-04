@@ -1,6 +1,6 @@
 import {
-    ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder,
-    PermissionFlagsBits, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
+    ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, MessageFlags, ModalBuilder,
+    PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
     type ButtonInteraction, type ChatInputCommandInteraction, type Client, type GuildMember, type Interaction,
     type Message, type ModalSubmitInteraction, type StringSelectMenuInteraction, type UserSelectMenuInteraction
 } from "discord.js";
@@ -10,6 +10,7 @@ import type { PolicePatrolMessage, PolicePatrolReport, PolicePatrolSettings } fr
 import { renderComponentsV2Panel, type PanelVisualConfig } from "./panelVisualRenderer";
 
 const PREFIX = "police_patrol";
+const CONFIG_PREFIX = "police_patrol_config";
 
 export function startPolicePatrolReportService(client: Client, context: BotContext) {
   if (!isBotModuleEnabled("police-patrol-reports")) return;
@@ -23,6 +24,7 @@ export async function createPolicePatrolFromCommand(interaction: ChatInputComman
   const author = await interaction.guild.members.fetch(interaction.user.id);
   if (!settings.enabled) { await interaction.reply({ content: "Relatórios policiais estão desativados.", ephemeral: true }); return; }
   if (!hasRoleOrAdmin(author, settings.creatorRoleIds)) { await interaction.reply({ content: "Você não possui o cargo autorizado para criar relatórios.", ephemeral: true }); return; }
+  if (settings.commandChannelId && interaction.channelId !== settings.commandChannelId) { await interaction.reply({ content: `Use o comando /relatorio em <#${settings.commandChannelId}>.`, ephemeral: true }); return; }
   const officer = interaction.options.getUser("policial", true);
   const patrolType = interaction.options.getString("tipo"); const initialNotes = interaction.options.getString("observacoes");
   await interaction.deferReply({ ephemeral: true });
@@ -51,6 +53,10 @@ export async function showPolicePatrolViewer(interaction: ChatInputCommandIntera
 }
 
 export async function handlePolicePatrolInteraction(interaction: Interaction, context: BotContext) {
+  if ("customId" in interaction && interaction.customId.startsWith(`${CONFIG_PREFIX}:`)) {
+    await handlePolicePatrolConfigInteraction(interaction, context);
+    return true;
+  }
   if (!(interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) || !interaction.customId.startsWith(`${PREFIX}:`)) return false;
   const [, action, reportId] = interaction.customId.split(":");
   if (interaction.isButton() && action === "start") await showStartModal(interaction, reportId!);
@@ -67,6 +73,68 @@ export async function handlePolicePatrolInteraction(interaction: Interaction, co
   else if (interaction.isButton() && action && ["html", "json", "pdf"].includes(action)) await exportReport(interaction, context, reportId!, action as "html" | "json" | "pdf");
   else if (interaction.isButton() && action === "delete") await deleteReport(interaction, context, reportId!);
   return true;
+}
+
+export async function showPolicePatrolConfigPanel(interaction: ChatInputCommandInteraction, context: BotContext) {
+  if (!interaction.guild) return;
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  if (!member.permissions.has(PermissionFlagsBits.ManageGuild) && !member.permissions.has(PermissionFlagsBits.Administrator)) {
+    await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
+    return;
+  }
+
+  const settings = await context.api.getPolicePatrolSettings(interaction.guild.id);
+  await interaction.reply(configPanelPayload(settings));
+}
+
+async function handlePolicePatrolConfigInteraction(interaction: Interaction, context: BotContext) {
+  if (!interaction.guildId || !interaction.isRepliable() || !("customId" in interaction)) return;
+  const member = interaction.member as GuildMember;
+  if (!member.permissions.has(PermissionFlagsBits.ManageGuild) && !member.permissions.has(PermissionFlagsBits.Administrator)) {
+    await interaction.reply({ content: "Voce nao possui permissao para configurar relatorios.", ephemeral: true });
+    return;
+  }
+
+  const settings = await context.api.getPolicePatrolSettings(interaction.guildId);
+  const [, action, target] = interaction.customId.split(":");
+
+  if (interaction.isButton() && action === "toggle") {
+    const saved = await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, enabled: !settings.enabled });
+    await interaction.update(configPanelPayload(saved));
+    return;
+  }
+
+  if (interaction.isStringSelectMenu() && action === "menu") {
+    await interaction.reply(configEditorPayload(interaction.values[0] ?? "general", settings));
+    return;
+  }
+
+  if (interaction.isChannelSelectMenu() && action === "channel") {
+    const channelId = interaction.values[0] ?? null;
+    const patch = target === "command" ? { commandChannelId: channelId } : target === "log" ? { logChannelId: channelId } : target === "temporary" ? { temporaryCategoryId: channelId } : { archiveCategoryId: channelId };
+    await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, ...patch });
+    await interaction.update(configSavedPayload("Canal salvo. Abra /config relatorio novamente para ver o resumo atualizado."));
+    return;
+  }
+
+  if (interaction.isRoleSelectMenu() && action === "roles") {
+    const values = interaction.values;
+    const patch = target === "creator" ? { creatorRoleIds: values } : target === "viewer" ? { viewerRoleIds: values } : target === "delete" ? { deleteRoleIds: values } : target === "archive" ? { archiveViewRoleIds: values } : { supervisorRoleIds: values };
+    await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, ...patch });
+    await interaction.update(configSavedPayload("Cargos salvos. Abra /config relatorio novamente para ver o resumo atualizado."));
+    return;
+  }
+
+  if (interaction.isStringSelectMenu() && action === "export") {
+    await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, defaultExportFormat: interaction.values[0] as PolicePatrolSettings["defaultExportFormat"] });
+    await interaction.update(configSavedPayload("Formato de exportacao salvo."));
+    return;
+  }
+
+  if (interaction.isStringSelectMenu() && action === "delete_delay") {
+    await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, deleteDelayMinutes: Number(interaction.values[0] ?? settings.deleteDelayMinutes) });
+    await interaction.update(configSavedPayload("Tempo de exclusao salvo."));
+  }
 }
 
 export async function capturePolicePatrolMessage(message: Message, context: BotContext) {
@@ -167,6 +235,119 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
 export function normalizeArchiveReason(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function configPanelPayload(settings: PolicePatrolSettings) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`${CONFIG_PREFIX}:menu`)
+    .setPlaceholder("Selecione o que deseja configurar")
+    .addOptions(
+      { label: "Canal do /relatorio", value: "command_channel", description: "Onde o comando podera ser utilizado" },
+      { label: "Canal de logs", value: "log_channel", description: "Onde relatorios finalizados serao enviados" },
+      { label: "Categorias", value: "categories", description: "Canais temporarios e arquivo" },
+      { label: "Permissoes", value: "permissions", description: "Cargos autorizados do sistema policial" },
+      { label: "Exclusao automatica", value: "delete_delay", description: "Tempo para limpeza de canais cancelados" },
+      { label: "Exportacao", value: "export", description: "Formato padrao HTML, PDF ou JSON" }
+    );
+  const toggle = new ButtonBuilder()
+    .setCustomId(`${CONFIG_PREFIX}:toggle`)
+    .setLabel(settings.enabled ? "Desativar sistema" : "Ativar sistema")
+    .setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success);
+
+  return {
+    components: [{
+      type: 17,
+      accent_color: 0x2563eb,
+      components: [
+        { type: 10, content: `# Sistema de Relatorios\nStatus: **${settings.enabled ? "Ativo" : "Inativo"}**\nCanal do comando: ${settings.commandChannelId ? `<#${settings.commandChannelId}>` : "Nao definido"}\nLogs: ${settings.logChannelId ? `<#${settings.logChannelId}>` : "Nao definido"}\nCategoria temporaria: ${settings.temporaryCategoryId ?? "Nao definida"}\nExportacao padrao: **${settings.defaultExportFormat.toUpperCase()}**` },
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
+        new ActionRowBuilder<ButtonBuilder>().addComponents(toggle)
+      ]
+    }],
+    ephemeral: true,
+    flags: MessageFlags.IsComponentsV2 as const
+  };
+}
+
+function configEditorPayload(section: string, settings: PolicePatrolSettings) {
+  if (section === "command_channel") return channelEditor("Canal de execucao do /relatorio", "command", ChannelType.GuildText);
+  if (section === "log_channel") return channelEditor("Canal de logs dos relatorios", "log", ChannelType.GuildText);
+  if (section === "categories") {
+    return {
+      components: [{
+        type: 17,
+        accent_color: 0x2563eb,
+        components: [
+          { type: 10, content: "# Categorias\nConfigure onde os canais temporarios serao criados e para onde serao arquivados." },
+          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:temporary`).setPlaceholder("Categoria temporaria").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1)),
+          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:archive`).setPlaceholder("Categoria de arquivo").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1))
+        ]
+      }],
+      ephemeral: true,
+      flags: MessageFlags.IsComponentsV2 as const
+    };
+  }
+  if (section === "permissions") {
+    return {
+      components: [{
+        type: 17,
+        accent_color: 0x2563eb,
+        components: [
+          { type: 10, content: "# Permissoes\nSelecione cargos para criar, visualizar, excluir e acessar canais de relatorio." },
+          roleEditor("Cargos que criam relatorios", "creator", settings.creatorRoleIds),
+          roleEditor("Cargos que visualizam todos", "viewer", settings.viewerRoleIds),
+          roleEditor("Cargos que excluem relatorios", "delete", settings.deleteRoleIds),
+          roleEditor("Cargos nos canais temporarios", "supervisor", settings.supervisorRoleIds),
+          roleEditor("Cargos que veem arquivo", "archive", settings.archiveViewRoleIds)
+        ]
+      }],
+      ephemeral: true,
+      flags: MessageFlags.IsComponentsV2 as const
+    };
+  }
+  if (section === "delete_delay") {
+    return stringSelectEditor("Exclusao automatica", "delete_delay", [
+      { label: "Nunca excluir automaticamente", value: "0" },
+      { label: "5 minutos", value: "5" },
+      { label: "30 minutos", value: "30" },
+      { label: "1 hora", value: "60" },
+      { label: "24 horas", value: "1440" }
+    ]);
+  }
+  return stringSelectEditor("Exportacao padrao", "export", [
+    { label: "HTML", value: "html" },
+    { label: "PDF", value: "pdf" },
+    { label: "JSON", value: "json" }
+  ]);
+}
+
+function channelEditor(title: string, target: string, type: ChannelType.GuildText | ChannelType.GuildCategory) {
+  return {
+    components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: `# ${title}` }, new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:${target}`).setPlaceholder(title).setChannelTypes(type).setMinValues(1).setMaxValues(1))] }],
+    ephemeral: true,
+    flags: MessageFlags.IsComponentsV2 as const
+  };
+}
+
+function roleEditor(placeholder: string, target: string, _defaults: string[]) {
+  void _defaults;
+  const menu = new RoleSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:roles:${target}`).setPlaceholder(placeholder).setMinValues(0).setMaxValues(25);
+  return new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(menu);
+}
+
+function stringSelectEditor(title: string, action: string, options: Array<{ label: string; value: string }>) {
+  return {
+    components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: `# ${title}` }, new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:${action}`).setPlaceholder(title).addOptions(options))] }],
+    ephemeral: true,
+    flags: MessageFlags.IsComponentsV2 as const
+  };
+}
+
+function configSavedPayload(message: string) {
+  return {
+    components: [{ type: 17, accent_color: 0x22c55e, components: [{ type: 10, content: `# Configuracao salva\n${message}` }] }],
+    flags: MessageFlags.IsComponentsV2 as const
+  };
 }
 
 function initialPanel(report: PolicePatrolReport, visuals: PanelVisualConfig[] = []) {

@@ -2,6 +2,7 @@ import { Collection } from "discord.js";
 import { banCommand } from "./ban";
 import { advertirCommand } from "./advertir";
 import { clearCommand } from "./clear";
+import { configCommand } from "./config";
 import { deleteServeCommand } from "./deleteServe";
 import { emojiClonerCommand } from "./emojiCloner";
 import { gravarCommand } from "./gravar";
@@ -27,6 +28,7 @@ export function createCommandCollection() {
     advertirCommand,
     banCommand,
     clearCommand,
+    configCommand,
     deleteServeCommand,
     emojiClonerCommand,
     gravarCommand,

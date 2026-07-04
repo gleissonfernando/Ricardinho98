@@ -3,13 +3,13 @@ import { env } from "../config/env";
 import { getMongoCollections, type MongoPolicePatrolMessage, type MongoPolicePatrolSettings } from "../database/mongo";
 
 export const POLICE_PATROL_MODULE_ID = "police-patrol-reports";
-type SettingsInput = Partial<Pick<MongoPolicePatrolSettings, "enabled" | "creatorRoleIds" | "viewerRoleIds" | "deleteRoleIds" | "supervisorRoleIds" | "logChannelId" | "temporaryCategoryId" | "archiveCategoryId" | "archiveViewRoleIds" | "deleteDelayMinutes" | "defaultExportFormat">>;
+type SettingsInput = Partial<Pick<MongoPolicePatrolSettings, "enabled" | "creatorRoleIds" | "viewerRoleIds" | "deleteRoleIds" | "supervisorRoleIds" | "commandChannelId" | "logChannelId" | "temporaryCategoryId" | "archiveCategoryId" | "archiveViewRoleIds" | "deleteDelayMinutes" | "defaultExportFormat">>;
 
 export async function getPolicePatrolSettings(botId: string, guildId: string) {
   const { policePatrolSettings } = await getMongoCollections();
   const found = await policePatrolSettings.findOne({ botId, guildId }); if (found) return settingsDto(found);
   const now = new Date();
-  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], logChannelId: null, temporaryCategoryId: null, archiveCategoryId: null, archiveViewRoleIds: [], deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
+  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], commandChannelId: null, logChannelId: null, temporaryCategoryId: null, archiveCategoryId: null, archiveViewRoleIds: [], deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
   await policePatrolSettings.updateOne({ botId, guildId }, { $setOnInsert: settings }, { upsert: true });
   return settingsDto((await policePatrolSettings.findOne({ botId, guildId })) ?? settings);
 }
@@ -78,7 +78,7 @@ export async function getPolicePatrolFile(fileId: string) { const { policePatrol
 async function requireReport(botId: string, reportId: string) { const { policePatrolReports } = await getMongoCollections(); const value = await policePatrolReports.findOne({ _id: reportId, botId }); if (!value) throw serviceError("Relatório não encontrado.", 404); return reportDto(value); }
 async function audit(reportId: string, botId: string, guildId: string, actorId: string | null, action: string, metadata: Record<string, unknown>) { const { policePatrolAudits } = await getMongoCollections(); await policePatrolAudits.insertOne({ _id: randomUUID(), reportId, botId, guildId, actorId, action, metadata, createdAt: new Date() }); }
 function timeMinutes(start: string, end: string) { const parse = (value: string) => { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw serviceError("Horário inválido. Use HH:mm.", 400); const [h, m] = value.split(":").map(Number); return h! * 60 + m!; }; const a = parse(start); let b = parse(end); if (b < a) b += 1440; return b - a; }
-function settingsDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
+function settingsDto(value: any) { return { ...value, id: value._id, commandChannelId: value.commandChannelId ?? null, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
 function reportDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), startedAt: value.startedAt?.toISOString() ?? null, finishedAt: value.finishedAt?.toISOString() ?? null, cancelledAt: value.cancelledAt?.toISOString() ?? null, archivedAt: value.archivedAt?.toISOString() ?? null, archivedBy: value.archivedBy ?? null, archiveCategoryId: value.archiveCategoryId ?? null, archiveReason: value.archiveReason ?? null, deleteAt: value.deleteAt?.toISOString() ?? null, updatedAt: value.updatedAt.toISOString() }; }
 function messageDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString() }; }
 function fileDto(value: any) { const path = `/api/police-patrol-reports/files/${value._id}`; return { id: value._id, name: value.name, mimeType: value.mimeType, size: value.size, url: new URL(path, env.FRONTEND_URL).toString() }; }

@@ -24,6 +24,7 @@ export function PolicePatrolReportsPanel({ botId, canManage, guild }: { botId?: 
       <FivemResourceMultiSelect disabled={!canManage} label="Cargos que visualizam todos" options={roles} values={data.settings.viewerRoleIds} onChange={(viewerRoleIds) => patch({ viewerRoleIds })} />
       <FivemResourceMultiSelect disabled={!canManage} label="Cargos que excluem" options={roles} values={data.settings.deleteRoleIds} onChange={(deleteRoleIds) => patch({ deleteRoleIds })} />
       <FivemResourceMultiSelect disabled={!canManage} label="Cargos de supervisão nos canais" options={roles} values={data.settings.supervisorRoleIds} onChange={(supervisorRoleIds) => patch({ supervisorRoleIds })} />
+      <FivemResourceSelect disabled={!canManage} label="Canal do /relatorio" options={channels} value={data.settings.commandChannelId} onChange={(commandChannelId) => patch({ commandChannelId })} />
       <FivemResourceSelect disabled={!canManage} label="Canal de logs" options={channels} value={data.settings.logChannelId} onChange={(logChannelId) => patch({ logChannelId })} />
       <FivemResourceSelect disabled={!canManage} label="Categoria dos canais temporários" options={categories} value={data.settings.temporaryCategoryId} onChange={(temporaryCategoryId) => patch({ temporaryCategoryId })} />
       <FivemResourceSelect disabled={!canManage} label="Categoria de arquivo" options={categories} value={data.settings.archiveCategoryId} onChange={(archiveCategoryId) => patch({ archiveCategoryId })} />

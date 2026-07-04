@@ -1280,7 +1280,7 @@ export type MongoFivemActionSession = {
 export type MongoPolicePatrolSettings = {
   _id: string; botId: string; guildId: string; enabled: boolean;
   creatorRoleIds: string[]; viewerRoleIds: string[]; deleteRoleIds: string[]; supervisorRoleIds: string[];
-  logChannelId: string | null; temporaryCategoryId: string | null; archiveCategoryId: string | null; archiveViewRoleIds: string[];
+  commandChannelId: string | null; logChannelId: string | null; temporaryCategoryId: string | null; archiveCategoryId: string | null; archiveViewRoleIds: string[];
   deleteDelayMinutes: number; defaultExportFormat: "html" | "pdf" | "json"; createdAt: Date; updatedAt: Date; updatedBy: string | null;
 };
 
