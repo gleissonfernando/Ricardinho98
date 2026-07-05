@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import { env } from "../config/env";
+import { currentRuntimeBotId, env } from "../config/env";
 import type { GuildSettings } from "../types";
 
 export type CreateLogInput = {
@@ -1279,6 +1279,12 @@ export class ApiClient {
         throw new Error("BACKEND_API_URL nao configurado.");
       }
 
+      const runtimeBotId = currentRuntimeBotId() ?? env.DASHBOARD_BOT_ID.trim();
+      if (runtimeBotId) {
+        config.headers = config.headers ?? {};
+        config.headers["x-dashboard-bot-id"] = runtimeBotId;
+      }
+
       recordApiRequest(config.method, config.url);
       return config;
     });
@@ -1395,12 +1401,16 @@ export class ApiClient {
   }
 
   async updatePoliceFlightState(guildId: string, patch: Record<string, unknown>) {
-    const { data } = await this.http.post<{ module: { config: Record<string, unknown> } }>(
-      `/bot/runtime/guilds/${encodeURIComponent(guildId)}/police-flight/state`,
-      patch,
-      { timeout: 8_000 }
-    );
-    return data.module;
+    try {
+      const { data } = await this.http.post<{ module: { config: Record<string, unknown> } }>(
+        `/bot/runtime/guilds/${encodeURIComponent(guildId)}/police-flight/state`,
+        patch,
+        { timeout: 8_000 }
+      );
+      return data.module;
+    } catch (error) {
+      throw enrichAxiosError(error, "Nao foi possivel salvar o estado da Escalacao DAF.");
+    }
   }
 
   async reportTagVerificationStatus(guildId: string, status: TagVerificationRuntimeStatus) {
@@ -2426,6 +2436,20 @@ function cleanupApiRequestCounters(now: number) {
       apiRequestCounters.delete(key);
     }
   }
+}
+
+function enrichAxiosError(error: unknown, fallback: string) {
+  if (!axios.isAxiosError(error)) {
+    return error instanceof Error ? error : new Error(String(error || fallback));
+  }
+
+  const status = error.response?.status;
+  const data = error.response?.data;
+  const message = data && typeof data === "object" && "message" in data && typeof data.message === "string"
+    ? data.message
+    : error.message;
+
+  return new Error(status ? `${fallback} ${message} (HTTP ${status})` : `${fallback} ${message}`);
 }
 
 function readAuthorizationResponse(value: unknown): BotCommandAuthorization | null {
