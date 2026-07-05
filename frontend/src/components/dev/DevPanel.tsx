@@ -75,6 +75,7 @@ import {
 } from "../../lib/api";
 import { createDashboardSocket } from "../../lib/socket";
 import { dashboardUrl } from "../../lib/urls";
+import type { ViewId } from "../layout/sidebar";
 import type {
     AuthUser,
     CreateDevBotPayload,
@@ -523,6 +524,10 @@ const botMenuItems: BotMenuItem[] = [
   }
 ];
 
+const moduleDashboardViews: Partial<Record<string, ViewId>> = {
+  "police-rh": "police-rh"
+};
+
 type DevPanelProps = {
   activeDashboardSection?: DevDashboardSection | null;
   guilds?: DashboardMeGuild[];
@@ -533,7 +538,7 @@ type DevPanelProps = {
   selectedBotId?: string | null;
   selectedGuildId?: string | null;
   onSelectBot?: (botId: string | null) => void;
-  onOpenView?: (view: "overview" | "settings" | "logs", bot?: DevBot) => void;
+  onOpenView?: (view: ViewId, bot?: DevBot) => void;
   user?: AuthUser;
 };
 
@@ -896,7 +901,7 @@ export function DevPanel({
     }
   }
 
-  function openSelectedBotView(view: "overview" | "settings" | "logs") {
+  function openSelectedBotView(view: ViewId) {
     if (!selectedBot) return;
     handleSelectBotId(selectedBot.id);
     onOpenView?.(view, selectedBot);
@@ -935,6 +940,7 @@ export function DevPanel({
             bot={selectedBot}
             guilds={guilds}
             modules={modules}
+            onOpenView={openSelectedBotView}
             onSelectMenu={setActiveBotMenuId}
             onToggle={(moduleId, checked) => void handleToggleModule(selectedBot, moduleId, checked)}
           />
@@ -1209,6 +1215,7 @@ export function DevPanel({
               bot={selectedBot}
               guilds={guilds}
               modules={modules}
+              onOpenView={openSelectedBotView}
               onSelectMenu={setActiveBotMenuId}
               onToggle={(moduleId, checked) => void handleToggleModule(selectedBot, moduleId, checked)}
             />
@@ -1895,6 +1902,7 @@ function BotModuleWorkspace({
   bot,
   guilds,
   modules,
+  onOpenView,
   onSelectMenu,
   onToggle
 }: {
@@ -1902,6 +1910,7 @@ function BotModuleWorkspace({
   bot: DevBot;
   guilds: DashboardMeGuild[];
   modules: DevModuleDefinition[];
+  onOpenView: (view: ViewId) => void;
   onSelectMenu: (menuId: BotMenuId) => void;
   onToggle: (moduleId: string, checked: boolean) => void;
 }) {
@@ -2098,6 +2107,7 @@ function BotModuleWorkspace({
                     index={index}
                     key={module.id}
                     module={module}
+                    onOpenView={onOpenView}
                     onToggle={onToggle}
                     onToggleFavorite={toggleFavorite}
                     status={bot.status}
@@ -2478,6 +2488,7 @@ function ModuleDashboardCard({
   favorite,
   index,
   module,
+  onOpenView,
   onToggle,
   onToggleFavorite,
   status
@@ -2486,12 +2497,14 @@ function ModuleDashboardCard({
   favorite: boolean;
   index: number;
   module: DevModuleDefinition;
+  onOpenView: (view: ViewId) => void;
   onToggle: (moduleId: string, checked: boolean) => void;
   onToggleFavorite: (moduleId: string) => void;
   status: DevBotStatus;
 }) {
   const Icon = iconForModule(module.id);
   const moduleStatus = moduleCardStatus(enabled, status);
+  const dashboardView = moduleDashboardViews[module.id];
 
   return (
     <div
@@ -2533,8 +2546,15 @@ function ModuleDashboardCard({
       <div className="mt-4 flex items-center gap-2">
         <button
           className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 text-xs font-bold text-purple-100 transition hover:border-purple-400/45 hover:bg-purple-500/18"
-          onClick={() => onToggle(module.id, !enabled)}
-          title="Configurar rapidamente"
+          onClick={() => {
+            if (dashboardView) {
+              onOpenView(dashboardView);
+              return;
+            }
+
+            onToggle(module.id, !enabled);
+          }}
+          title={dashboardView ? "Abrir configuração do módulo" : "Configurar rapidamente"}
           type="button"
         >
           <Settings className="h-3.5 w-3.5" />

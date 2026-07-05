@@ -232,7 +232,11 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
             onBotUpdated={handleBotUpdated}
             onDashboardSectionChange={(section) => handleChangeView(section)}
             onOpenView={(view, bot) => {
-              if (view === "overview") window.location.replace(dashboardUrl(bot?.slug));
+              const url = new URL(dashboardUrl(bot?.slug));
+              if (view !== "overview") {
+                url.searchParams.set("view", view);
+              }
+              window.location.replace(url.toString());
             }}
             onSelectBot={setSelectedBotId}
             selectedBotId={selectedBotId}

@@ -638,11 +638,20 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
 
 const settingsModuleIds = new Set(["tickets", "avisos", "network", "server-generator"]);
 
+function readInitialDashboardView(): ViewId {
+  try {
+    const view = new URLSearchParams(window.location.search).get("view");
+    return view === "police-rh" ? "police-rh" : "overview";
+  } catch {
+    return "overview";
+  }
+}
+
 export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardProps) {
   const [dashboardProfile, setDashboardProfile] = useState<DashboardMeResponse | null>(null);
   const [dashboardProfileLoading, setDashboardProfileLoading] = useState(true);
   const [dashboardRouteError, setDashboardRouteError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<ViewId>("overview");
+  const [activeView, setActiveView] = useState<ViewId>(() => readInitialDashboardView());
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(
     auth.user.selectedGuildId ?? auth.guilds[0]?.id ?? CONFIGURED_GUILD_ID
@@ -4233,6 +4242,10 @@ function isModuleReleasedForBot(bot: DashboardBot, moduleId: string) {
 
   if (moduleId === "fivem-fac") {
     return released.has("fivem-fac") || released.has("fivem-absences");
+  }
+
+  if (moduleId === "police-rh") {
+    return released.has("police-rh") || released.has("fivem-absences") || released.has("fivem-fac");
   }
 
   if (moduleId === "fivem-drugs") {
@@ -9137,12 +9150,20 @@ function isViewAllowed(view: ViewId, enabledModules: string[]) {
     return enabledModules.includes("police-patrol-reports") || enabledModules.includes("patrol-reports");
   }
 
+  if (view === "police-rh") {
+    return policeRhModuleEnabled(enabledModules);
+  }
+
   const requiredModule = viewModuleIds[view];
   return Boolean(requiredModule && enabledModules.includes(requiredModule));
 }
 
 function liveModulesEnabled(enabledModules: string[]) {
   return enabledModules.includes("live") || enabledModules.includes("kick-integration");
+}
+
+function policeRhModuleEnabled(enabledModules: string[]) {
+  return enabledModules.includes("police-rh") || enabledModules.includes("fivem-absences") || enabledModules.includes("fivem-fac");
 }
 
 function ensureDashboardGuilds(guilds: DashboardGuild[]) {

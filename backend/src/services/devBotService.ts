@@ -2448,6 +2448,10 @@ function sanitizeModules(modules: string[]) {
 }
 
 function devBotModuleReleaseIds(moduleId: string) {
+  if (moduleId === "police-rh") {
+    return ["police-rh", "fivem-absences", "fivem-fac"];
+  }
+
   const canonicalModuleId = LEGACY_MODULE_ALIASES[moduleId] ?? moduleId;
 
   return [...new Set([moduleId, canonicalModuleId])];
