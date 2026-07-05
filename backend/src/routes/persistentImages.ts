@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { getPersistentImage } from "../services/persistentImageStorageService";
 
@@ -7,6 +8,14 @@ const imageIdSchema = z.string().uuid();
 export const persistentImagesRouter = Router();
 
 persistentImagesRouter.get("/:imageId", async (req, res, next) => {
+  return servePersistentImage(req, res, next);
+});
+
+persistentImagesRouter.get("/:imageId/:fileName", async (req, res, next) => {
+  return servePersistentImage(req, res, next);
+});
+
+async function servePersistentImage(req: Request, res: Response, next: NextFunction) {
   try {
     const imageId = imageIdSchema.parse(req.params.imageId);
     const image = await getPersistentImage(imageId);
@@ -24,12 +33,13 @@ persistentImagesRouter.get("/:imageId", async (req, res, next) => {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     res.setHeader("Content-Length", String(buffer.length));
     res.setHeader("Content-Type", image.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(image.fileName)}`);
     res.setHeader("X-Content-Type-Options", "nosniff");
     return res.end(buffer);
   } catch (error) {
     return next(error);
   }
-});
+}
 
 function toImageBuffer(value: unknown) {
   if (Buffer.isBuffer(value)) {

@@ -39,7 +39,7 @@ export async function savePersistentImage(input: {
   const id = randomUUID();
   const extension = PERSISTENT_IMAGE_MIME_EXTENSIONS[input.mimeType];
   const fileName = `${sanitizePathPart(input.guildId)}-${sanitizePathPart(input.moduleId)}-${sanitizePathPart(input.imageType)}-${Date.now()}-${id}.${extension}`;
-  const publicUrl = publicImageUrl(id);
+  const publicUrl = publicImageUrl(id, fileName);
   const now = new Date();
   const doc: MongoPersistentImage = {
     _id: id,
@@ -172,15 +172,15 @@ export function isLocalUploadUrl(value: string | null | undefined) {
   return /^\/uploads\//.test(value?.trim() ?? "");
 }
 
-function publicImageUrl(id: string) {
+function publicImageUrl(id: string, fileName: string) {
   const baseUrl = env.SITE_ORIGIN || env.FRONTEND_URL;
-  return `${baseUrl}/api/persistent-images/${encodeURIComponent(id)}`;
+  return `${baseUrl}/api/persistent-images/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`;
 }
 
 function parsePersistentImageId(value: string) {
   const normalized = value.trim();
   if (!normalized) return null;
-  const match = normalized.match(/\/api\/persistent-images\/([a-f0-9-]{36})(?:[?#].*)?$/i);
+  const match = normalized.match(/\/api\/persistent-images\/([a-f0-9-]{36})(?:\/[^?#]*)?(?:[?#].*)?$/i);
   return match?.[1] ?? null;
 }
 

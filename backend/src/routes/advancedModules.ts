@@ -167,7 +167,7 @@ const policeFlightSaveSchema = z.object({
   config: policeFlightConfigSchema,
   guildName: z.string().min(1).max(100).optional()
 });
-const policeRhImagePositionSchema = z.enum(["top", "middle", "side", "footer", "none"]);
+const policeRhImagePositionSchema = z.enum(["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"]);
 const policeRhConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),

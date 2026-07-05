@@ -9161,7 +9161,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 }
 
 type PoliceRhTab = "general" | "absence" | "adornos" | "panel" | "logs" | "permissions";
-type PoliceRhImagePosition = "top" | "middle" | "side" | "footer" | "none";
+type PoliceRhImagePosition = "banner" | "thumbnail" | "top" | "below_title" | "middle" | "bottom" | "side" | "footer" | "before_buttons" | "below_text" | "above_buttons" | "none";
 const DEFAULT_POLICE_RH_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
 
 type PoliceRhConfig = {
@@ -9330,15 +9330,25 @@ function PoliceRhField({ disabled, label, onChange, type = "text", value }: { di
 }
 
 function PoliceRhImagePositionSelect({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: PoliceRhImagePosition) => void; value: PoliceRhImagePosition }) {
+  const options: Array<{ label: string; value: PoliceRhImagePosition }> = [
+    { label: "Sem imagem", value: "none" },
+    { label: "Banner principal", value: "banner" },
+    { label: "Topo / cabeçalho", value: "top" },
+    { label: "Lateral direita", value: "side" },
+    { label: "Thumbnail", value: "thumbnail" },
+    { label: "Abaixo do título", value: "below_title" },
+    { label: "Meio do painel", value: "middle" },
+    { label: "Abaixo do texto", value: "below_text" },
+    { label: "Antes dos botões", value: "before_buttons" },
+    { label: "Rodapé", value: "footer" },
+    { label: "Final do painel", value: "bottom" }
+  ];
+
   return (
     <label className="grid gap-2 text-xs font-medium text-zinc-400">
       <span>{label}</span>
       <select className="h-10 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value as PoliceRhImagePosition)} value={value}>
-        <option value="top">Topo</option>
-        <option value="middle">Meio</option>
-        <option value="side">Lateral</option>
-        <option value="footer">Rodapé</option>
-        <option value="none">Sem imagem</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
   );
@@ -9357,10 +9367,13 @@ function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
   const imageUrl = config.panelImageUrl || config.panelBannerUrl;
   const footerImageUrl = config.panelFooterImageUrl;
   const imagePosition = config.panelImagePosition;
-  const showTop = imageUrl && imagePosition === "top";
+  const showTop = imageUrl && (imagePosition === "top" || imagePosition === "banner");
+  const showBelowTitle = imageUrl && imagePosition === "below_title";
   const showMiddle = imageUrl && imagePosition === "middle";
-  const showSide = imageUrl && imagePosition === "side";
+  const showSide = imageUrl && (imagePosition === "side" || imagePosition === "thumbnail");
+  const showBeforeButtons = imageUrl && (imagePosition === "before_buttons" || imagePosition === "above_buttons" || imagePosition === "below_text");
   const showFooter = imageUrl && imagePosition === "footer";
+  const showBottom = imageUrl && imagePosition === "bottom";
 
   return (
     <div className="rounded-lg border border-purple-500/20 bg-[#0b0b0f] p-4">
@@ -9377,7 +9390,9 @@ function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-white">{config.panelTitle}</p>
             <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-300">{config.panelDescription}</p>
+            {showBelowTitle ? <img alt="Preview abaixo do título" className="mt-3 max-h-36 w-full rounded-lg object-cover" src={imageUrl} /> : null}
             {showMiddle ? <img alt="Preview meio" className="mt-3 max-h-40 w-full rounded-lg object-cover" src={imageUrl} /> : null}
+            {showBeforeButtons ? <img alt="Preview antes dos botões" className="mt-3 max-h-36 w-full rounded-lg object-cover" src={imageUrl} /> : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-100">📝 Solicitar Ausência</span>
               <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">🎖️ Solicitar Adorno</span>
@@ -9392,6 +9407,7 @@ function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
             <span>{config.panelFooterText}</span>
           </div>
         ) : null}
+        {showBottom ? <img alt="Preview final" className="max-h-36 w-full border-t border-zinc-800 object-cover" src={imageUrl} /> : null}
       </div>
     </div>
   );
@@ -9471,7 +9487,7 @@ function readColorValue(value: unknown, fallback: string) {
 }
 
 function readPoliceRhImagePosition(value: unknown, fallback: PoliceRhImagePosition): PoliceRhImagePosition {
-  return value === "top" || value === "middle" || value === "side" || value === "footer" || value === "none" ? value : fallback;
+  return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PoliceRhImagePosition : fallback;
 }
 
 function visualPanelIdForView(view: ViewId) {
