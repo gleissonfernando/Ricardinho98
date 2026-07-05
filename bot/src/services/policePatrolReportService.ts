@@ -11,6 +11,13 @@ import { renderComponentsV2Panel, type PanelVisualConfig } from "./panelVisualRe
 
 const PREFIX = "police_patrol";
 const CONFIG_PREFIX = "police_patrol_config";
+const DEFAULT_REPORT_QUESTIONS = [
+  "Nome do policial", "ID/passaporte", "Cargo/patente", "Unidade",
+  "Horario de inicio do patrulhamento", "Horario de termino do patrulhamento",
+  "Quantidade de abordagens", "Quantidade de prisoes", "Quantidade de multas",
+  "Quantidade de apreensoes", "Ocorrencias atendidas", "Com quem patrulhou",
+  "Descreva um pouco como foi o patrulhamento"
+];
 
 export function startPolicePatrolReportService(client: Client, context: BotContext) {
   if (!isBotModuleEnabled("police-patrol-reports")) return;
@@ -25,7 +32,8 @@ export async function createPolicePatrolFromCommand(interaction: ChatInputComman
   if (!settings.enabled) { await interaction.reply({ content: "Relatórios policiais estão desativados.", ephemeral: true }); return; }
   if (!hasRoleOrAdmin(author, settings.creatorRoleIds)) { await interaction.reply({ content: "Você não possui o cargo autorizado para criar relatórios.", ephemeral: true }); return; }
   if (settings.commandChannelId && interaction.channelId !== settings.commandChannelId) { await interaction.reply({ content: `Use o comando /relatorio em <#${settings.commandChannelId}>.`, ephemeral: true }); return; }
-  const officer = interaction.options.getUser("policial", true);
+  const officer = interaction.options.getUser("usuario", true);
+  await interaction.guild.members.fetch(officer.id);
   const patrolType = interaction.options.getString("tipo"); const initialNotes = interaction.options.getString("observacoes");
   await interaction.deferReply({ ephemeral: true });
   const report = await context.api.createPolicePatrolReport({ guildId: interaction.guild.id, officerId: officer.id, officerName: officer.globalName ?? officer.username, authorId: interaction.user.id, authorName: author.displayName, patrolType, initialNotes });
@@ -33,8 +41,7 @@ export async function createPolicePatrolFromCommand(interaction: ChatInputComman
   const overwrites: any[] = [
     { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
     { id: interaction.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AddReactions] },
-    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
-    { id: officer.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+    { id: officer.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
     ...settings.supervisorRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
   ];
   const channel = await interaction.guild.channels.create({ name: `relatorio-${slug(officer.username)}-${report.id.slice(0, 4)}`, type: ChannelType.GuildText, parent: settings.temporaryCategoryId ?? undefined, permissionOverwrites: overwrites, reason: `Relatório policial ${report.id}` });
@@ -72,6 +79,7 @@ export async function handlePolicePatrolInteraction(interaction: Interaction, co
   else if (interaction.isButton() && action === "export") await exportDefaultReport(interaction, context, reportId!);
   else if (interaction.isButton() && action && ["html", "json", "pdf"].includes(action)) await exportReport(interaction, context, reportId!, action as "html" | "json" | "pdf");
   else if (interaction.isButton() && action === "delete") await deleteReport(interaction, context, reportId!);
+  else if (interaction.isButton() && (action === "approve" || action === "reject")) await evaluateReport(interaction, context, reportId!, action === "approve" ? "approved" : "rejected");
   return true;
 }
 
@@ -83,6 +91,11 @@ export async function showPolicePatrolConfigPanel(interaction: ChatInputCommandI
     return;
   }
 
+  await Promise.all([
+    interaction.guild.members.fetch(),
+    interaction.guild.roles.fetch(),
+    interaction.guild.channels.fetch()
+  ]);
   const settings = await context.api.getPolicePatrolSettings(interaction.guild.id);
   await interaction.reply(configPanelPayload(settings));
 }
@@ -140,7 +153,7 @@ async function handlePolicePatrolConfigInteraction(interaction: Interaction, con
 export async function capturePolicePatrolMessage(message: Message, context: BotContext) {
   if (!isBotModuleEnabled("police-patrol-reports") || !message.guild || message.author.bot) return false;
   const report = await context.api.getPolicePatrolReportByChannel(message.channel.id).catch(() => null);
-  if (!report || report.authorId !== message.author.id) return false;
+  if (!report || report.officerId !== message.author.id) return false;
   const attachments = await Promise.all([...message.attachments.values()].map(async (item) => {
     try { const response = await fetch(item.url); if (!response.ok) throw new Error(`HTTP ${response.status}`); const stored = await context.api.storePolicePatrolAttachment(report.id, item.id, item.name, item.contentType ?? "application/octet-stream", Buffer.from(await response.arrayBuffer())); return { id: item.id, name: item.name, url: stored.url, contentType: item.contentType, size: item.size }; }
     catch (error) { console.warn(`[police-patrol] anexo ${item.id} não pôde ser persistido:`, error instanceof Error ? error.message : error); return { id: item.id, name: item.name, url: item.url, contentType: item.contentType, size: item.size }; }
@@ -192,7 +205,7 @@ async function finishReport(interaction: ButtonInteraction | ModalSubmitInteract
     if (settings.archiveCategoryId) { await channel.setParent(settings.archiveCategoryId, { lockPermissions: false }).catch(() => null); }
   }
   await updatePanel(interaction, finishedPanel(data.report));
-  await sendLog(interaction, context, settings, data.report);
+  await sendLog(interaction, context, settings, data.report, data.messages);
   await interaction.deleteReply().catch(() => null);
 }
 
@@ -216,7 +229,44 @@ async function exportDefaultReport(interaction: ButtonInteraction, context: BotC
 
 async function deleteReport(interaction: ButtonInteraction, context: BotContext, reportId: string) { const settings = await context.api.getPolicePatrolSettings(interaction.guildId!); const member = interaction.member as GuildMember; if (!hasRoleOrAdmin(member, settings.deleteRoleIds)) { await interaction.reply({ content: "Somente administradores autorizados podem excluir.", ephemeral: true }); return; } await context.api.deletePolicePatrolReport(reportId, interaction.user.id); await interaction.reply({ content: "Relatório excluído permanentemente.", ephemeral: true }); }
 
-async function sendLog(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext, settings: PolicePatrolSettings, report: PolicePatrolReport) { if (!settings.logChannelId || !interaction.guild) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (!channel?.isTextBased() || channel.isDMBased()) return; const categoryName = settings.archiveCategoryId ? await interaction.guild.channels.fetch(settings.archiveCategoryId).catch(() => null) : null; const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver Relatório").setEmoji("📄").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}:export:${report.id}`).setLabel("Exportar").setEmoji("🗂️").setStyle(ButtonStyle.Secondary)); const details = [`# Relatório encerrado`, `**Policial:** <@${report.officerId}>`, `**Autor:** <@${report.authorId}>`, `**Tempo:** ${duration(report.durationMinutes)}`, `**Finalizado por:** <@${interaction.user.id}>`, `**Motivo:** ${report.archiveReason || "Não informado"}`, ...(settings.archiveCategoryId ? [`**Categoria de arquivo:** ${categoryName && "name" in categoryName ? categoryName.name : settings.archiveCategoryId}`] : [])].join("\n"); await channel.send({ components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: details }, buttons] }], flags: MessageFlags.IsComponentsV2 }); }
+async function evaluateReport(interaction: ButtonInteraction, context: BotContext, reportId: string, result: "approved" | "rejected") {
+  const settings = await context.api.getPolicePatrolSettings(interaction.guildId!);
+  if (!hasRoleOrAdmin(interaction.member as GuildMember, settings.supervisorRoleIds)) {
+    await interaction.reply({ content: "Voce nao possui cargo autorizado para avaliar relatorios.", ephemeral: true });
+    return;
+  }
+  await interaction.deferUpdate();
+  const report = await context.api.evaluatePolicePatrolReport(reportId, interaction.user.id, result);
+  await interaction.message.edit(evaluationLogPayload(report));
+}
+
+async function sendLog(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext, settings: PolicePatrolSettings, report: PolicePatrolReport, messages: PolicePatrolMessage[]) {
+  if (!settings.logChannelId || !interaction.guild) return;
+  const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) return;
+  await channel.send(pendingLogPayload(report, messages));
+}
+
+function pendingLogPayload(report: PolicePatrolReport, messages: PolicePatrolMessage[]) {
+  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve:${report.id}`).setLabel("Aprovar relatorio").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject:${report.id}`).setLabel("Reprovar relatorio").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver completo").setStyle(ButtonStyle.Secondary)
+  );
+  const details = `${reportText(report, messages)}\n\n**Solicitado por:** <@${report.authorId}>\n**Canal de origem:** ${report.channelId ? `<#${report.channelId}>` : "-"}\n**Status:** Pendente de avaliacao`;
+  return { components: [{ type: 17, accent_color: 0xf59e0b, components: [{ type: 10, content: details.slice(0, 3900) }, actions] }], flags: MessageFlags.IsComponentsV2 as const };
+}
+
+function evaluationLogPayload(report: PolicePatrolReport) {
+  const approved = report.evaluationStatus === "approved";
+  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve:${report.id}`).setLabel("Aprovar relatorio").setStyle(ButtonStyle.Success).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject:${report.id}`).setLabel("Reprovar relatorio").setStyle(ButtonStyle.Danger).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver completo").setStyle(ButtonStyle.Secondary)
+  );
+  const details = `# Relatorio ${approved ? "aprovado" : "reprovado"}\n**Responsavel:** <@${report.officerId}>\n**Solicitado por:** <@${report.authorId}>\n**Status:** ${approved ? "Aprovado" : "Reprovado"}\n**Avaliacao:** ${report.evaluationMessage}\n**Avaliado por:** <@${report.evaluatedBy}>\n**Data da avaliacao:** <t:${Math.floor(Date.parse(report.evaluatedAt ?? new Date().toISOString()) / 1000)}:F>`;
+  return { components: [{ type: 17, accent_color: approved ? 0x22c55e : 0xef4444, components: [{ type: 10, content: details }, actions] }], flags: MessageFlags.IsComponentsV2 as const };
+}
 
 async function updatePanel(interaction: any, payload: any) { if (!interaction.message) return; await interaction.message.edit(payload).catch(() => null); }
 async function cleanupDueChannels(client: Client, context: BotContext) { const reports = await context.api.getPolicePatrolChannelsDue().catch(() => []); for (const report of reports) { if (!report.channelId) continue; const guild = await client.guilds.fetch(report.guildId).catch(() => null); const channel = await guild?.channels.fetch(report.channelId).catch(() => null); await channel?.delete(`Relatório ${report.status} arquivado`).catch(() => null); await context.api.clearPolicePatrolChannel(report.id).catch(() => null); } }
@@ -355,9 +405,12 @@ function initialPanel(report: PolicePatrolReport, visuals: PanelVisualConfig[] =
   return renderComponentsV2Panel({
     accentColor: 0x2563eb,
     actions: [buttons],
-    description: "Utilize este canal para registrar todo o relatório do patrulhamento realizado.",
+    description: "Responda ao roteiro abaixo neste canal. Voce pode dividir as respostas em varias mensagens.",
     extraImages: visuals.slice(1),
-    fields: [`**Policial avaliado:** <@${report.officerId}>\n**Responsável:** <@${report.authorId}>\n\nQuando estiver pronto, clique em **Iniciar Relatório**.`],
+    fields: [
+      `**Responsável pelo preenchimento:** <@${report.officerId}>\n**Solicitado por:** <@${report.authorId}>\n\nQuando estiver pronto, clique em **Iniciar Relatório**.`,
+      DEFAULT_REPORT_QUESTIONS.map((question, index) => `**${index + 1}. ${question}:**`).join("\n")
+    ],
     image: visuals[0] ?? null,
     moduleId: "police-patrol-reports",
     title: "Relatório de Patrulhamento"

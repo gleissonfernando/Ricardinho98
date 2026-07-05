@@ -1373,6 +1373,7 @@ export type MongoPolicePatrolReport = {
   patrolType: string | null; initialNotes: string | null; patrolStart: string | null; patrolEnd: string | null; durationMinutes: number | null;
   channelId: string | null; panelMessageId: string | null; lastAuthorMessageId: string | null;
   messageCount: number; attachmentCount: number; status: "draft" | "active" | "finished" | "cancelled";
+  evaluationStatus?: "pending" | "approved" | "rejected"; evaluatedBy?: string | null; evaluatedAt?: Date | null; evaluationMessage?: string | null; logMessageId?: string | null;
   createdAt: Date; startedAt: Date | null; finishedAt: Date | null; cancelledAt: Date | null; archivedAt: Date | null; archivedBy: string | null; archiveCategoryId: string | null; archiveReason: string | null; deleteAt: Date | null; updatedAt: Date;
 };
 

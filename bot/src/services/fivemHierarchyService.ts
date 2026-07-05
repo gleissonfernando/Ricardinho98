@@ -20,6 +20,8 @@ export const hierarchyCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("hierarquia")
     .setDescription("Gerencia os paineis automaticos de hierarquia.")
+    .addSubcommand((command) => command.setName("config").setDescription("Abre a configuracao das hierarquias."))
+    .addSubcommand((command) => command.setName("sync").setDescription("Sincroniza agora todos os paineis de hierarquia."))
     .addSubcommand((command) => command.setName("configurar").setDescription("Mostra onde configurar unidades, cargos e o painel."))
     .addSubcommand((command) => command.setName("postar").setDescription("Posta ou edita uma unidade de hierarquia.").addStringOption((option) => option.setName("unidade").setDescription("DU, CBP, TRAFFIC, MARY, FAST, DAF ou SWAT").setRequired(true)))
     .addSubcommand((command) => command.setName("atualizar").setDescription("Atualiza uma unidade de hierarquia.").addStringOption((option) => option.setName("unidade").setDescription("DU, CBP, TRAFFIC, MARY, FAST, DAF ou SWAT").setRequired(true)))
@@ -34,7 +36,7 @@ export const hierarchyCommand: BotCommand = {
       return;
     }
     const subcommand = interaction.options.getSubcommand();
-    if (subcommand === "configurar" || subcommand === "resetar") {
+    if (subcommand === "config" || subcommand === "configurar" || subcommand === "resetar") {
       await interaction.reply({ content: "Configure as hierarquias, cargos/patentes, ordem, imagens, texto, rodape e canal na aba **Hierarquia** da Dashboard.", ephemeral: true });
       return;
     }
@@ -49,8 +51,9 @@ export const hierarchyCommand: BotCommand = {
       await interaction.editReply(createHierarchyPayload(interaction.guild, panel, panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition, imageUrl: panel.imageUrl } : null));
       return;
     }
-    await refreshHierarchyPanelsForGuild(interaction.guild, context, subcommand === "atualizar_todas" ? null : unit);
-    await interaction.editReply(subcommand === "atualizar_todas" ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
+    const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
+    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit);
+    await interaction.editReply(syncAll ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
   }
 };
 
@@ -89,7 +92,11 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
   const lookup = panelId?.trim().toLowerCase() ?? null;
   const scoped = dedupeHierarchyPanels(panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup)));
   if (!scoped.length) return;
-  await guild.members.fetch().catch(() => null);
+  await Promise.all([
+    guild.members.fetch(),
+    guild.roles.fetch(),
+    guild.channels.fetch()
+  ]);
   for (const panel of scoped) {
     await publishHierarchyPanelOnce(guild, context, panel);
   }
@@ -196,16 +203,14 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
 }
 
 function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
-  const listedMemberIds = new Set<string>();
   const blocks = panel.hierarchies
     .filter((item) => item.active)
     .sort((a, b) => a.order - b.order)
     .map((item) => {
       const candidates = item.roleId ? Array.from(guild.members.cache.values())
-        .filter((member) => member.roles.cache.has(item.roleId) && !listedMemberIds.has(member.id))
+        .filter((member) => member.roles.cache.has(item.roleId))
         .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR")) : [];
       const displayedCandidates = candidates.slice(0, item.limit ?? 50);
-      displayedCandidates.forEach((member) => listedMemberIds.add(member.id));
       const members = displayedCandidates.map((member) => formatHierarchyMember(member, panel.displayMode));
       if (!members.length && item.showWhenEmpty === false) return null;
       const heading = [item.emoji, `**${item.name}**`].filter(Boolean).join(" ");

@@ -200,6 +200,7 @@ export async function savePanelImageUpload(input: {
   panelId: string;
 }) {
   const current = await getPanelImageSettings(input.guildId, input.botId, input.panelId);
+  const own = await getOwnPanelImageSettings(input.guildId, input.botId, input.panelId);
   const stored = await savePersistentImage({
     actorId: input.actorId,
     botId: input.botId,
@@ -209,7 +210,7 @@ export async function savePanelImageUpload(input: {
     metadata: { panelId: input.panelId },
     mimeType: input.mimeType,
     moduleId: input.panelId,
-    previousUrl: current.imageUrl || null
+    previousUrl: own.imageUrl || null
   });
 
   const saved = await savePanelImageSettings(input.guildId, input.botId, input.panelId, {
@@ -221,14 +222,14 @@ export async function savePanelImageUpload(input: {
     useGlobalDefault: false
   }, input.actorId);
 
-  if (current.imageUrl && current.imageUrl !== stored.publicUrl) {
+  if (own.imageUrl && own.imageUrl !== stored.publicUrl) {
     void removePersistentImageByUrl({
       actorId: input.actorId,
       botId: input.botId,
       guildId: input.guildId,
       imageType: "panel",
       moduleId: input.panelId,
-      url: current.imageUrl
+      url: own.imageUrl
     }).catch(() => null);
   }
 
@@ -245,7 +246,7 @@ export async function removePanelImageSettings(input: {
   guildId: string;
   panelId: string;
 }) {
-  const current = await getPanelImageSettings(input.guildId, input.botId, input.panelId);
+  const current = await getOwnPanelImageSettings(input.guildId, input.botId, input.panelId);
   if (current.imageUrl) {
     await removePersistentImageByUrl({
       actorId: input.actorId,
@@ -262,6 +263,12 @@ export async function removePanelImageSettings(input: {
     imageUrl: "",
     useGlobalDefault: false
   }, input.actorId);
+}
+
+async function getOwnPanelImageSettings(guildId: string, botId: string, panelId: string) {
+  const { panelImageSettings } = await getMongoCollections();
+  const settings = await panelImageSettings.findOne({ botId, guildId, panelId });
+  return settings ? toDtoWithMigration(settings) : defaultPanelImageSettings(guildId, botId, panelId);
 }
 
 function normalizeSettings(settings: PanelImageSettingsDto): PanelImageSettingsDto {

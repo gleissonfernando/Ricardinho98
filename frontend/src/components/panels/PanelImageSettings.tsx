@@ -600,12 +600,25 @@ function previewImageStyle(size: PanelImageSize, customWidth: number | null, cus
 }
 
 function readErrorMessage(error: unknown, fallback: string) {
-  if (typeof error !== "object" || error === null || !("response" in error)) {
+  if (typeof error !== "object" || error === null) {
     return fallback;
   }
 
-  const response = (error as { response?: { data?: { message?: unknown } } }).response;
-  return typeof response?.data?.message === "string"
-    ? response.data.message
+  const requestError = error as {
+    code?: string;
+    message?: string;
+    response?: { data?: { message?: unknown }; status?: number };
+  };
+  if (typeof requestError.response?.data?.message === "string") {
+    return requestError.response.data.message;
+  }
+  if (requestError.code === "ECONNABORTED") {
+    return "O envio demorou além do limite. Tente novamente com uma imagem menor.";
+  }
+  if (!requestError.response && requestError.message) {
+    return `Falha de conexão durante o envio: ${requestError.message}`;
+  }
+  return requestError.response?.status
+    ? `${fallback} Código HTTP ${requestError.response.status}.`
     : fallback;
 }

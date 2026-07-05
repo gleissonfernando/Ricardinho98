@@ -164,19 +164,18 @@ async function assertCanManage(user: AuthSessionUser, guildId: string, botId: st
 }
 
 function moduleIdForPanel(panelId: string) {
-  if (panelId === "dm-system") return "dm-system";
-  if (panelId === "summons-system") return "summons-system";
-  if (panelId === "police-flight") return "police-flight";
-  if (panelId === "police-rh") return "police-rh";
-  if (panelId === "fivem-absence") return "fivem-absences";
-  if (panelId === "manual-registration") return "manual-registration";
-  if (panelId === "fivem-orders") return "fivem-orders";
-  if (panelId === "fivem-hierarchy" || /^fivem-hierarchy-banner-[23]$/i.test(panelId)) return "fivem-hierarchy";
-  if (panelId === "police-actions" || panelId === "fivem-actions-police" || /^police-actions-banner-[23]$/i.test(panelId)) return "police-actions";
-  if (panelId === "police-patrol-reports" || /^police-patrol-reports-banner-[23]$/i.test(panelId)) return "police-patrol-reports";
-  if (panelId === "police-reports" || /^police-reports-banner-[23]$/i.test(panelId)) return "police-reports";
-  if (panelId.startsWith("fivem-actions-")) return "fivem-actions";
-  return MODULE_ID;
+  const baseId = panelId.replace(/-banner-[23]$/i, "");
+  const aliases: Record<string, string> = {
+    "entry-leave": "welcome",
+    "fivem-actions-fac": "fivem-actions",
+    "fivem-actions-police": "police-actions",
+    "fivem-absence": "fivem-absences",
+    "fivem-general": "fivem",
+    "global-default": MODULE_ID,
+    "lives": "live",
+    "self-bot-protection": "safe-bot"
+  };
+  return aliases[baseId] ?? baseId;
 }
 
 function createRouteError(message: string, statusCode: number) {

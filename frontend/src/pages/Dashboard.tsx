@@ -1393,6 +1393,9 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
         {activeView === "summons-system" ? (
           <CommunicationPanel type="summons" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)} />
         ) : null}
+        {activeView === "police-rh" ? (
+          <PoliceRhPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "police-rh", canManageDashboard)} />
+        ) : null}
         {activeView === "settings" ? (
           <SettingsView
             botId={activeBotId}
@@ -8796,6 +8799,34 @@ function readResponseMessage(error: unknown) {
 
   const response = (error as { response?: { data?: { message?: unknown } } }).response;
   return typeof response?.data?.message === "string" ? response.data.message : null;
+}
+
+function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canManage: boolean; guild: DashboardGuild | null }) {
+  if (!botId || !guild) {
+    return <Card><CardContent className="py-10 text-center text-zinc-500">Selecione um bot e um servidor.</CardContent></Card>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>RH Policial</CardTitle>
+          <CardDescription>Sistema exclusivo da Policia, separado das ausencias da FAC.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
+            <p className="font-semibold text-white">Registrar Ausencia</p>
+            <p className="mt-2 text-sm text-zinc-400">Solicitacoes, analise, cargo temporario e retorno automatico.</p>
+          </div>
+          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
+            <p className="font-semibold text-white">Solicitar Adorno</p>
+            <p className="mt-2 text-sm text-zinc-400">Envio de imagem, avaliacao da equipe e registro nas logs policiais.</p>
+          </div>
+        </CardContent>
+      </Card>
+      <PanelImageSettings botId={botId} canManage={canManage} guildId={guild.id} panelId="police-rh" panelLabel="RH Policial" />
+    </div>
+  );
 }
 
 function visualPanelIdForView(view: ViewId) {
