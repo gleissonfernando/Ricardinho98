@@ -2926,10 +2926,8 @@ type PoliceFlightConfig = {
   pilotText: string;
   shooterText: string;
   enterButtonText: string;
-  leaveButtonText: string;
   closeButtonText: string;
   enterButtonEmoji: string;
-  leaveButtonEmoji: string;
   closeButtonEmoji: string;
   embedColor: string;
   allowReplaceOccupiedRole: boolean;
@@ -2951,14 +2949,12 @@ const defaultPoliceFlightConfig: PoliceFlightConfig = {
   closeRoleIds: [],
   adminRoleIds: [],
   titleText: "🚁 PAINEL DE ESCALACAO DE VOO — DAF",
-  descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Sair da Escalacao para liberar apenas a sua vaga.\n\nO encerramento oficial deve ser feito por um responsavel autorizado.",
+  descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Encerrar Escalacao para finalizar apenas a sua propria escala.",
   pilotText: "Responsavel pelo voo",
   shooterText: "Responsavel pela cobertura",
   enterButtonText: "Entrar na Escalacao",
-  leaveButtonText: "Sair da Escalacao",
   closeButtonText: "Encerrar Escalacao",
   enterButtonEmoji: "✈️",
-  leaveButtonEmoji: "🚪",
   closeButtonEmoji: "🔒",
   embedColor: "#3b82f6",
   allowReplaceOccupiedRole: false,
@@ -3051,17 +3047,15 @@ function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null;
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <TicketField disabled={!canManage || loading} label="Texto botao entrar" onChange={(enterButtonText) => patch({ enterButtonText })} value={config.enterButtonText} />
-            <TicketField disabled={!canManage || loading} label="Texto botao sair" onChange={(leaveButtonText) => patch({ leaveButtonText })} value={config.leaveButtonText} />
             <TicketField disabled={!canManage || loading} label="Texto botao encerrar" onChange={(closeButtonText) => patch({ closeButtonText })} value={config.closeButtonText} />
             <TicketField disabled={!canManage || loading} label="Emoji entrar" onChange={(enterButtonEmoji) => patch({ enterButtonEmoji })} value={config.enterButtonEmoji} />
-            <TicketField disabled={!canManage || loading} label="Emoji sair" onChange={(leaveButtonEmoji) => patch({ leaveButtonEmoji })} value={config.leaveButtonEmoji} />
             <TicketField disabled={!canManage || loading} label="Emoji encerrar" onChange={(closeButtonEmoji) => patch({ closeButtonEmoji })} value={config.closeButtonEmoji} />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <MultiRoleSelect disabled={!canManage || loading} label="Cargos que podem usar" onChange={(allowedRoleIds) => patch({ allowedRoleIds })} roles={roles} values={config.allowedRoleIds} />
             <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Piloto" onChange={(pilotRoleIds) => patch({ pilotRoleIds })} roles={roles} values={config.pilotRoleIds} />
             <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Atirador" onChange={(shooterRoleIds) => patch({ shooterRoleIds })} roles={roles} values={config.shooterRoleIds} />
-            <MultiRoleSelect disabled={!canManage || loading} label="Cargos para fechar" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
+            <MultiRoleSelect disabled={!canManage || loading} label="Cargos administrativos" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
             <MultiRoleSelect disabled={!canManage || loading} label="Administradores" onChange={(adminRoleIds) => patch({ adminRoleIds })} roles={roles} values={config.adminRoleIds} />
           </div>
           <div className="grid gap-3 md:grid-cols-3">

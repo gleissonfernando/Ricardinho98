@@ -56,9 +56,7 @@ type FlightConfig = {
   enterPilotButtonText: string;
   enterShooterButtonText: string;
   enterButtonText: string;
-  leaveButtonText: string;
   enterButtonEmoji: string;
-  leaveButtonEmoji: string;
   closeButtonEmoji: string;
   closeButtonText: string;
   embedColor: string;
@@ -153,12 +151,8 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
     await joinRole(interaction, context, config, role);
     return true;
   }
-  if (interaction.isButton() && action === "leave") {
-    await leaveScale(interaction, context, config);
-    return true;
-  }
   if (interaction.isButton() && action === "close") {
-    await closeScale(interaction, context, config);
+    await closeOwnScale(interaction, context, config);
     return true;
   }
 
@@ -353,7 +347,7 @@ async function publishDafPanelUnlocked(
     ? await fetchDafPanelMessage(client, config.panelMessageChannelId, config.panelMessageId)
     : null;
   const sendOrEdit = async (imageUrl: string | null) => {
-    const payload = await panelPayload(guild, config, imageUrl ? { position: image.position, url: imageUrl } : null);
+    const payload = await panelPayload(config, imageUrl ? { position: image.position, url: imageUrl } : null);
     return message ? message.edit(payload) : channel.send(payload);
   };
   try {
@@ -429,7 +423,7 @@ async function joinRole(interaction: StringSelectMenuInteraction, context: BotCo
     return;
   }
   if (alreadyPilot || alreadyShooter) {
-    await editDeferred(interaction, "Voce ja ocupa uma categoria nesta escalacao. Saia da escalacao antes de entrar em outra categoria.");
+    await editDeferred(interaction, "Voce ja ocupa uma categoria nesta escalacao. Encerre sua escalacao antes de entrar em outra categoria.");
     return;
   }
 
@@ -453,10 +447,10 @@ async function joinRole(interaction: StringSelectMenuInteraction, context: BotCo
   });
   const savedConfig = normalizeDafConfig(saved.config);
   await refreshPanel(interaction.guild!, context, savedConfig);
-  await editDeferred(interaction, `Voce entrou na escala como ${role === "pilot" ? "Piloto" : "Atirador"}.`);
+  await editDeferred(interaction, `✅ <@${interaction.user.id}> entrou na escalacao como ${role === "pilot" ? "Piloto" : "Atirador"}.`);
 }
 
-async function leaveScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
+async function closeOwnScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
   const member = await ensureGuildMember(interaction);
   if (!member) {
     await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
@@ -474,53 +468,24 @@ async function leaveScale(interaction: ButtonInteraction, context: BotContext, c
   const wasPilot = config.pilotIds.includes(interaction.user.id);
   const wasShooter = config.shooterIds.includes(interaction.user.id);
   if (!wasPilot && !wasShooter) {
-    await editDeferred(interaction, "Voce nao esta em nenhuma categoria desta escalacao.");
+    await editDeferred(interaction, "Voce nao possui uma escalacao ativa para encerrar.");
     return;
   }
 
+  const closedAt = new Date().toISOString();
+  const finalPilotIds = config.pilotIds.filter((id) => id !== interaction.user.id);
+  const finalShooterIds = config.shooterIds.filter((id) => id !== interaction.user.id);
   const saved = await context.api.updatePoliceFlightState(interaction.guildId!, {
-    pilotIds: config.pilotIds.filter((id) => id !== interaction.user.id),
-    shooterIds: config.shooterIds.filter((id) => id !== interaction.user.id)
-  });
-  await sendParticipantLeaveLog(interaction.guild!, config, interaction.user.id, wasPilot ? "pilot" : "shooter");
-  await refreshPanel(interaction.guild!, context, normalizeDafConfig(saved.config));
-  await editDeferred(interaction, `Voce saiu da escala de ${wasPilot ? "Piloto" : "Atirador"}.`);
-}
-
-async function closeScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
-  const member = await ensureGuildMember(interaction);
-  if (!member) {
-    await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
-    return;
-  }
-  if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)
-    && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
-    && !canCloseScale(member, config)) {
-    await editDeferred(interaction, "Voce nao possui permissao para encerrar a escalacao da DAF.");
-    return;
-  }
-  if (config.status === "closed") {
-    await editDeferred(interaction, "Esta escalacao ja foi encerrada.");
-    return;
-  }
-
-  const finalConfig = {
-    ...config,
-    status: "closed" as const,
+    status: "open",
     closedBy: interaction.user.id,
-    closedAt: new Date().toISOString()
-  };
-  const savedClosed = await context.api.updatePoliceFlightState(interaction.guildId!, {
-    status: "closed",
-    closedBy: finalConfig.closedBy,
-    closedAt: finalConfig.closedAt,
-    pilotIds: finalConfig.pilotIds,
-    shooterIds: finalConfig.shooterIds
+    closedAt,
+    pilotIds: finalPilotIds,
+    shooterIds: finalShooterIds
   });
-  const closedConfig = normalizeDafConfig(savedClosed.config);
-  await sendScaleLog(interaction.guild!, config, closedConfig, false);
+  const closedConfig = normalizeDafConfig(saved.config);
+  await sendParticipantCloseLog(interaction.guild!, config, closedConfig, interaction.user.id, wasPilot ? "pilot" : "shooter", interaction.user.id, closedAt);
   await refreshPanel(interaction.guild!, context, closedConfig);
-  await editDeferred(interaction, "Escalacao encerrada, bloqueada e registrada.");
+  await editDeferred(interaction, `✅ <@${interaction.user.id}> encerrou sua escalação com sucesso.`);
 }
 
 async function refreshPanel(guild: Guild, context: BotContext, config: FlightConfig) {
@@ -533,20 +498,19 @@ async function refreshPanel(guild: Guild, context: BotContext, config: FlightCon
   if (!channel?.isTextBased()) return;
   const message = await channel.messages.fetch(config.panelMessageId).catch(() => null);
   const image = await loadDafPanelImage(guild.id, context, config.panelImage);
-  if (message) await message.edit(await panelPayload(guild, config, image.url ? { position: image.position, url: image.url } : null)).catch((error) => {
+  if (message) await message.edit(await panelPayload(config, image.url ? { position: image.position, url: image.url } : null)).catch((error) => {
     console.warn("[police-flight] falha ao editar painel:", error instanceof Error ? error.message : error);
   });
 }
 
-async function panelPayload(guild: Guild, config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
+async function panelPayload(config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
   const closed = config.status === "closed";
-  const memberNames = await loadMemberNames(guild, [...config.pilotIds, ...config.shooterIds]);
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:join`).setLabel(config.enterButtonText).setStyle(ButtonStyle.Primary).setDisabled(closed), config.enterButtonEmoji),
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:leave`).setLabel(config.leaveButtonText).setStyle(ButtonStyle.Secondary).setDisabled(closed), config.leaveButtonEmoji),
     applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger).setDisabled(closed), config.closeButtonEmoji)
   );
-  return renderComponentsV2Panel({
+  return {
+    ...renderComponentsV2Panel({
     accentColor: color(config.embedColor),
     actions: [buttons],
     description: config.descriptionText,
@@ -556,17 +520,19 @@ async function panelPayload(guild: Guild, config: FlightConfig, image: { positio
     `**Status:** ${closed ? "Encerrada" : "Aberta"}`,
     "",
     `**PILOTO**${config.pilotText ? `\n${config.pilotText}` : ""}`,
-    formatSlots(config.pilotIds, config.maxPilots, memberNames),
+    formatSlots(config.pilotIds, config.maxPilots),
     "",
     `**ATIRADOR**${config.shooterText ? `\n${config.shooterText}` : ""}`,
-    formatSlots(config.shooterIds, config.maxShooters, memberNames)
+    formatSlots(config.shooterIds, config.maxShooters)
       ].join("\n")
     ],
     footerText: config.panelFooter,
     image: image ? { imageEnabled: true, imagePosition: image.position, imageUrl: image.url } : null,
     moduleId: MODULE_ID,
     title: config.titleText
-  });
+    }),
+    allowedMentions: { parse: [] }
+  };
 }
 
 function configPanelPayload(config: FlightConfig) {
@@ -666,6 +632,7 @@ export function normalizeDafConfig(raw: Record<string, unknown>): FlightConfig {
     adminRoleIds: ids(raw.adminRoleIds),
     titleText: str(raw.panelTitle) ?? str(raw.titleText) ?? fallback.titleText,
     descriptionText: normalizeLegacyDefaultText(str(raw.panelDescription) ?? str(raw.descriptionText), [
+      "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Sair da Escalacao para liberar apenas a sua vaga.\n\nO encerramento oficial deve ser feito por um responsavel autorizado.",
       "Use os botoes abaixo para abrir uma nova escalacao de voo.\nApos aberto, os membros assumem as posicoes de Piloto e Atirador.\n\nAo finalizar, clique em Fechar Escalacao para encerrar e registrar."
     ], fallback.descriptionText),
     panelFooter: str(raw.panelFooter) ?? fallback.panelFooter,
@@ -675,9 +642,7 @@ export function normalizeDafConfig(raw: Record<string, unknown>): FlightConfig {
     enterPilotButtonText: str(raw.enterPilotButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Piloto",
     enterShooterButtonText: str(raw.enterShooterButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Atirador",
     enterButtonText: normalizeLegacyDefaultText(str(raw.enterButtonText), ["Abrir Escalacao de Voo"], fallback.enterButtonText),
-    leaveButtonText: str(raw.leaveButtonText) ?? fallback.leaveButtonText,
     enterButtonEmoji: str(raw.enterButtonEmoji) ?? fallback.enterButtonEmoji,
-    leaveButtonEmoji: str(raw.leaveButtonEmoji) ?? fallback.leaveButtonEmoji,
     closeButtonEmoji: str(raw.closeButtonEmoji) ?? fallback.closeButtonEmoji,
     closeButtonText: normalizeLegacyDefaultText(str(raw.closeButtonText), ["Fechar escalacao", "Fechar Escalacao"], fallback.closeButtonText),
     embedColor: str(raw.embedColor) ?? fallback.embedColor,
@@ -714,7 +679,7 @@ function defaultConfig(): FlightConfig {
     closeRoleIds: [],
     adminRoleIds: [],
     titleText: "North Police Department - DAF",
-    descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Sair da Escalacao para liberar apenas a sua vaga.\n\nO encerramento oficial deve ser feito por um responsavel autorizado.",
+    descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Encerrar Escalacao para finalizar apenas a sua propria escala.",
     panelFooter: "",
     panelImage: null,
     pilotText: "Responsavel pelo voo",
@@ -722,9 +687,7 @@ function defaultConfig(): FlightConfig {
     enterPilotButtonText: "Entrar como Piloto",
     enterShooterButtonText: "Entrar como Atirador",
     enterButtonText: "Entrar na Escalacao",
-    leaveButtonText: "Sair da Escalacao",
     enterButtonEmoji: "✈️",
-    leaveButtonEmoji: "🚪",
     closeButtonEmoji: "🔒",
     closeButtonText: "Encerrar Escalacao",
     embedColor: "#3b82f6",
@@ -756,28 +719,22 @@ async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: Fl
   }
   const openedAt = closedConfig.openedAt ? new Date(closedConfig.openedAt) : new Date();
   const closedAt = closedConfig.closedAt ? new Date(closedConfig.closedAt) : new Date();
-  const memberNames = await loadMemberNames(guild, [
-    ...closedConfig.pilotIds,
-    ...closedConfig.shooterIds,
-    closedConfig.openedBy,
-    closedConfig.closedBy
-  ]);
   const content = [
     "# North Police Department - DAF",
     "",
     `## HISTORICO - ESCALACAO #${closedConfig.scaleId}`,
     "",
     "**PILOTO**",
-    formatSlots(closedConfig.pilotIds, closedConfig.maxPilots, memberNames),
+    formatSlots(closedConfig.pilotIds, closedConfig.maxPilots),
     "",
     "**ATIRADOR**",
-    formatSlots(closedConfig.shooterIds, closedConfig.maxShooters, memberNames),
+    formatSlots(closedConfig.shooterIds, closedConfig.maxShooters),
     "",
     "**Aberto por**",
-    formatSlot(closedConfig.openedBy, memberNames),
+    formatSlot(closedConfig.openedBy),
     "",
     "**Responsavel pelo encerramento**",
-    formatSlot(closedConfig.closedBy, memberNames),
+    formatSlot(closedConfig.closedBy),
     "",
     "**Horario de inicio**",
     formatLongDate(openedAt),
@@ -796,42 +753,54 @@ async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: Fl
   });
 }
 
-async function sendParticipantLeaveLog(guild: Guild, config: FlightConfig, userId: string, role: FlightRole) {
+async function sendParticipantCloseLog(guild: Guild, config: FlightConfig, finalConfig: FlightConfig, userId: string, role: FlightRole, actorId: string, closedAtIso: string) {
   const logChannelId = config.logChannelId ?? config.logChannelIds[0] ?? null;
   if (!logChannelId) {
-    console.warn("[police-flight] canal de logs nao configurado para saida", { guildId: guild.id, userId });
+    console.warn("[police-flight] canal de logs nao configurado para encerramento individual", { guildId: guild.id, userId });
     return;
   }
   const channel = await guild.channels.fetch(logChannelId).catch(() => null);
   if (!channel?.isTextBased()) {
-    console.warn("[police-flight] canal de logs invalido para saida", { guildId: guild.id, logChannelId, userId });
+    console.warn("[police-flight] canal de logs invalido para encerramento individual", { guildId: guild.id, logChannelId, userId });
     return;
   }
-  const memberNames = await loadMemberNames(guild, [userId]);
   const roleLabel = role === "pilot" ? "Piloto" : "Atirador";
-  const now = new Date();
+  const closedAt = new Date(closedAtIso);
   const content = [
     "# North Police Department - DAF",
     "",
-    `## SAIDA DA ESCALACAO #${config.scaleId}`,
+    `## ENCERRAMENTO INDIVIDUAL - ESCALACAO #${config.scaleId}`,
     "",
-    "**Membro**",
-    formatSlot(userId, memberNames),
+    "**Usuario**",
+    formatSlot(userId),
+    "",
+    "**Status**",
+    "Escalação encerrada",
     "",
     "**Categoria**",
     roleLabel,
     "",
-    "**Horario**",
-    formatLongDate(now),
+    "**Horario de encerramento**",
+    formatLongDate(closedAt),
     "",
-    `NPD - Escalacao #${config.scaleId} - Saida de ${roleLabel} - ${formatFooterDate(now)}`
+    "**Quem executou a ação**",
+    formatSlot(actorId),
+    "",
+    "**Layout final gerado**",
+    "**PILOTO**",
+    formatSlots(finalConfig.pilotIds, finalConfig.maxPilots),
+    "",
+    "**ATIRADOR**",
+    formatSlots(finalConfig.shooterIds, finalConfig.maxShooters),
+    "",
+    `NPD - Escalacao #${config.scaleId} - Encerramento individual de ${roleLabel} - ${formatFooterDate(closedAt)}`
   ].join("\n");
   await channel.send({
     allowedMentions: { parse: [] },
     components: [{ type: 17, accent_color: color(config.embedColor), components: [{ type: 10, content }] }],
     flags: MessageFlags.IsComponentsV2
   }).catch((error) => {
-    console.warn("[police-flight] falha ao enviar log de saida:", error instanceof Error ? error.message : error);
+    console.warn("[police-flight] falha ao enviar log de encerramento individual:", error instanceof Error ? error.message : error);
   });
 }
 
@@ -853,11 +822,6 @@ async function ensureGuildMember(interaction: Interaction) {
 function allowedParticipantRoles(config: FlightConfig, role: FlightRole) {
   const roleSpecific = role === "pilot" ? config.pilotRoleIds : config.shooterRoleIds;
   return [...config.allowedRoleIds, ...config.dafRoleIds, ...roleSpecific, ...config.adminRoleIds];
-}
-
-function canCloseScale(member: { roles: { cache: Map<string, unknown> } }, config: FlightConfig) {
-  const roleIds = [...config.adminRoleIds, ...config.closeRoleIds].filter(Boolean);
-  return roleIds.length ? hasAnyRole(member, roleIds) : false;
 }
 
 function hasAnyRole(member: { roles: { cache: Map<string, unknown> } }, roleIds: string[]) {
@@ -956,29 +920,14 @@ async function safeReply(interaction: Interaction, payload: string | { content?:
   else await interaction.reply(replyPayload as never).catch(() => undefined);
 }
 
-async function loadMemberNames(guild: Guild, userIds: Array<string | null | undefined>) {
-  const uniqueIds = [...new Set(userIds.filter((id): id is string => typeof id === "string" && /^\d{5,32}$/.test(id)))];
-  const names = new Map<string, string>();
-  await Promise.all(uniqueIds.map(async (userId) => {
-    const cached = guild.members.cache.get(userId);
-    const member = cached ?? await guild.members.fetch(userId).catch(() => null);
-    const displayName = member?.displayName?.trim()
-      || member?.user.globalName?.trim()
-      || member?.user.username?.trim()
-      || userId;
-    names.set(userId, displayName);
-  }));
-  return names;
-}
-
-function formatSlot(userId: string | null | undefined, memberNames?: Map<string, string>) {
+function formatSlot(userId: string | null | undefined) {
   if (!userId) return "❌ Não preenchido";
-  return memberNames?.get(userId) ?? userId;
+  return `<@${userId}>`;
 }
 
-function formatSlots(userIds: string[], maxSlots: number, memberNames?: Map<string, string>) {
+function formatSlots(userIds: string[], maxSlots: number) {
   const slots = Array.from({ length: Math.max(1, maxSlots) }, (_, index) => userIds[index] ?? null);
-  return slots.map((userId, index) => slots.length > 1 ? `${index + 1}. ${formatSlot(userId, memberNames)}` : formatSlot(userId, memberNames)).join("\n");
+  return slots.map((userId, index) => slots.length > 1 ? `${index + 1}. ${formatSlot(userId)}` : formatSlot(userId)).join("\n");
 }
 
 function applyButtonEmoji(button: ButtonBuilder, emoji: string) {

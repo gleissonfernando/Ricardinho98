@@ -46,13 +46,14 @@ test("usa enterButtonText da dashboard como fallback dos botoes de entrada", () 
   assert.equal(config.enterShooterButtonText, "Entrar na escala");
 });
 
-test("migra textos padrao antigos para o novo fluxo de entrar sair e encerrar", () => {
+test("migra textos padrao antigos para o novo fluxo de entrar e encerrar individualmente", () => {
   const config = normalizeDafConfig({
     closeButtonText: "Fechar Escalacao",
     enterButtonText: "Abrir Escalacao de Voo"
   });
 
   assert.equal(config.enterButtonText, "Entrar na Escalacao");
-  assert.equal(config.leaveButtonText, "Sair da Escalacao");
   assert.equal(config.closeButtonText, "Encerrar Escalacao");
+  assert.match(config.descriptionText, /Encerrar Escalacao/);
+  assert.doesNotMatch(config.descriptionText, /Sair da Escalacao/);
 });
