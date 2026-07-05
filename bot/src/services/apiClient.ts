@@ -66,9 +66,9 @@ export type PolicePatrolReport = { id: string; botId: string; guildId: string; o
 export type PolicePatrolMessage = { id: string; discordMessageId: string; authorId: string; content: string; attachments: Array<{ id: string; name: string; url: string; contentType: string | null; size: number }>; embeds: unknown[]; stickers: Array<{ id: string; name: string; format: number }>; emojis: string[]; createdAt: string };
 export type OpenPointSettings = { id: string; botId: string; guildId: string; enabled: boolean; allowedRoleIds: string[]; fineChannelId: string | null; fineRoleId: string | null; justificationChannelId: string | null; logChannelId: string | null; dmBannerUrl: string | null; fineBannerUrl: string | null; fineMode: "once_at_3" | "every_after_3"; createdAt: string; updatedAt: string };
 export type OpenPointCounter = { id: string; botId: string; guildId: string; userId: string; totalNotifications: number; lastNotificationAt: string | null; fineGeneratedAt: string | null; history: Array<{ appliedBy: string; at: string; reason: string }>; resetHistory: Array<{ resetBy: string; at: string; previousTotal: number }>; updatedAt: string };
-export type PoliceCourseConfig = { id: string; botId: string; guildId: string; enabled: boolean; logChannelId: string | null; defaultCategoryId: string | null; defaultPanelChannelId: string | null; allowedManagerRoles: string[]; allowedFinishRoles: string[]; dmOnFinish: boolean; dmOnCancel: boolean; lockChannelOnFinish: boolean; lockChannelOnCancel: boolean; deletePanelOnCancel: boolean; removeDepartedMembers: boolean; panelHeader: string; panelText: string; accentColor: string; joinButtonStyle: "primary" | "secondary" | "success" | "danger"; leaveButtonStyle: "primary" | "secondary" | "success" | "danger"; createdAt: string; updatedAt: string };
+export type PoliceCourseConfig = { id: string; botId: string; guildId: string; enabled: boolean; logChannelId: string | null; defaultCategoryId: string | null; defaultPanelChannelId: string | null; generalManagerUserIds: string[]; allowedManagerRoles: string[]; allowedFinishRoles: string[]; allowJoinAfterStart: boolean; allowLeaveAfterStart: boolean; dmOnFinish: boolean; dmOnCancel: boolean; lockChannelOnFinish: boolean; lockChannelOnCancel: boolean; deletePanelOnCancel: boolean; removeDepartedMembers: boolean; panelHeader: string; panelText: string; accentColor: string; joinButtonStyle: "primary" | "secondary" | "success" | "danger"; leaveButtonStyle: "primary" | "secondary" | "success" | "danger"; createdAt: string; updatedAt: string };
 export type PoliceCourseParticipant = { userId: string; guildNickname: string | null; username: string; passportId: string | null; joinedAt: string };
-export type PoliceCourse = { id: string; botId: string; guildId: string; courseNumber: string; title: string; instructorId: string | null; instructorName: string; date: string; time: string; location: string; description: string; notes: string; maxSlots: number | null; bannerUrl: string | null; imagePosition: "top" | "thumbnail" | "bottom" | "none"; authorizedRoleIds: string[]; authorizedUserIds: string[]; status: "draft" | "open" | "in_progress" | "finished" | "canceled"; panelChannelId: string | null; panelMessageId: string | null; participants: PoliceCourseParticipant[]; createdBy: string | null; createdAt: string; updatedAt: string };
+export type PoliceCourse = { id: string; botId: string; guildId: string; courseNumber: string; title: string; emoji: string | null; color: string | null; instructorId: string | null; instructorName: string; date: string; time: string; location: string; description: string; notes: string; maxSlots: number | null; bannerUrl: string | null; imagePosition: "top" | "thumbnail" | "bottom" | "none"; authorizedRoleIds: string[]; authorizedUserIds: string[]; participantRoleIds: string[]; viewerRoleIds: string[]; status: "draft" | "open" | "in_progress" | "finished" | "canceled"; panelChannelId: string | null; panelMessageId: string | null; participants: PoliceCourseParticipant[]; createdBy: string | null; createdAt: string; updatedAt: string };
 
 export type ManualRegistrationField = {
   enabled: boolean;
@@ -2449,7 +2449,12 @@ export class ApiClient {
     return data.course;
   }
 
-  async startPoliceCourse(guildId: string, courseId: string, input: { instructorId: string; instructorName: string; time: string; maxSlots: number; location: string; actorId: string }) {
+  async beginPoliceCourse(guildId: string, courseId: string, actorId: string) {
+    const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/begin`, { actorId });
+    return data.course;
+  }
+
+  async startPoliceCourse(guildId: string, courseId: string, input: { instructorId: string; instructorName: string; date?: string; time: string; maxSlots: number; location: string; actorId: string }) {
     const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/start`, input);
     return data.course;
   }

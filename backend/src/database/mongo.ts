@@ -780,8 +780,11 @@ export type MongoPoliceCourseConfig = {
   logChannelId: string | null;
   defaultCategoryId: string | null;
   defaultPanelChannelId: string | null;
+  generalManagerUserIds: string[];
   allowedManagerRoles: string[];
   allowedFinishRoles: string[];
+  allowJoinAfterStart: boolean;
+  allowLeaveAfterStart: boolean;
   dmOnFinish: boolean;
   dmOnCancel: boolean;
   lockChannelOnFinish: boolean;
@@ -804,6 +807,8 @@ export type MongoPoliceCourse = {
   guildId: string;
   courseNumber: string;
   title: string;
+  emoji: string | null;
+  color: string | null;
   instructorId: string | null;
   instructorName: string;
   date: string;
@@ -816,6 +821,8 @@ export type MongoPoliceCourse = {
   imagePosition: "top" | "thumbnail" | "bottom" | "none";
   authorizedRoleIds: string[];
   authorizedUserIds: string[];
+  participantRoleIds: string[];
+  viewerRoleIds: string[];
   status: "draft" | "open" | "in_progress" | "finished" | "canceled";
   panelChannelId: string | null;
   panelMessageId: string | null;

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuth, requireBot } from "../middleware/auth";
 import { canReadDevBotModule, canUseDevBotModule, getBotApiPermissions } from "../services/devBotService";
 import {
-  closePoliceCourse, createPoliceCourse, deletePoliceCourse, getPoliceCourse, getPoliceCourseConfig,
+  beginPoliceCourse, closePoliceCourse, createPoliceCourse, deletePoliceCourse, getPoliceCourse, getPoliceCourseConfig,
   getPoliceCourseDashboard, joinPoliceCourse, leavePoliceCourse, listPoliceCourses, POLICE_COURSES_MODULE_ID,
   requestPoliceCoursePublish, savePoliceCourseConfig, setPoliceCourseBanner, setPoliceCoursePanel, startPoliceCourse, updatePoliceCourse
 } from "../services/policeCourseService";
@@ -17,6 +17,8 @@ const style = z.enum(["primary", "secondary", "success", "danger"]);
 const courseSchema = z.object({
   courseNumber: z.string().trim().min(1).max(50),
   title: z.string().trim().min(1).max(100),
+  emoji: z.string().trim().max(40).nullable().optional(),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
   instructorId: snowflake.nullable().optional(),
   instructorName: z.string().trim().max(100).optional(),
   date: z.string().trim().max(50).optional(),
@@ -29,6 +31,8 @@ const courseSchema = z.object({
   imagePosition: z.enum(["top", "thumbnail", "bottom", "none"]).optional(),
   authorizedRoleIds: z.array(snowflake).max(100).optional(),
   authorizedUserIds: z.array(snowflake).max(100).optional(),
+  participantRoleIds: z.array(snowflake).max(100).optional(),
+  viewerRoleIds: z.array(snowflake).max(100).optional(),
   panelChannelId: snowflake.nullable().optional()
 });
 const configSchema = z.object({
@@ -36,8 +40,11 @@ const configSchema = z.object({
   logChannelId: snowflake.nullable().optional(),
   defaultCategoryId: snowflake.nullable().optional(),
   defaultPanelChannelId: snowflake.nullable().optional(),
+  generalManagerUserIds: z.array(snowflake).max(100).optional(),
   allowedManagerRoles: z.array(snowflake).max(100).optional(),
   allowedFinishRoles: z.array(snowflake).max(100).optional(),
+  allowJoinAfterStart: z.boolean().optional(),
+  allowLeaveAfterStart: z.boolean().optional(),
   dmOnFinish: z.boolean().optional(),
   dmOnCancel: z.boolean().optional(),
   lockChannelOnFinish: z.boolean().optional(),
@@ -153,12 +160,20 @@ policeCoursesRouter.post("/bot/:guildId/courses/:courseId/close", requireBot, as
     res.json({ course: await closePoliceCourse(scope.botId, scope.guildId, req.params.courseId!, input.status, input.actorId) });
   } catch (error) { next(error); }
 });
+policeCoursesRouter.post("/bot/:guildId/courses/:courseId/begin", requireBot, async (req, res, next) => {
+  try {
+    const scope = await botScope(req);
+    const input = z.object({ actorId: snowflake }).parse(req.body);
+    res.json({ course: await beginPoliceCourse(scope.botId, scope.guildId, req.params.courseId!, input.actorId) });
+  } catch (error) { next(error); }
+});
 policeCoursesRouter.post("/bot/:guildId/courses/:courseId/start", requireBot, async (req, res, next) => {
   try {
     const scope = await botScope(req);
     const input = z.object({
       instructorId: snowflake,
       instructorName: z.string().trim().min(1).max(100),
+      date: z.string().trim().max(50).optional(),
       time: z.string().trim().min(1).max(50),
       maxSlots: z.number().int().min(1).max(500),
       location: z.string().trim().min(1).max(100),
