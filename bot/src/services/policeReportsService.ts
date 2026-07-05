@@ -17,13 +17,13 @@ import {
 } from "discord.js";
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
-import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRenderer";
+import { renderComponentsV2Panel } from "./panelVisualRenderer";
 import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
 
 const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
 const PAGE_SIZE = 25;
-const IAB_WEBHOOK_NAME = "Equipe IAB";
+const IAB_WEBHOOK_NAME = "Human Resources - NPD";
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -517,7 +517,7 @@ async function createArchivePanel(
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     description: `:info1: Denuncia - ${selected.name}`,
     fields: [
-      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\nEquipe IAB`,
+      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\n${IAB_WEBHOOK_NAME}`,
       `**Data / Horario**\n<t:${createdAt}:F>\n\n**Evidencias**\n${evidence.length ? evidence.join("\n") : "Nenhuma evidencia encontrada no historico recente."}`,
       `**Historico recente**\n${history || "Sem mensagens textuais recentes."}`
     ],
@@ -534,9 +534,9 @@ async function createArchivePanel(
 
 function archiveHistoryAuthorLabel(message: Message, requesterId: string, anonymous: boolean) {
   if (message.author.id === requesterId) return anonymous ? "Denunciante Anonimo" : "Denunciante";
-  if (message.content.includes("**Equipe IAB**")) return "Equipe IAB";
+  if (message.content.includes(`**${IAB_WEBHOOK_NAME}**`)) return IAB_WEBHOOK_NAME;
   if (message.content.includes("**Denunciante Anonimo**")) return "Denunciante Anonimo";
-  return message.author.bot ? "Bot" : "Equipe IAB";
+  return message.author.bot ? "Bot" : IAB_WEBHOOK_NAME;
 }
 
 export async function handlePoliceReportsMessage(message: Message, context: BotContext) {
@@ -558,11 +558,10 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
   const deleted = await message.delete().then(() => true).catch(() => false);
   if (isStaff) {
     try {
-      const config = await loadConfig(message.guild.id, context);
       const webhook = await getOrCreateIabWebhook(message);
       await webhook.send({
         allowedMentions: { parse: [] },
-        avatarURL: resolvePanelImageUrl(config?.channelVisual?.imageUrl ?? config?.panelVisual?.imageUrl ?? config?.footerVisual?.imageUrl ?? null) ?? undefined,
+        avatarURL: message.client.user.displayAvatarURL({ size: 128 }),
         content: content || undefined,
         files,
         username: IAB_WEBHOOK_NAME

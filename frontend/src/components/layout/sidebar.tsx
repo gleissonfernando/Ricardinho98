@@ -3,6 +3,7 @@ import {
   Activity,
   Archive,
   AtSign,
+  Bell,
   Bot,
   Building2,
   CalendarClock,
@@ -96,6 +97,7 @@ export type ViewId =
   | "manual-registration"
   | "dm-system"
   | "summons-system"
+  | "open-point-notification"
   | "notifications"
   | "entry-leave"
   | "auto-roles"
@@ -177,6 +179,7 @@ const navItems: NavItem[] = [
   { id: "manual-registration", label: "Pedido de Set", icon: ListChecks, moduleId: "manual-registration" },
   { id: "dm-system", label: "Sistema de DM", icon: AtSign, moduleId: "dm-system" },
   { id: "summons-system", label: "Intimacoes", icon: ShieldAlert, moduleId: "summons-system" },
+  { id: "open-point-notification", label: "Ponto Aberto", icon: Bell, moduleId: "open-point-notification" },
   { id: "entry-leave", label: "Entrada/Saida", icon: UserPlus, moduleIds: ["welcome", "leave"] },
   { id: "auto-roles", label: "Cargos automaticos", icon: Users, moduleId: "roles" },
   { id: "media-library", label: "Emojis & Sons", icon: Archive, moduleId: "emoji-cloner" },
@@ -196,6 +199,7 @@ function navSectionForItem(item: NavItem): NavSectionId {
     || item.id === "rh-ausencias-adornos"
     || item.id === "dm-system"
     || item.id === "summons-system"
+    || item.id === "open-point-notification"
     || item.moduleId === "fivem-hierarchy"
     || item.moduleId === "police-actions"
     || item.moduleId === "police-patrol-reports"
@@ -204,6 +208,7 @@ function navSectionForItem(item: NavItem): NavSectionId {
     || item.moduleId === "police-rh"
     || item.moduleId === "dm-system"
     || item.moduleId === "summons-system"
+    || item.moduleId === "open-point-notification"
   ) {
     return "police";
   }

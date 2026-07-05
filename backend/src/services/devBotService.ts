@@ -54,6 +54,7 @@ export const DEV_MODULES = [
   { id: "manual-registration", label: "Pedido de Set" },
   { id: "dm-system", label: "Policia - Sistema de DM" },
   { id: "summons-system", label: "Policia - Sistema de Intimacao" },
+  { id: "open-point-notification", label: "Policia - Notificacao de Ponto Aberto" },
   { id: "moderation", label: "Sistema de Moderacao" },
   { id: "rules", label: "Sistema de Regras" },
   { id: "mission-tools", label: "Mission Tools" },

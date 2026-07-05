@@ -20,6 +20,7 @@ import { ticketCommand } from "./ticket";
 import { summonsCommand } from "./summons";
 import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./policePatrolReports";
 import { policeReportsCommand } from "../services/policeReportsService";
+import { notifyOpenPointCommand, notifyOpenPointConfigCommand, notifyOpenPointCounterCommand, notifyOpenPointResetCommand } from "../services/openPointNotificationService";
 import { removeCommand } from "../services/absenceRemovalService";
 import type { BotCommand } from "../types";
 
@@ -49,6 +50,10 @@ export function createCommandCollection() {
     policePatrolReportCommand,
     viewPolicePatrolReportCommand,
     policeReportsCommand,
+    notifyOpenPointCommand,
+    notifyOpenPointCounterCommand,
+    notifyOpenPointResetCommand,
+    notifyOpenPointConfigCommand,
     removeCommand,
     serverClonerCommand,
     serverGeneratorCommand

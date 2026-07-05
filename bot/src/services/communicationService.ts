@@ -11,6 +11,7 @@ const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
 const SUMMONS_TEAM_NAME = "Equipe IAB";
 const SUMMONS_WEBHOOK_NAME = "Intimações Institucionais";
+const ANONYMOUS_TEAM_NAME = "Human Resources - NPD";
 const DISCORD_ROLE_SELECT_LIMIT = 25;
 const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
 const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
@@ -116,7 +117,6 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
   if (!settings?.anonymityEnabled) return false;
 
   const competence = recordCompetence(record);
-  const teamName = teamNameForCompetence(competence);
   const member = await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member || !hasRole(member, roleIdsForCompetence(settings, competence))) return false;
 
@@ -138,10 +138,10 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
   const webhook = await getOrCreateSummonsWebhook(message);
   await webhook.send({
     allowedMentions: { parse: [] },
-    avatarURL: resolvePanelImageUrl(settings.teamAvatarUrl ?? settings.bannerUrl) ?? undefined,
+    avatarURL: botAvatarUrl(message),
     content: proxiedContent || undefined,
     files: attachments,
-    username: teamName
+    username: ANONYMOUS_TEAM_NAME
   });
 
   await sendSummonsProxyLog(message, settings, record, proxiedContent, attachments.length);
@@ -669,7 +669,7 @@ async function sendSummonsProxyLog(message: Message, settings: SummonsSettings, 
       components: [{
         type: 10,
         content: [
-          "# Mensagem anônima da Equipe IAB",
+          `# Mensagem anônima - ${ANONYMOUS_TEAM_NAME}`,
           `**Intimação:** ${record.id}`,
           `**Autor real:** <@${message.author.id}> (${message.author.id})`,
           `**Canal temporário:** <#${message.channel.id}>`,
@@ -840,6 +840,9 @@ function recordResponsibleId(record: SummonsRecord) {
 }
 function recordCompetence(record: SummonsRecord): SummonsCompetence {
   return parseCompetence(snapshotString(record, "finalCompetence") ?? "") ?? "iab";
+}
+function botAvatarUrl(message: Message) {
+  return message.client.user.displayAvatarURL({ size: 128 });
 }
 function summonsSettingsSnapshot(settings: SummonsSettings) {
   return {

@@ -1364,6 +1364,45 @@ export type MongoSummons = {
   updatedAt: Date;
 };
 
+export type MongoOpenPointSettings = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  enabled: boolean;
+  allowedRoleIds: string[];
+  fineChannelId: string | null;
+  fineRoleId: string | null;
+  justificationChannelId: string | null;
+  logChannelId: string | null;
+  dmBannerUrl: string | null;
+  fineBannerUrl: string | null;
+  fineMode: "once_at_3" | "every_after_3";
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
+};
+
+export type MongoOpenPointCounter = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  userId: string;
+  totalNotifications: number;
+  lastNotificationAt: Date | null;
+  fineGeneratedAt: Date | null;
+  history: Array<{
+    appliedBy: string;
+    at: Date;
+    reason: string;
+  }>;
+  resetHistory: Array<{
+    resetBy: string;
+    at: Date;
+    previousTotal: number;
+  }>;
+  updatedAt: Date;
+};
+
 export type MongoFivemActionParticipant = {
   userId: string;
   username: string;
@@ -2804,6 +2843,8 @@ export async function getMongoCollections() {
     dmLogs: db.collection<MongoDmLog>("dm_logs"),
     summonsSettings: db.collection<MongoSummonsSettings>("summons_settings"),
     summons: db.collection<MongoSummons>("summons"),
+    openPointSettings: db.collection<MongoOpenPointSettings>("open_point_settings"),
+    openPointCounters: db.collection<MongoOpenPointCounter>("open_point_counters"),
     policePatrolSettings: db.collection<MongoPolicePatrolSettings>("police_patrol_settings"),
     policePatrolReports: db.collection<MongoPolicePatrolReport>("police_patrol_reports"),
     policePatrolMessages: db.collection<MongoPolicePatrolMessage>("police_patrol_messages"),
@@ -3367,6 +3408,8 @@ async function ensureFivemModuleIndexes(db: Db) {
     db.collection<MongoSummonsSettings>("summons_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
     db.collection<MongoSummons>("summons").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
     db.collection<MongoSummons>("summons").createIndex({ botId: 1, channelId: 1, status: 1 }),
+    db.collection<MongoOpenPointSettings>("open_point_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
+    db.collection<MongoOpenPointCounter>("open_point_counters").createIndex({ botId: 1, guildId: 1, userId: 1 }, { unique: true }),
     db.collection<MongoPolicePatrolSettings>("police_patrol_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
     db.collection<MongoPolicePatrolReport>("police_patrol_reports").createIndex({ botId: 1, guildId: 1, officerId: 1, createdAt: -1 }),
     db.collection<MongoPolicePatrolReport>("police_patrol_reports").createIndex({ openKey: 1 }, { unique: true, partialFilterExpression: { openKey: { $type: "string" } } }),

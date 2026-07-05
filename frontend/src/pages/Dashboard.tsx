@@ -61,6 +61,7 @@ import { LogsSettingsPanel } from "../components/LogsSettingsPanel";
 import { MissionToolsPanel } from "../components/mission-tools/MissionToolsPanel";
 import { MediaLibraryPanel } from "../components/media/MediaLibraryPanel";
 import { SiteAccessPanel } from "../components/moderation/SiteAccessPanel";
+import { OpenPointNotificationPanel } from "../components/open-point/OpenPointNotificationPanel";
 import { PanelImageSettings } from "../components/panels/PanelImageSettings";
 import { ManualPaymentsPanel } from "../components/manual-payments/ManualPaymentsPanel";
 import { PriceTablesPanel } from "../components/price-tables/PriceTablesPanel";
@@ -612,6 +613,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-goals": "fivem-goals",
   "manual-registration": "manual-registration",
   "dm-system": "dm-system",
+  "open-point-notification": "open-point-notification",
   "summons-system": "summons-system",
   "voice-recorder": "voice-recorder",
   music: "music",
@@ -1419,6 +1421,9 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
         ) : null}
         {activeView === "summons-system" ? (
           <CommunicationPanel type="summons" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)} />
+        ) : null}
+        {activeView === "open-point-notification" ? (
+          <OpenPointNotificationPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "open-point-notification", canManageDashboard)} />
         ) : null}
         {activeView === "police-rh" || activeView === "rh-ausencias-adornos" ? (
           <PoliceRhPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "police-rh", canManageDashboard)} />

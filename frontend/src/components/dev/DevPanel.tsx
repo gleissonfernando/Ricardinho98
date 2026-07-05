@@ -168,6 +168,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "police-flight", label: "Policia - Escalacao DAF" },
   { id: "dm-system", label: "Policia - Sistema de DM" },
   { id: "summons-system", label: "Policia - Sistema de Intimacao" },
+  { id: "open-point-notification", label: "Policia - Notificacao de Ponto Aberto" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalização" }
 ];
