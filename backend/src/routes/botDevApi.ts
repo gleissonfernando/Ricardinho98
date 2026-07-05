@@ -32,6 +32,9 @@ const tagVerificationStatusSchema = z.object({
 const policeReportsPanelStateSchema = z.object({
   messageId: z.string().regex(/^\d{5,32}$/).nullable()
 });
+const policeRhPanelStateSchema = z.object({
+  messageId: z.string().regex(/^\d{5,32}$/).nullable()
+});
 const policeFlightStateSchema = z.object({
   panelMessageId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
   panelChannelId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
@@ -147,6 +150,29 @@ botDevApiRouter.post("/runtime/guilds/:guildId/police-reports/panel-state", asyn
       guildId,
       guildName: current.guildName,
       moduleId: "police-reports",
+      config: { ...currentConfig, panelMessageId: input.messageId }
+    });
+    return res.json({ module });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.post("/runtime/guilds/:guildId/police-rh/panel-state", async (req, res, next) => {
+  try {
+    const botId = await resolveRequestBotId(req);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const input = policeRhPanelStateSchema.parse(req.body ?? {});
+    const authorization = await authorizeBotRuntimeModule({ botId, guildId, moduleId: "police-rh" });
+    if (!authorization.allowed || !botId) return res.status(403).json({ message: authorization.reason });
+    const current = await getBotGuildConfig(botId, guildId);
+    const modules = current.modules as Record<string, Record<string, unknown>>;
+    const currentConfig = modules["police-rh"] ?? {};
+    const module = await updateBotGuildModuleConfig({
+      botId,
+      guildId,
+      guildName: current.guildName,
+      moduleId: "police-rh",
       config: { ...currentConfig, panelMessageId: input.messageId }
     });
     return res.json({ module });

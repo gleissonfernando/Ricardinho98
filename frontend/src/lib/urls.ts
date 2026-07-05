@@ -1,4 +1,5 @@
 const PRODUCTION_ORIGIN = "https://bots-orvitek.shardweb.app";
+const DASHBOARD_VIEW_PATHS = new Set(["rh-ausencias-adornos"]);
 
 function normalizeUrl(value?: string) {
   const trimmed = value?.trim();
@@ -51,6 +52,9 @@ export function isDashboardRoutePath(path: string) {
 export function dashboardSlugFromPath(path: string) {
   if (path.startsWith("/dashboard/")) {
     const slug = path.slice("/dashboard/".length).split("/")[0]?.trim();
+    if (slug && DASHBOARD_VIEW_PATHS.has(slug)) {
+      return null;
+    }
     return decodeSlug(slug);
   }
 

@@ -232,6 +232,10 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
             onBotUpdated={handleBotUpdated}
             onDashboardSectionChange={(section) => handleChangeView(section)}
             onOpenView={(view, bot) => {
+              if (view === "rh-ausencias-adornos") {
+                window.location.replace("/dashboard/rh-ausencias-adornos");
+                return;
+              }
               const url = new URL(dashboardUrl(bot?.slug));
               if (view !== "overview") {
                 url.searchParams.set("view", view);

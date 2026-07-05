@@ -2086,6 +2086,10 @@ export async function publishPoliceFlightPanel(botId: string, guildId: string) {
   await api.post(`/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-flight/publish`);
 }
 
+export async function publishPoliceRhPanel(botId: string, guildId: string) {
+  await api.post(`/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-rh/publish`);
+}
+
 export async function runTagVerificationNow(botId: string, guildId: string) {
   const { data } = await api.post<{ result: import("../types").TagVerificationRunResult }>(
     `/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/tag-verification/run`,

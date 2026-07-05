@@ -135,6 +135,7 @@ export type GiveawayPanelUpdateEvent = {
   guildId: string;
 };
 export type PoliceReportsPanelUpdateEvent = { action: "publish" | "update"; botId: string; guildId: string };
+export type PoliceRhPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
 export type PoliceFlightPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
 
 export type ImageAntiSpamSettingsEvent = {
@@ -240,6 +241,7 @@ export class BotSocketClient {
   private databaseMaintenanceDeleteChannelsHandler: ((payload: DatabaseMaintenanceDeleteChannelsEvent) => void) | null = null;
   private fivemHierarchyPanelUpdateHandler: ((payload: FivemHierarchyPanelUpdateEvent) => void) | null = null;
   private policeReportsPanelUpdateHandler: ((payload: PoliceReportsPanelUpdateEvent) => void) | null = null;
+  private policeRhPanelUpdateHandler: ((payload: PoliceRhPanelUpdateEvent) => void) | null = null;
   private policeFlightPanelUpdateHandler: ((payload: PoliceFlightPanelUpdateEvent) => void) | null = null;
   private fivemFacAbsenceUpdateHandler: ((payload: FivemFacAbsenceUpdateEvent) => void) | null = null;
   private missionToolsSettingsHandler: ((payload: MissionToolsSettingsEvent) => void) | null = null;
@@ -350,6 +352,7 @@ export class BotSocketClient {
       this.socket.on("fivem:hierarchy:panel_update", this.fivemHierarchyPanelUpdateHandler);
     }
     if (this.policeReportsPanelUpdateHandler) this.socket.on("police-reports:panel_update", this.policeReportsPanelUpdateHandler);
+    if (this.policeRhPanelUpdateHandler) this.socket.on("police-rh:panel_update", this.policeRhPanelUpdateHandler);
     if (this.policeFlightPanelUpdateHandler) this.socket.on("police-flight:panel_update", this.policeFlightPanelUpdateHandler);
 
     if (this.fivemFacAbsenceUpdateHandler) {
@@ -560,6 +563,12 @@ export class BotSocketClient {
     this.policeReportsPanelUpdateHandler = handler;
     this.socket?.off("police-reports:panel_update");
     this.socket?.on("police-reports:panel_update", handler);
+  }
+
+  onPoliceRhPanelUpdate(handler: (payload: PoliceRhPanelUpdateEvent) => void) {
+    this.policeRhPanelUpdateHandler = handler;
+    this.socket?.off("police-rh:panel_update");
+    this.socket?.on("police-rh:panel_update", handler);
   }
 
   onPoliceFlightPanelUpdate(handler: (payload: PoliceFlightPanelUpdateEvent) => void) {

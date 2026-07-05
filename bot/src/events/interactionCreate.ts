@@ -22,6 +22,7 @@ import { handlePolicePatrolInteraction } from "../services/policePatrolReportSer
 import { handleManualPaymentInteraction } from "../services/manualPaymentService";
 import { handlePriceTableInteraction } from "../services/priceTableService";
 import { handlePoliceReportsInteraction } from "../services/policeReportsService";
+import { handlePoliceRhInteraction } from "../services/policeRhService";
 import { handlePoliceFlightInteraction } from "../services/policeFlightService";
 import { handleCommunicationInteraction } from "../services/communicationService";
 
@@ -100,6 +101,7 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
   if (await handleFivemActionInteraction(interaction, context)) return;
   if (await handlePolicePatrolInteraction(interaction, context)) return;
   if (await handlePoliceReportsInteraction(interaction, context)) return;
+  if (await handlePoliceRhInteraction(interaction, context)) return;
   if (await handlePoliceFlightInteraction(interaction, context)) return;
   if (await handleCommunicationInteraction(interaction, context)) return;
 

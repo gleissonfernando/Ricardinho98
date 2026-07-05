@@ -182,7 +182,8 @@ const MODULE_ALIASES: Record<string, string[]> = {
   "fivem-drugs": ["fivem-drugs", "fivem-orders"],
   "fivem-washing": ["fivem-washing", "fivem-orders"],
   "police-patrol-reports": ["police-patrol-reports", "patrol-reports"],
-  "patrol-reports": ["patrol-reports", "police-patrol-reports"]
+  "patrol-reports": ["patrol-reports", "police-patrol-reports"],
+  "police-rh": ["police-rh", "fivem-absences", "fivem-fac"]
 };
 let runtimeEnabledModules: Set<string> | null = null;
 let runtimeBotId = env.DASHBOARD_BOT_ID.trim() || null;

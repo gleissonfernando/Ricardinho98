@@ -525,7 +525,7 @@ const botMenuItems: BotMenuItem[] = [
 ];
 
 const moduleDashboardViews: Partial<Record<string, ViewId>> = {
-  "police-rh": "police-rh"
+  "police-rh": "rh-ausencias-adornos"
 };
 
 type DevPanelProps = {

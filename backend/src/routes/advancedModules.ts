@@ -158,6 +158,63 @@ const policeFlightSaveSchema = z.object({
   config: policeFlightConfigSchema,
   guildName: z.string().min(1).max(100).optional()
 });
+const policeRhImagePositionSchema = z.enum(["top", "middle", "side", "footer", "none"]);
+const policeRhConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  panelChannelId: snowflakeSchema.nullable().default(null),
+  panelMessageId: snowflakeSchema.nullable().default(null),
+  panelTitle: z.string().trim().min(1).max(120).default("RH - Ausências e Adornos"),
+  panelDescription: z.string().trim().max(1200).default("Solicite ausência ou adorno pelo painel abaixo."),
+  panelImageUrl: z.string().trim().max(2048).default(""),
+  panelBannerUrl: z.string().trim().max(2048).default(""),
+  panelFooterText: z.string().trim().max(200).default("RH - Sistema interno"),
+  panelFooterImageUrl: z.string().trim().max(2048).default(""),
+  panelColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
+  panelImagePosition: policeRhImagePositionSchema.default("side"),
+  rhAllowedRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  rhResponsibleRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  rhLogChannelId: snowflakeSchema.nullable().default(null),
+  rhPanelChannelId: snowflakeSchema.nullable().default(null),
+  absenceEnabled: z.boolean().default(true),
+  absencePanelChannelId: snowflakeSchema.nullable().default(null),
+  absenceCategoryId: snowflakeSchema.nullable().default(null),
+  absenceLogChannelId: snowflakeSchema.nullable().default(null),
+  absenceRoleId: snowflakeSchema.nullable().default(null),
+  absenceApproverRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  absenceTitle: z.string().trim().min(1).max(120).default("Sistema de Ausência"),
+  absenceDescription: z.string().trim().max(1200).default("Informe a data de início, retorno e motivo da ausência."),
+  absenceImageUrl: z.string().trim().max(2048).default(""),
+  absenceBannerUrl: z.string().trim().max(2048).default(""),
+  absenceFooterText: z.string().trim().max(200).default("Solicitação de ausência"),
+  absenceFooterImageUrl: z.string().trim().max(2048).default(""),
+  absenceColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#f59e0b"),
+  absenceImagePosition: policeRhImagePositionSchema.default("side"),
+  absenceDmApprovedMessage: z.string().trim().max(1200).default("Sua solicitação de ausência foi aprovada."),
+  absenceDmRejectedMessage: z.string().trim().max(1200).default("Sua solicitação de ausência foi reprovada."),
+  absenceDmFinishedMessage: z.string().trim().max(1200).default("Sua ausência acabou. Você pode voltar ao RP/trabalho."),
+  absenceDmMessage: z.string().trim().max(1200).default("Sua solicitação de ausência foi atualizada pela equipe."),
+  adornoEnabled: z.boolean().default(true),
+  adornoPanelChannelId: snowflakeSchema.nullable().default(null),
+  adornoCategoryId: snowflakeSchema.nullable().default(null),
+  adornoLogChannelId: snowflakeSchema.nullable().default(null),
+  adornoResponsibleRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  adornoApproverRoleIds: z.array(snowflakeSchema).max(100).default([]),
+  adornoTitle: z.string().trim().min(1).max(120).default("Sistema de Adornos"),
+  adornoDescription: z.string().trim().max(1200).default("Solicite análise de adorno com tipo, descrição, motivo e imagem."),
+  adornoImageUrl: z.string().trim().max(2048).default(""),
+  adornoBannerUrl: z.string().trim().max(2048).default(""),
+  adornoFooterText: z.string().trim().max(200).default("Solicitação de adorno"),
+  adornoFooterImageUrl: z.string().trim().max(2048).default(""),
+  adornoColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#22c55e"),
+  adornoImagePosition: policeRhImagePositionSchema.default("side"),
+  adornoDmApprovedMessage: z.string().trim().max(1200).default("Sua solicitação de adorno foi aprovada."),
+  adornoDmRejectedMessage: z.string().trim().max(1200).default("Sua solicitação de adorno foi reprovada."),
+  adornoDmMessage: z.string().trim().max(1200).default("Sua solicitação de adorno foi atualizada pela equipe.")
+});
+const policeRhSaveSchema = z.object({
+  config: policeRhConfigSchema,
+  guildName: z.string().min(1).max(100).optional()
+});
 const autoUnmuteConfigSchema = z.object({
   enabled: z.boolean().default(false),
   voiceChannelId: snowflakeSchema.nullable().default(null),
@@ -319,7 +376,7 @@ advancedModulesRouter.get("/:botId/:guildId/:moduleId", async (req, res, next) =
     const module = await getBotGuildModuleConfig(botId, guildId, moduleId);
 
     return res.json({
-      module: moduleId === "police-reports"
+      module: moduleId === "police-reports" || moduleId === "police-rh"
         ? { ...module, config: normalizeModuleConfig(moduleId, module.config) }
         : module
     });
@@ -333,7 +390,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
     const botId = botIdSchema.parse(req.params.botId);
     const guildId = guildIdSchema.parse(req.params.guildId);
     const moduleId = moduleIdSchema.parse(req.params.moduleId);
-    const input = moduleId === "police-reports" ? policeReportsSaveSchema.parse(req.body ?? {}) : moduleId === "police-flight" ? policeFlightSaveSchema.parse(req.body ?? {}) : saveSchema.parse(req.body ?? {});
+    const input = moduleId === "police-reports" ? policeReportsSaveSchema.parse(req.body ?? {}) : moduleId === "police-flight" ? policeFlightSaveSchema.parse(req.body ?? {}) : moduleId === "police-rh" ? policeRhSaveSchema.parse(req.body ?? {}) : saveSchema.parse(req.body ?? {});
     const user = res.locals.dashboardAuth.user as AuthSessionUser;
 
     if (!(await canUseDevBotModule(user, botId, guildId, moduleId))) {
@@ -362,7 +419,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
       moduleId,
       config: {
         ...normalizedConfig,
-        ...(moduleId === "police-reports" || moduleId === "police-flight" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
+        ...(moduleId === "police-reports" || moduleId === "police-flight" || moduleId === "police-rh" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
         ...(moduleId === "tag-verification" ? { botId, guildId } : {}),
         updatedBy: user.id
       }
@@ -389,10 +446,32 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
     if (moduleId === "police-flight") {
       emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "update", botId, guildId });
     }
+    if (moduleId === "police-rh") {
+      emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "update", botId, guildId });
+    }
 
     return res.json({
       module: savedModule
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+advancedModulesRouter.post("/:botId/:guildId/police-rh/publish", async (req, res, next) => {
+  try {
+    const botId = botIdSchema.parse(req.params.botId);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const user = res.locals.dashboardAuth.user as AuthSessionUser;
+    if (!(await canUseDevBotModule(user, botId, guildId, "police-rh"))) {
+      return res.status(403).json({ message: "Este modulo nao foi liberado para este bot ou servidor." });
+    }
+    const module = await getBotGuildModuleConfig(botId, guildId, "police-rh");
+    const config = policeRhConfigSchema.parse(module.config);
+    const panelChannelId = config.panelChannelId || config.rhPanelChannelId || config.absencePanelChannelId || config.adornoPanelChannelId;
+    if (!panelChannelId) return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "publish", botId, guildId });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }
@@ -569,6 +648,22 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
 
   if (moduleId === "police-flight") {
     return policeFlightConfigSchema.parse(config);
+  }
+
+  if (moduleId === "police-rh") {
+    return policeRhConfigSchema.parse({
+      ...config,
+      panelChannelId: config.panelChannelId || config.rhPanelChannelId || config.absencePanelChannelId || config.adornoPanelChannelId || null,
+      panelImageUrl: config.panelImageUrl || "",
+      panelBannerUrl: config.panelBannerUrl || "",
+      panelFooterImageUrl: config.panelFooterImageUrl || "",
+      absenceImageUrl: config.absenceImageUrl || "",
+      absenceBannerUrl: config.absenceBannerUrl || "",
+      absenceFooterImageUrl: config.absenceFooterImageUrl || "",
+      adornoImageUrl: config.adornoImageUrl || "",
+      adornoBannerUrl: config.adornoBannerUrl || "",
+      adornoFooterImageUrl: config.adornoFooterImageUrl || ""
+    });
   }
 
   if (moduleId === "police-reports") {

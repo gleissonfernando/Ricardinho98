@@ -16,6 +16,10 @@ import { resolvePanelImageUrl, type PanelVisualConfig, type PanelVisualPosition 
 const scheduledGuilds = new Map<string, NodeJS.Timeout>();
 const publishingPanels = new Map<string, Promise<void>>();
 
+type HierarchyRefreshOptions = {
+  allowCreate?: boolean;
+};
+
 export const hierarchyCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("hierarquia")
@@ -53,7 +57,7 @@ export const hierarchyCommand: BotCommand = {
       return;
     }
     const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
-    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit);
+    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, { allowCreate: true });
     await interaction.editReply(syncAll ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
   }
 };
@@ -61,11 +65,18 @@ export const hierarchyCommand: BotCommand = {
 export function startFivemHierarchyService(client: Client<true>, context: BotContext) {
   context.socket.onFivemHierarchyPanelUpdate((payload) => {
     const guild = client.guilds.cache.get(payload.guildId);
-    if (guild) scheduleHierarchyRefresh(guild, context);
+    if (!guild) return;
+
+    if (payload.action === "publish") {
+      void refreshHierarchyPanelsForGuild(guild, context, payload.panelId, { allowCreate: true });
+      return;
+    }
+
+    scheduleHierarchyRefresh(guild, context, payload.panelId, { allowCreate: false });
   });
 
   for (const guild of client.guilds.cache.values()) {
-    scheduleHierarchyRefresh(guild, context);
+    scheduleHierarchyRefresh(guild, context, null, { allowCreate: false });
   }
 }
 
@@ -75,14 +86,14 @@ export async function handleFivemHierarchyInteraction(interaction: Interaction, 
   return false;
 }
 
-export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, panelId?: string | null) {
+export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, panelId?: string | null, options: HierarchyRefreshOptions = {}) {
   if (!isBotModuleEnabled("fivem-hierarchy")) return;
   const key = `${guild.id}:${panelId ?? "all"}`;
   const current = scheduledGuilds.get(key);
   if (current) clearTimeout(current);
   const timeout = setTimeout(() => {
     scheduledGuilds.delete(key);
-    void refreshHierarchyPanelsForGuild(guild, context, panelId);
+    void refreshHierarchyPanelsForGuild(guild, context, panelId, options);
   }, 2500);
   timeout.unref();
   scheduledGuilds.set(key, timeout);
@@ -133,7 +144,7 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
   }
 }
 
-export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null) {
+export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null, options: HierarchyRefreshOptions = {}) {
   const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
   const lookup = panelId?.trim().toLowerCase() ?? null;
   const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
@@ -144,15 +155,15 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
     guild.channels.fetch()
   ]);
   for (const panel of scoped) {
-    await publishHierarchyPanelOnce(guild, context, panel, members);
+    await publishHierarchyPanelOnce(guild, context, panel, members, options);
   }
 }
 
 export async function atualizarTodasHierarquias(guild: Guild, context: BotContext) {
-  await refreshHierarchyPanelsForGuild(guild, context, null);
+  await refreshHierarchyPanelsForGuild(guild, context, null, { allowCreate: true });
 }
 
-async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache) {
+async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
   const key = `${guild.id}:${panel.id}`;
   const current = publishingPanels.get(key);
   if (current) {
@@ -160,15 +171,16 @@ async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, pane
     return;
   }
 
-  const task = publishHierarchyPanel(guild, context, panel, members).finally(() => {
+  const task = publishHierarchyPanel(guild, context, panel, members, options).finally(() => {
     publishingPanels.delete(key);
   });
   publishingPanels.set(key, task);
   await task;
 }
 
-async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache) {
+async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
   if (!panel.enabled || !panel.panelChannelId) return;
+  const allowCreate = options.allowCreate === true;
   const channel = await guild.channels.fetch(panel.panelChannelId).catch(() => null);
   if (!channel || !("send" in channel) || !("messages" in channel)) return;
   const visuals = await getPanelVisualSlots(context, guild.id, panel.id);
@@ -176,6 +188,9 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
   let message = panel.panelMessageId ? await channel.messages.fetch(panel.panelMessageId).catch(() => null) : null;
   if (message) {
     await message.edit(payload);
+  } else if (!allowCreate) {
+    console.log(`[HIERARQUIA] Painel ${panel.name} sem mensagem salva/encontrada. Atualizacao automatica nao criou painel novo.`);
+    return;
   } else {
     message = await channel.send(payload).catch(() => null);
   }
@@ -202,10 +217,13 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
     ? { type: 9, components: [{ type: 10, content: header }], accessory: { type: 11, media: { url: sideImageUrl }, description: panel.title } }
     : { type: 10, content: header });
 
-  pushExtraHierarchyMedia(components, extraImages, ["below_title"], panel.title);
+  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["below_title", "middle"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["below_title", "middle"], panel.title);
   renderHierarchyTextChunks(members ?? guild, panel).forEach((content) => components.push({ type: 10, content }));
+  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["below_text"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["below_text"], panel.title);
   pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["bottom", "footer"], panel.title);
-  pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer", "below_text"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer"], panel.title);
 
   if (footerText) {
     components.push({ type: 14, divider: true, spacing: 1 });
@@ -352,7 +370,7 @@ function normalizeHierarchyImagePosition(position: PanelVisualPosition | undefin
 
 function normalizeHierarchyMainImagePosition(position: PanelVisualPosition | undefined) {
   const normalized = normalizeHierarchyImagePosition(position);
-  return normalized === "none" ? "none" : "side";
+  return normalized === "thumbnail" ? "side" : normalized;
 }
 
 function chunkHierarchyBlocks(blocks: string[]) {

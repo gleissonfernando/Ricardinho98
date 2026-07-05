@@ -79,6 +79,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
+import { cn } from "../lib/utils";
 import { createDashboardSocket } from "../lib/socket";
 import {
   downloadEmojiZip,
@@ -119,6 +120,7 @@ import {
   publishFivemGoalPanel,
   publishFivemHierarchyPanel,
   publishPoliceFlightPanel,
+  publishPoliceRhPanel,
   publishPoliceReportsPanel,
   publishManualRegistrationPanel,
   publishRulesPanel,
@@ -597,6 +599,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "police-reports": "police-reports",
   "police-flight": "police-flight",
   "police-rh": "police-rh",
+  "rh-ausencias-adornos": "police-rh",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -639,12 +642,20 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
 const settingsModuleIds = new Set(["tickets", "avisos", "network", "server-generator"]);
 
 function readInitialDashboardView(): ViewId {
+  if (window.location.pathname === "/dashboard/rh-ausencias-adornos") {
+    return "rh-ausencias-adornos";
+  }
+
   try {
     const view = new URLSearchParams(window.location.search).get("view");
-    return view === "police-rh" ? "police-rh" : "overview";
+    return view === "police-rh" || view === "rh-ausencias-adornos" ? "rh-ausencias-adornos" : "overview";
   } catch {
     return "overview";
   }
+}
+
+function dashboardPathForView(view: ViewId) {
+  return view === "rh-ausencias-adornos" ? "/dashboard/rh-ausencias-adornos" : "/dashboard";
 }
 
 export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardProps) {
@@ -1015,6 +1026,11 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
     }
   }
 
+  function handleChangeView(view: ViewId) {
+    setActiveView(view);
+    window.history.pushState({}, "", dashboardPathForView(view));
+  }
+
   if (dashboardRouteError) {
     return <DashboardRouteError message={dashboardRouteError} />;
   }
@@ -1026,7 +1042,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
       dashboardUser={dashboardProfile?.user}
       enabledModules={enabledModules}
       guilds={scopedDashboardGuilds}
-      onChangeView={setActiveView}
+      onChangeView={handleChangeView}
       onLogout={onLogout}
       onSelectBot={handleSelectBot}
       onSelectGuild={handleSelectGuild}
@@ -1403,7 +1419,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
         {activeView === "summons-system" ? (
           <CommunicationPanel type="summons" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)} />
         ) : null}
-        {activeView === "police-rh" ? (
+        {activeView === "police-rh" || activeView === "rh-ausencias-adornos" ? (
           <PoliceRhPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "police-rh", canManageDashboard)} />
         ) : null}
         {activeView === "settings" ? (
@@ -8837,8 +8853,10 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
   const [channels, setChannels] = useState<GuildChannelOption[]>([]);
   const [categories, setCategories] = useState<GuildCategoryOption[]>([]);
   const [roles, setRoles] = useState<GuildRoleOption[]>([]);
+  const [tab, setTab] = useState<PoliceRhTab>("general");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -8892,14 +8910,34 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
     }
   }
 
+  async function publish() {
+    if (!botId || !guild) return;
+    setPublishing(true);
+    setMessage(null);
+    try {
+      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
+        config,
+        guildName: guild.name
+      });
+      setConfig(normalizePoliceRhConfig(saved.config));
+      await publishPoliceRhPanel(botId, guild.id);
+      setMessage("Painel do RH enviado para atualização. Se já existir mensagem salva, o bot deve editar a mensagem existente.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Não foi possível publicar o painel do RH.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   if (!botId || !guild) {
     return <Card><CardContent className="py-10 text-center text-zinc-500">Selecione um bot e um servidor.</CardContent></Card>;
   }
 
-  const disabled = !canManage || loading || saving;
+  const disabled = !canManage || loading || saving || publishing;
   const roleOptions = roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }));
   const channelOptions = channels.map((channel) => ({ id: channel.id, name: channel.name }));
   const categoryOptions = categories.map((category) => ({ id: category.id, name: category.name }));
+  const selectedPanelChannel = config.panelChannelId || config.rhPanelChannelId || config.absencePanelChannelId || config.adornoPanelChannelId;
 
   return (
     <div className="space-y-5">
@@ -8907,49 +8945,126 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>RH, Ausência e Adorno</CardTitle>
-              <CardDescription>Configurações policiais deste módulo, sem redirecionar para FAC, IA ou outro menu.</CardDescription>
+              <CardTitle>RH - Ausências e Adornos</CardTitle>
+              <CardDescription>Modo dedicado para RH, solicitações de ausência, adornos, permissões, logs e painel Components V2.</CardDescription>
             </div>
-            <Switch checked={config.enabled} disabled={disabled} onCheckedChange={(enabled) => patch({ enabled })} />
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-zinc-300">{config.enabled ? "Ativado" : "Desativado"}</span>
+              <Switch checked={config.enabled} disabled={disabled} onCheckedChange={(enabled) => patch({ enabled })} />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
           {message ? <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-200">{message}</div> : null}
           {loading ? <div className="flex min-h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div> : (
             <>
-              <section className="grid gap-4 lg:grid-cols-3">
-                <PoliceRhConfigSection icon={Users} title="Sistema de RH" description="Cargos, logs, responsáveis, permissões e painel Components V2.">
-                  <FivemResourceMultiSelect disabled={disabled} label="Cargos permitidos" onChange={(rhAllowedRoleIds) => patch({ rhAllowedRoleIds })} options={roleOptions} prefix="@" values={config.rhAllowedRoleIds} />
-                  <FivemResourceMultiSelect disabled={disabled} label="Responsáveis do RH" onChange={(rhResponsibleRoleIds) => patch({ rhResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.rhResponsibleRoleIds} />
-                  <FivemResourceSelect disabled={disabled} label="Canal de logs do RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
-                  <FivemResourceSelect disabled={disabled} label="Canal do painel RH" onChange={(rhPanelChannelId) => patch({ rhPanelChannelId })} options={channelOptions} prefix="#" value={config.rhPanelChannelId} />
-                </PoliceRhConfigSection>
+              <PoliceRhTabs active={tab} onChange={setTab} />
 
-                <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Painel, categoria temporária, logs, cargo de ausência, aprovação, DM e imagens.">
-                  <FivemResourceSelect disabled={disabled} label="Canal do painel" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
-                  <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(absenceCategoryId) => patch({ absenceCategoryId })} options={categoryOptions} value={config.absenceCategoryId} />
-                  <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
-                  <FivemResourceSelect disabled={disabled} label="Cargo de ausência" onChange={(absenceRoleId) => patch({ absenceRoleId })} options={roleOptions} prefix="@" value={config.absenceRoleId} />
-                  <FivemResourceMultiSelect disabled={disabled} label="Aprovadores" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
-                  <PoliceRhTextarea disabled={disabled} label="Mensagem de DM" onChange={(absenceDmMessage) => patch({ absenceDmMessage })} value={config.absenceDmMessage} />
-                </PoliceRhConfigSection>
+              {tab === "general" ? (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <PoliceRhConfigSection icon={Users} title="Configuração Geral" description="Estado geral do módulo, canal principal e identidade visual do painel Components V2.">
+                    <FivemResourceSelect disabled={disabled} label="Canal do painel principal" onChange={(panelChannelId) => patch({ panelChannelId, rhPanelChannelId: panelChannelId })} options={channelOptions} prefix="#" value={selectedPanelChannel} />
+                    <FivemResourceSelect disabled={disabled} label="Canal de logs geral do RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
+                    <PoliceRhField disabled={disabled} label="Título do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
+                    <PoliceRhTextarea disabled={disabled} label="Descrição do painel" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
+                    <PoliceRhField disabled={disabled} label="Cor do painel" onChange={(panelColor) => patch({ panelColor })} type="color" value={config.panelColor} />
+                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
+                  </PoliceRhConfigSection>
+                  <PoliceRhPreview config={config} />
+                </section>
+              ) : null}
 
-                <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adorno" description="Painel, categoria temporária, logs, responsáveis marcados, aprovação, DM e imagens.">
-                  <FivemResourceSelect disabled={disabled} label="Canal do painel" onChange={(adornoPanelChannelId) => patch({ adornoPanelChannelId })} options={channelOptions} prefix="#" value={config.adornoPanelChannelId} />
-                  <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(adornoCategoryId) => patch({ adornoCategoryId })} options={categoryOptions} value={config.adornoCategoryId} />
-                  <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
-                  <FivemResourceMultiSelect disabled={disabled} label="Responsáveis marcados" onChange={(adornoResponsibleRoleIds) => patch({ adornoResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.adornoResponsibleRoleIds} />
-                  <FivemResourceMultiSelect disabled={disabled} label="Aprovadores" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
-                  <PoliceRhTextarea disabled={disabled} label="Mensagem de DM" onChange={(adornoDmMessage) => patch({ adornoDmMessage })} value={config.adornoDmMessage} />
-                </PoliceRhConfigSection>
-              </section>
+              {tab === "absence" ? (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Solicitação com modal: início, retorno e motivo. Aprovação em canal temporário com botões Component V2.">
+                    <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de ausência ativo</span><Switch checked={config.absenceEnabled} disabled={disabled} onCheckedChange={(absenceEnabled) => patch({ absenceEnabled })} /></label>
+                    <FivemResourceSelect disabled={disabled} label="Canal do painel de ausência" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
+                    <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(absenceCategoryId) => patch({ absenceCategoryId })} options={categoryOptions} value={config.absenceCategoryId} />
+                    <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
+                    <FivemResourceSelect disabled={disabled} label="Cargo de ausência" onChange={(absenceRoleId) => patch({ absenceRoleId })} options={roleOptions} prefix="@" value={config.absenceRoleId} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Cargos aprovadores" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
+                    <PoliceRhField disabled={disabled} label="Título" onChange={(absenceTitle) => patch({ absenceTitle })} value={config.absenceTitle} />
+                    <PoliceRhTextarea disabled={disabled} label="Descrição" onChange={(absenceDescription) => patch({ absenceDescription })} value={config.absenceDescription} />
+                    <PoliceRhField disabled={disabled} label="Cor" onChange={(absenceColor) => patch({ absenceColor })} type="color" value={config.absenceColor} />
+                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(absenceImagePosition) => patch({ absenceImagePosition })} value={config.absenceImagePosition} />
+                  </PoliceRhConfigSection>
+                  <PoliceRhConfigSection icon={ShieldCheck} title="Mensagens automáticas" description="DMs Component V2 para aprovação, reprovação e retorno da ausência.">
+                    <PoliceRhTextarea disabled={disabled} label="DM ao aprovar" onChange={(absenceDmApprovedMessage) => patch({ absenceDmApprovedMessage })} value={config.absenceDmApprovedMessage} />
+                    <PoliceRhTextarea disabled={disabled} label="DM ao reprovar" onChange={(absenceDmRejectedMessage) => patch({ absenceDmRejectedMessage })} value={config.absenceDmRejectedMessage} />
+                    <PoliceRhTextarea disabled={disabled} label="DM ao finalizar na data de retorno" onChange={(absenceDmFinishedMessage) => patch({ absenceDmFinishedMessage })} value={config.absenceDmFinishedMessage} />
+                  </PoliceRhConfigSection>
+                </section>
+              ) : null}
+
+              {tab === "adornos" ? (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adornos" description="Solicitação com modal: tipo, descrição, motivo e imagem opcional. Aprovação em canal temporário com Component V2.">
+                    <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de adorno ativo</span><Switch checked={config.adornoEnabled} disabled={disabled} onCheckedChange={(adornoEnabled) => patch({ adornoEnabled })} /></label>
+                    <FivemResourceSelect disabled={disabled} label="Canal do painel de adorno" onChange={(adornoPanelChannelId) => patch({ adornoPanelChannelId })} options={channelOptions} prefix="#" value={config.adornoPanelChannelId} />
+                    <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(adornoCategoryId) => patch({ adornoCategoryId })} options={categoryOptions} value={config.adornoCategoryId} />
+                    <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Responsáveis marcados" onChange={(adornoResponsibleRoleIds) => patch({ adornoResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.adornoResponsibleRoleIds} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Cargos aprovadores" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
+                    <PoliceRhField disabled={disabled} label="Título" onChange={(adornoTitle) => patch({ adornoTitle })} value={config.adornoTitle} />
+                    <PoliceRhTextarea disabled={disabled} label="Descrição" onChange={(adornoDescription) => patch({ adornoDescription })} value={config.adornoDescription} />
+                    <PoliceRhField disabled={disabled} label="Cor" onChange={(adornoColor) => patch({ adornoColor })} type="color" value={config.adornoColor} />
+                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(adornoImagePosition) => patch({ adornoImagePosition })} value={config.adornoImagePosition} />
+                  </PoliceRhConfigSection>
+                  <PoliceRhConfigSection icon={ShieldCheck} title="Mensagens automáticas" description="DMs Component V2 para resposta da análise de adorno.">
+                    <PoliceRhTextarea disabled={disabled} label="DM ao aprovar" onChange={(adornoDmApprovedMessage) => patch({ adornoDmApprovedMessage })} value={config.adornoDmApprovedMessage} />
+                    <PoliceRhTextarea disabled={disabled} label="DM ao reprovar" onChange={(adornoDmRejectedMessage) => patch({ adornoDmRejectedMessage })} value={config.adornoDmRejectedMessage} />
+                  </PoliceRhConfigSection>
+                </section>
+              ) : null}
+
+              {tab === "panel" ? (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <PoliceRhConfigSection icon={Settings} title="Textos e imagens por URL" description="Campos salvos no MongoDB. Upload avançado sem reload fica no bloco de imagens abaixo.">
+                    <PoliceRhField disabled={disabled} label="Imagem principal" onChange={(panelImageUrl) => patch({ panelImageUrl })} value={config.panelImageUrl} />
+                    <PoliceRhField disabled={disabled} label="Banner" onChange={(panelBannerUrl) => patch({ panelBannerUrl })} value={config.panelBannerUrl} />
+                    <PoliceRhField disabled={disabled} label="Texto do rodapé" onChange={(panelFooterText) => patch({ panelFooterText })} value={config.panelFooterText} />
+                    <PoliceRhField disabled={disabled} label="Imagem pequena do rodapé" onChange={(panelFooterImageUrl) => patch({ panelFooterImageUrl })} value={config.panelFooterImageUrl} />
+                    <PoliceRhField disabled={disabled} label="Imagem ausência" onChange={(absenceImageUrl) => patch({ absenceImageUrl })} value={config.absenceImageUrl} />
+                    <PoliceRhField disabled={disabled} label="Banner ausência" onChange={(absenceBannerUrl) => patch({ absenceBannerUrl })} value={config.absenceBannerUrl} />
+                    <PoliceRhField disabled={disabled} label="Imagem adorno" onChange={(adornoImageUrl) => patch({ adornoImageUrl })} value={config.adornoImageUrl} />
+                    <PoliceRhField disabled={disabled} label="Banner adorno" onChange={(adornoBannerUrl) => patch({ adornoBannerUrl })} value={config.adornoBannerUrl} />
+                  </PoliceRhConfigSection>
+                  <PoliceRhPreview config={config} />
+                </section>
+              ) : null}
+
+              {tab === "logs" ? (
+                <section className="grid gap-4 lg:grid-cols-3">
+                  <PoliceRhConfigSection icon={ScrollText} title="Logs" description="Canais onde as ações do sistema devem ser registradas.">
+                    <FivemResourceSelect disabled={disabled} label="Logs gerais RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
+                    <FivemResourceSelect disabled={disabled} label="Logs de ausência" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
+                    <FivemResourceSelect disabled={disabled} label="Logs de adorno" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
+                  </PoliceRhConfigSection>
+                </section>
+              ) : null}
+
+              {tab === "permissions" ? (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <PoliceRhConfigSection icon={LockKeyhole} title="Permissões" description="Quem pode configurar pela dashboard usa as permissões do painel. Aprovar/reprovar é definido por cargo.">
+                    <FivemResourceMultiSelect disabled={disabled} label="Cargos permitidos a usar RH" onChange={(rhAllowedRoleIds) => patch({ rhAllowedRoleIds })} options={roleOptions} prefix="@" values={config.rhAllowedRoleIds} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Responsáveis do RH" onChange={(rhResponsibleRoleIds) => patch({ rhResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.rhResponsibleRoleIds} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Aprovadores de ausência" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
+                    <FivemResourceMultiSelect disabled={disabled} label="Aprovadores de adorno" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
+                  </PoliceRhConfigSection>
+                </section>
+              ) : null}
 
               <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
                 <Button disabled={disabled} onClick={() => void save()} type="button">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                   Salvar configurações
                 </Button>
+                <Button disabled={disabled || !selectedPanelChannel} onClick={() => void publish()} type="button" variant="outline">
+                  {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Publicar/atualizar painel
+                </Button>
                 <Badge variant={config.enabled ? "success" : "muted"}>{config.enabled ? "Módulo ativo" : "Módulo inativo"}</Badge>
+                {!selectedPanelChannel ? <Badge variant="muted">Configure um canal para publicar</Badge> : null}
               </div>
             </>
           )}
@@ -8970,20 +9085,56 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
   );
 }
 
+type PoliceRhTab = "general" | "absence" | "adornos" | "panel" | "logs" | "permissions";
+type PoliceRhImagePosition = "top" | "middle" | "side" | "footer" | "none";
+
 type PoliceRhConfig = {
+  adornoColor: string;
+  adornoDescription: string;
+  adornoDmApprovedMessage: string;
   adornoApproverRoleIds: string[];
+  adornoBannerUrl: string;
   adornoCategoryId: string | null;
   adornoDmMessage: string;
+  adornoDmRejectedMessage: string;
+  adornoEnabled: boolean;
+  adornoFooterImageUrl: string;
+  adornoFooterText: string;
+  adornoImagePosition: PoliceRhImagePosition;
+  adornoImageUrl: string;
   adornoLogChannelId: string | null;
   adornoPanelChannelId: string | null;
   adornoResponsibleRoleIds: string[];
+  adornoTitle: string;
   absenceApproverRoleIds: string[];
+  absenceBannerUrl: string;
   absenceCategoryId: string | null;
+  absenceColor: string;
+  absenceDescription: string;
+  absenceDmApprovedMessage: string;
   absenceDmMessage: string;
+  absenceDmRejectedMessage: string;
+  absenceDmFinishedMessage: string;
+  absenceEnabled: boolean;
+  absenceFooterImageUrl: string;
+  absenceFooterText: string;
+  absenceImagePosition: PoliceRhImagePosition;
+  absenceImageUrl: string;
   absenceLogChannelId: string | null;
   absencePanelChannelId: string | null;
   absenceRoleId: string | null;
+  absenceTitle: string;
   enabled: boolean;
+  panelBannerUrl: string;
+  panelChannelId: string | null;
+  panelColor: string;
+  panelDescription: string;
+  panelFooterImageUrl: string;
+  panelFooterText: string;
+  panelImagePosition: PoliceRhImagePosition;
+  panelImageUrl: string;
+  panelMessageId: string | null;
+  panelTitle: string;
   rhAllowedRoleIds: string[];
   rhLogChannelId: string | null;
   rhPanelChannelId: string | null;
@@ -8991,24 +9142,88 @@ type PoliceRhConfig = {
 };
 
 const defaultPoliceRhConfig: PoliceRhConfig = {
+  adornoColor: "#22c55e",
+  adornoDescription: "Solicite análise de adorno com tipo, descrição, motivo e imagem.",
+  adornoDmApprovedMessage: "Sua solicitação de adorno foi aprovada.",
   adornoApproverRoleIds: [],
+  adornoBannerUrl: "",
   adornoCategoryId: null,
   adornoDmMessage: "Sua solicitação de adorno foi atualizada pela equipe.",
+  adornoDmRejectedMessage: "Sua solicitação de adorno foi reprovada.",
+  adornoEnabled: true,
+  adornoFooterImageUrl: "",
+  adornoFooterText: "Solicitação de adorno",
+  adornoImagePosition: "side",
+  adornoImageUrl: "",
   adornoLogChannelId: null,
   adornoPanelChannelId: null,
   adornoResponsibleRoleIds: [],
+  adornoTitle: "Sistema de Adornos",
   absenceApproverRoleIds: [],
+  absenceBannerUrl: "",
   absenceCategoryId: null,
+  absenceColor: "#f59e0b",
+  absenceDescription: "Informe a data de início, retorno e motivo da ausência.",
+  absenceDmApprovedMessage: "Sua solicitação de ausência foi aprovada.",
   absenceDmMessage: "Sua solicitação de ausência foi atualizada pela equipe.",
+  absenceDmRejectedMessage: "Sua solicitação de ausência foi reprovada.",
+  absenceDmFinishedMessage: "Sua ausência acabou. Você pode voltar ao RP/trabalho.",
+  absenceEnabled: true,
+  absenceFooterImageUrl: "",
+  absenceFooterText: "Solicitação de ausência",
+  absenceImagePosition: "side",
+  absenceImageUrl: "",
   absenceLogChannelId: null,
   absencePanelChannelId: null,
   absenceRoleId: null,
+  absenceTitle: "Sistema de Ausência",
   enabled: false,
+  panelBannerUrl: "",
+  panelChannelId: null,
+  panelColor: "#7c3aed",
+  panelDescription: "Solicite ausência ou adorno pelo painel abaixo.",
+  panelFooterImageUrl: "",
+  panelFooterText: "RH - Sistema interno",
+  panelImagePosition: "side",
+  panelImageUrl: "",
+  panelMessageId: null,
+  panelTitle: "RH - Ausências e Adornos",
   rhAllowedRoleIds: [],
   rhLogChannelId: null,
   rhPanelChannelId: null,
   rhResponsibleRoleIds: []
 };
+
+function PoliceRhTabs({ active, onChange }: { active: PoliceRhTab; onChange: (tab: PoliceRhTab) => void }) {
+  const tabs: Array<{ id: PoliceRhTab; label: string }> = [
+    { id: "general", label: "Configuração Geral" },
+    { id: "absence", label: "Ausência" },
+    { id: "adornos", label: "Adornos" },
+    { id: "panel", label: "Painel" },
+    { id: "logs", label: "Logs" },
+    { id: "permissions", label: "Permissões" }
+  ];
+
+  return (
+    <div className="discord-scrollbar flex gap-2 overflow-x-auto border-b border-zinc-900 pb-3">
+      {tabs.map((item) => (
+        <button
+          className={cn(
+            "shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold transition",
+            active === item.id
+              ? "border-purple-500/35 bg-purple-500/15 text-white"
+              : "border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:border-purple-500/25 hover:text-zinc-100"
+          )}
+          key={item.id}
+          onClick={() => onChange(item.id)}
+          type="button"
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function PoliceRhConfigSection({ children, description, icon: Icon, title }: { children: React.ReactNode; description: string; icon: typeof Bot; title: string }) {
   return (
@@ -9027,6 +9242,30 @@ function PoliceRhConfigSection({ children, description, icon: Icon, title }: { c
   );
 }
 
+function PoliceRhField({ disabled, label, onChange, type = "text", value }: { disabled: boolean; label: string; onChange: (value: string) => void; type?: string; value: string }) {
+  return (
+    <label className="grid gap-2 text-xs font-medium text-zinc-400">
+      <span>{label}</span>
+      <input className="h-10 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value)} type={type} value={value} />
+    </label>
+  );
+}
+
+function PoliceRhImagePositionSelect({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: PoliceRhImagePosition) => void; value: PoliceRhImagePosition }) {
+  return (
+    <label className="grid gap-2 text-xs font-medium text-zinc-400">
+      <span>{label}</span>
+      <select className="h-10 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value as PoliceRhImagePosition)} value={value}>
+        <option value="top">Topo</option>
+        <option value="middle">Meio</option>
+        <option value="side">Lateral</option>
+        <option value="footer">Rodapé</option>
+        <option value="none">Sem imagem</option>
+      </select>
+    </label>
+  );
+}
+
 function PoliceRhTextarea({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: string) => void; value: string }) {
   return (
     <label className="grid gap-2 text-xs font-medium text-zinc-400">
@@ -9036,25 +9275,102 @@ function PoliceRhTextarea({ disabled, label, onChange, value }: { disabled: bool
   );
 }
 
+function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
+  const imageUrl = config.panelImageUrl || config.panelBannerUrl;
+  const footerImageUrl = config.panelFooterImageUrl;
+  const imagePosition = config.panelImagePosition;
+  const showTop = imageUrl && imagePosition === "top";
+  const showMiddle = imageUrl && imagePosition === "middle";
+  const showSide = imageUrl && imagePosition === "side";
+  const showFooter = imageUrl && imagePosition === "footer";
+
+  return (
+    <div className="rounded-lg border border-purple-500/20 bg-[#0b0b0f] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Preview Component V2</p>
+          <p className="mt-1 text-xs text-zinc-500">Visual aproximado do painel principal. Botões e DMs usam a mesma base visual.</p>
+        </div>
+        <span className="h-5 w-5 rounded-full" style={{ backgroundColor: config.panelColor }} />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+        {showTop ? <img alt="Preview topo" className="max-h-44 w-full object-cover" src={imageUrl} /> : null}
+        <div className="flex gap-4 p-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-white">{config.panelTitle}</p>
+            <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-300">{config.panelDescription}</p>
+            {showMiddle ? <img alt="Preview meio" className="mt-3 max-h-40 w-full rounded-lg object-cover" src={imageUrl} /> : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-100">Solicitar Ausência</span>
+              <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">Solicitar Adorno</span>
+            </div>
+          </div>
+          {showSide ? <img alt="Preview lateral" className="h-24 w-24 shrink-0 rounded-lg object-cover" src={imageUrl} /> : null}
+        </div>
+        {(config.panelFooterText || footerImageUrl || showFooter) ? (
+          <div className="flex items-center gap-2 border-t border-zinc-800 px-4 py-3 text-xs font-semibold text-zinc-400">
+            {footerImageUrl ? <img alt="Rodapé" className="h-6 w-6 rounded object-cover" src={footerImageUrl} /> : null}
+            {showFooter ? <img alt="Imagem rodapé" className="h-6 w-6 rounded object-cover" src={imageUrl} /> : null}
+            <span>{config.panelFooterText}</span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function normalizePoliceRhConfig(raw: Record<string, unknown>): PoliceRhConfig {
   return {
     ...defaultPoliceRhConfig,
     enabled: raw.enabled === true,
+    panelChannelId: readNullableString(raw.panelChannelId),
+    panelMessageId: readNullableString(raw.panelMessageId),
+    panelTitle: readStringValue(raw.panelTitle) || defaultPoliceRhConfig.panelTitle,
+    panelDescription: readStringValue(raw.panelDescription) || defaultPoliceRhConfig.panelDescription,
+    panelImageUrl: readStringValue(raw.panelImageUrl),
+    panelBannerUrl: readStringValue(raw.panelBannerUrl),
+    panelFooterText: readStringValue(raw.panelFooterText) || defaultPoliceRhConfig.panelFooterText,
+    panelFooterImageUrl: readStringValue(raw.panelFooterImageUrl),
+    panelColor: readColorValue(raw.panelColor, defaultPoliceRhConfig.panelColor),
+    panelImagePosition: readPoliceRhImagePosition(raw.panelImagePosition, defaultPoliceRhConfig.panelImagePosition),
     rhAllowedRoleIds: readStringList(raw.rhAllowedRoleIds),
     rhResponsibleRoleIds: readStringList(raw.rhResponsibleRoleIds),
     rhLogChannelId: readNullableString(raw.rhLogChannelId),
     rhPanelChannelId: readNullableString(raw.rhPanelChannelId),
+    absenceEnabled: raw.absenceEnabled !== false,
     absencePanelChannelId: readNullableString(raw.absencePanelChannelId),
     absenceCategoryId: readNullableString(raw.absenceCategoryId),
     absenceLogChannelId: readNullableString(raw.absenceLogChannelId),
     absenceRoleId: readNullableString(raw.absenceRoleId),
     absenceApproverRoleIds: readStringList(raw.absenceApproverRoleIds),
+    absenceTitle: readStringValue(raw.absenceTitle) || defaultPoliceRhConfig.absenceTitle,
+    absenceDescription: readStringValue(raw.absenceDescription) || defaultPoliceRhConfig.absenceDescription,
+    absenceImageUrl: readStringValue(raw.absenceImageUrl),
+    absenceBannerUrl: readStringValue(raw.absenceBannerUrl),
+    absenceFooterText: readStringValue(raw.absenceFooterText) || defaultPoliceRhConfig.absenceFooterText,
+    absenceFooterImageUrl: readStringValue(raw.absenceFooterImageUrl),
+    absenceColor: readColorValue(raw.absenceColor, defaultPoliceRhConfig.absenceColor),
+    absenceImagePosition: readPoliceRhImagePosition(raw.absenceImagePosition, defaultPoliceRhConfig.absenceImagePosition),
+    absenceDmApprovedMessage: readStringValue(raw.absenceDmApprovedMessage) || defaultPoliceRhConfig.absenceDmApprovedMessage,
+    absenceDmRejectedMessage: readStringValue(raw.absenceDmRejectedMessage) || defaultPoliceRhConfig.absenceDmRejectedMessage,
+    absenceDmFinishedMessage: readStringValue(raw.absenceDmFinishedMessage) || defaultPoliceRhConfig.absenceDmFinishedMessage,
     absenceDmMessage: readStringValue(raw.absenceDmMessage) || defaultPoliceRhConfig.absenceDmMessage,
+    adornoEnabled: raw.adornoEnabled !== false,
     adornoPanelChannelId: readNullableString(raw.adornoPanelChannelId),
     adornoCategoryId: readNullableString(raw.adornoCategoryId),
     adornoLogChannelId: readNullableString(raw.adornoLogChannelId),
     adornoResponsibleRoleIds: readStringList(raw.adornoResponsibleRoleIds),
     adornoApproverRoleIds: readStringList(raw.adornoApproverRoleIds),
+    adornoTitle: readStringValue(raw.adornoTitle) || defaultPoliceRhConfig.adornoTitle,
+    adornoDescription: readStringValue(raw.adornoDescription) || defaultPoliceRhConfig.adornoDescription,
+    adornoImageUrl: readStringValue(raw.adornoImageUrl),
+    adornoBannerUrl: readStringValue(raw.adornoBannerUrl),
+    adornoFooterText: readStringValue(raw.adornoFooterText) || defaultPoliceRhConfig.adornoFooterText,
+    adornoFooterImageUrl: readStringValue(raw.adornoFooterImageUrl),
+    adornoColor: readColorValue(raw.adornoColor, defaultPoliceRhConfig.adornoColor),
+    adornoImagePosition: readPoliceRhImagePosition(raw.adornoImagePosition, defaultPoliceRhConfig.adornoImagePosition),
+    adornoDmApprovedMessage: readStringValue(raw.adornoDmApprovedMessage) || defaultPoliceRhConfig.adornoDmApprovedMessage,
+    adornoDmRejectedMessage: readStringValue(raw.adornoDmRejectedMessage) || defaultPoliceRhConfig.adornoDmRejectedMessage,
     adornoDmMessage: readStringValue(raw.adornoDmMessage) || defaultPoliceRhConfig.adornoDmMessage
   };
 }
@@ -9069,6 +9385,14 @@ function readNullableString(value: unknown) {
 
 function readStringValue(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function readColorValue(value: unknown, fallback: string) {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+function readPoliceRhImagePosition(value: unknown, fallback: PoliceRhImagePosition): PoliceRhImagePosition {
+  return value === "top" || value === "middle" || value === "side" || value === "footer" || value === "none" ? value : fallback;
 }
 
 function visualPanelIdForView(view: ViewId) {
@@ -9150,7 +9474,7 @@ function isViewAllowed(view: ViewId, enabledModules: string[]) {
     return enabledModules.includes("police-patrol-reports") || enabledModules.includes("patrol-reports");
   }
 
-  if (view === "police-rh") {
+  if (view === "police-rh" || view === "rh-ausencias-adornos") {
     return policeRhModuleEnabled(enabledModules);
   }
 
