@@ -143,6 +143,7 @@ import {
   previewServerBackupRestore,
   restoreServerBackup,
   runTagVerificationNow,
+  uploadPanelImage,
   validateEmojiCloneBotToken
 } from "../lib/api";
 import type {
@@ -1063,7 +1064,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           status={displayedBotStatus}
         />
 
-        {activeView !== "delete-channels" && activeView !== "fivem-hierarchy" ? (
+        {activeView !== "delete-channels" && activeView !== "fivem-hierarchy" && activeView !== "police-rh" && activeView !== "rh-ausencias-adornos" ? (
           <PanelImageSettings
             botId={activeBotId}
             canManage={canManageDashboard}
@@ -8877,6 +8878,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -8949,11 +8951,37 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
     }
   }
 
+  async function uploadRhImage(file: File | null) {
+    if (!file || !botId || !guild) return;
+    setImageUploading(true);
+    setMessage(null);
+    try {
+      const image = await uploadPanelImage(guild.id, "police-rh", file, botId);
+      const nextImagePosition = config.panelImagePosition === "none" ? "top" : config.panelImagePosition;
+      setConfig((current) => ({
+        ...current,
+        panelImagePosition: nextImagePosition,
+        panelImageUrl: image.imageUrl,
+        panelBannerUrl: image.imagePosition === "banner" ? image.imageUrl : current.panelBannerUrl
+      }));
+      setMessage("🖼️ Imagem enviada. Clique em salvar ou publicar para aplicar no painel RH.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Não foi possível enviar a imagem do RH.");
+    } finally {
+      setImageUploading(false);
+    }
+  }
+
+  function removeRhImage() {
+    patch({ panelBannerUrl: "", panelFooterImageUrl: "", panelImageUrl: "", panelImagePosition: "none" });
+    setMessage("🗑️ Imagem removida. Clique em salvar ou publicar para aplicar.");
+  }
+
   if (!botId || !guild) {
     return <Card><CardContent className="py-10 text-center text-zinc-500">Selecione um bot e um servidor.</CardContent></Card>;
   }
 
-  const disabled = !canManage || loading || saving || publishing;
+  const disabled = !canManage || loading || saving || publishing || imageUploading;
   const roleOptions = roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }));
   const channelOptions = channels.map((channel) => ({ id: channel.id, name: channel.name }));
   const categoryOptions = categories.map((category) => ({ id: category.id, name: category.name }));
@@ -9039,9 +9067,33 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 
               {tab === "panel" ? (
                 <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={Settings} title="Textos e imagens por URL" description="Campos salvos no MongoDB. Upload avançado sem reload fica no bloco de imagens abaixo.">
-                    <PoliceRhField disabled={disabled} label="Imagem principal" onChange={(panelImageUrl) => patch({ panelImageUrl })} value={config.panelImageUrl} />
-                    <PoliceRhField disabled={disabled} label="Banner" onChange={(panelBannerUrl) => patch({ panelBannerUrl })} value={config.panelBannerUrl} />
+                  <PoliceRhConfigSection icon={Settings} title="🖼️ Imagem do painel RH" description="Upload e URL ficam salvos no mesmo registro usado pelo bot ao publicar o painel.">
+                    <div className="grid gap-3">
+                      <label className="grid gap-2 text-xs font-medium text-zinc-400">
+                        <span>Enviar imagem</span>
+                        <span className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm font-semibold text-zinc-200 transition hover:border-zinc-600">
+                          {imageUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                          {imageUploading ? "Enviando..." : "Enviar arquivo"}
+                          <input
+                            accept="image/gif,image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] ?? null;
+                              event.currentTarget.value = "";
+                              void uploadRhImage(file);
+                            }}
+                            type="file"
+                          />
+                        </span>
+                      </label>
+                      <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
+                      <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
+                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={removeRhImage} type="button" variant="outline">
+                        <Trash2 className="h-4 w-4" />
+                        Remover imagem
+                      </Button>
+                    </div>
                     <PoliceRhField disabled={disabled} label="Texto do rodapé" onChange={(panelFooterText) => patch({ panelFooterText })} value={config.panelFooterText} />
                     <PoliceRhField disabled={disabled} label="Imagem pequena do rodapé" onChange={(panelFooterImageUrl) => patch({ panelFooterImageUrl })} value={config.panelFooterImageUrl} />
                     <PoliceRhField disabled={disabled} label="Imagem ausência" onChange={(absenceImageUrl) => patch({ absenceImageUrl })} value={config.absenceImageUrl} />
@@ -9090,17 +9142,6 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
           )}
         </CardContent>
       </Card>
-      <PanelImageSettings
-        botId={botId}
-        canManage={canManage}
-        guildId={guild.id}
-        panelLabel="RH, Ausência e Adorno"
-        panelSlots={[
-          { id: "police-rh", label: "RH - Painel principal" },
-          { id: "police-rh-absence", label: "Ausência - Banner/cabeçalho/rodapé" },
-          { id: "police-rh-adorno", label: "Adorno - Banner/cabeçalho/rodapé" }
-        ]}
-      />
     </div>
   );
 }

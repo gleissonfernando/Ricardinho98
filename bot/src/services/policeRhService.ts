@@ -28,6 +28,7 @@ type PoliceRhConfig = {
   panelTitle: string;
   panelDescription: string;
   panelColor: string;
+  panelBannerUrl: string;
   panelImageUrl: string;
   panelImagePosition: PanelVisualPosition;
   panelFooterText: string;
@@ -37,16 +38,24 @@ type PoliceRhConfig = {
   absenceLogChannelId: string | null;
   absenceRoleId: string | null;
   absenceApproverRoleIds: string[];
+  absenceBannerUrl: string;
   absenceDmApprovedMessage: string;
   absenceDmRejectedMessage: string;
   absenceDmFinishedMessage: string;
+  absenceFooterImageUrl: string;
+  absenceImagePosition: PanelVisualPosition;
+  absenceImageUrl: string;
   adornoEnabled: boolean;
   adornoCategoryId: string | null;
   adornoLogChannelId: string | null;
   adornoApproverRoleIds: string[];
   adornoResponsibleRoleIds: string[];
+  adornoBannerUrl: string;
   adornoDmApprovedMessage: string;
   adornoDmRejectedMessage: string;
+  adornoFooterImageUrl: string;
+  adornoImagePosition: PanelVisualPosition;
+  adornoImageUrl: string;
   rhLogChannelId: string | null;
 };
 
@@ -121,7 +130,7 @@ function mainPanelPayload(config: PoliceRhConfig) {
     description: config.panelDescription,
     footerIcon: visual(config.panelFooterImageUrl, "footer"),
     footerText: config.panelFooterText,
-    image: visual(config.panelImageUrl, config.panelImagePosition),
+    image: visual(config.panelImageUrl || config.panelBannerUrl, config.panelImagePosition),
     moduleId: MODULE_ID,
     title: withEmoji(config.panelTitle, "🏢")
   });
@@ -211,6 +220,9 @@ async function createRhRequestChannel(interaction: ModalSubmitInteraction, conte
 }
 
 function requestPanelPayload(config: PoliceRhConfig, type: "absence" | "adorno", fields: string[], status = "⏳ Pendente") {
+  const imageUrl = type === "absence" ? config.absenceImageUrl || config.absenceBannerUrl : config.adornoImageUrl || config.adornoBannerUrl;
+  const imagePosition = type === "absence" ? config.absenceImagePosition : config.adornoImagePosition;
+  const footerImageUrl = type === "absence" ? config.absenceFooterImageUrl : config.adornoFooterImageUrl;
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setEmoji("✅").setLabel(type === "absence" ? "Aprovar Ausência" : "Aprovar Adorno").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setEmoji("❌").setLabel(type === "absence" ? "Recusar Ausência" : "Recusar Adorno").setStyle(ButtonStyle.Danger),
@@ -221,6 +233,8 @@ function requestPanelPayload(config: PoliceRhConfig, type: "absence" | "adorno",
     actions: [buttons],
     description: `📌 Status: **${status}**`,
     fields,
+    footerIcon: visual(footerImageUrl, "footer"),
+    image: visual(imageUrl, imagePosition),
     moduleId: MODULE_ID,
     title: type === "absence" ? "📋 Solicitação de Ausência criada" : "🎖️ Solicitação de Adorno criada"
   });
@@ -269,6 +283,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelTitle: readString(raw.panelTitle) ?? "🏢 RH - Ausências e Adornos",
     panelDescription: readString(raw.panelDescription) ?? "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
     panelColor: readString(raw.panelColor) ?? "#7c3aed",
+    panelBannerUrl: readString(raw.panelBannerUrl) ?? "",
     panelImageUrl: readString(raw.panelImageUrl) ?? "",
     panelImagePosition: readImagePosition(raw.panelImagePosition),
     panelFooterText: readString(raw.panelFooterText) ?? "📌 RH - Sistema interno",
@@ -278,16 +293,24 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     absenceLogChannelId: readString(raw.absenceLogChannelId),
     absenceRoleId: readString(raw.absenceRoleId),
     absenceApproverRoleIds: idList(raw.absenceApproverRoleIds),
+    absenceBannerUrl: readString(raw.absenceBannerUrl) ?? "",
     absenceDmApprovedMessage: readString(raw.absenceDmApprovedMessage) ?? "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
     absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "❌ Sua solicitação de ausência foi recusada.",
     absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
+    absenceFooterImageUrl: readString(raw.absenceFooterImageUrl) ?? "",
+    absenceImagePosition: readImagePosition(raw.absenceImagePosition),
+    absenceImageUrl: readString(raw.absenceImageUrl) ?? "",
     adornoEnabled: raw.adornoEnabled !== false,
     adornoCategoryId: readString(raw.adornoCategoryId),
     adornoLogChannelId: readString(raw.adornoLogChannelId),
     adornoApproverRoleIds: idList(raw.adornoApproverRoleIds),
     adornoResponsibleRoleIds: idList(raw.adornoResponsibleRoleIds),
+    adornoBannerUrl: readString(raw.adornoBannerUrl) ?? "",
     adornoDmApprovedMessage: readString(raw.adornoDmApprovedMessage) ?? "✅ Sua solicitação de adorno foi aprovada.",
     adornoDmRejectedMessage: readString(raw.adornoDmRejectedMessage) ?? "❌ Sua solicitação de adorno foi recusada.",
+    adornoFooterImageUrl: readString(raw.adornoFooterImageUrl) ?? "",
+    adornoImagePosition: readImagePosition(raw.adornoImagePosition),
+    adornoImageUrl: readString(raw.adornoImageUrl) ?? "",
     rhLogChannelId: readString(raw.rhLogChannelId)
   };
 }
