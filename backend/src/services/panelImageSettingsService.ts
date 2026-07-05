@@ -175,6 +175,16 @@ export async function savePanelImageSettings(
 }
 
 function emitPanelRefresh(guildId: string, botId: string, panelId: string) {
+  if (/^hierarchy-/i.test(panelId)) {
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "fivem:hierarchy:panel_update", {
+      action: "update",
+      botId,
+      guildId,
+      panelId: refreshPanelId(panelId)
+    });
+    return;
+  }
+
   const events: Record<string, string> = {
     "fivem-hierarchy": "fivem:hierarchy:panel_update",
     "fivem-orders": "fivem:orders:panel_publish",
@@ -184,7 +194,7 @@ function emitPanelRefresh(guildId: string, botId: string, panelId: string) {
     "mission-tools": "mission-tools:panel_publish"
   };
   const event = events[refreshPanelId(panelId)];
-  if (event) emitRealtimeToRoom(devBotRealtimeRoom(botId), event, { botId, guildId });
+  if (event) emitRealtimeToRoom(devBotRealtimeRoom(botId), event, { action: "update", botId, guildId, panelId: refreshPanelId(panelId) });
 }
 
 function refreshPanelId(panelId: string) {

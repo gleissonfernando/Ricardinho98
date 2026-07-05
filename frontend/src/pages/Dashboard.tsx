@@ -1063,7 +1063,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           status={displayedBotStatus}
         />
 
-        {activeView !== "delete-channels" ? (
+        {activeView !== "delete-channels" && activeView !== "fivem-hierarchy" ? (
           <PanelImageSettings
             botId={activeBotId}
             canManage={canManageDashboard}
@@ -3520,6 +3520,17 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
               </div>
+              <PanelImageSettings
+                botId={botId}
+                canManage={canManage}
+                guildId={guild?.id ?? null}
+                panelLabel={`Hierarquia - ${draft.name}`}
+                panelSlots={[
+                  { id: draft.id, label: `${draft.name} - Imagem principal` },
+                  { id: `${draft.id}-banner-2`, label: `${draft.name} - Banner 2` },
+                  { id: `${draft.id}-banner-3`, label: `${draft.name} - Banner 3` }
+                ]}
+              />
               <HierarchyPreview panel={draft} roles={roles} />
               {draft.id !== "new" ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
