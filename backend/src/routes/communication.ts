@@ -24,10 +24,6 @@ const summonsSettingsSchema = z.object({
   authorizedRoleIds: z.array(snowflake).max(50).optional(), moderatorRoleIds: z.array(snowflake).max(50).optional(),
   logChannelId: snowflake.nullable().optional(), bannerUrl: z.string().max(2048).nullable().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), defaultMessage: z.string().max(3000).optional(),
-  publicResponsibleName: z.string().trim().min(1).max(80).optional(),
-  dmTitle: z.string().trim().min(1).max(100).optional(),
-  dmDescription: z.string().trim().min(1).max(1000).optional(),
-  dmButtonText: z.string().trim().min(1).max(80).optional(),
   deleteDelaySeconds: z.coerce.number().int().min(3).max(86400).optional(), transcriptEnabled: z.boolean().optional()
 });
 

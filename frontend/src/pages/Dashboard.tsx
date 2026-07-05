@@ -9163,51 +9163,51 @@ type PoliceRhConfig = {
 
 const defaultPoliceRhConfig: PoliceRhConfig = {
   adornoColor: "#22c55e",
-  adornoDescription: "Solicite análise de adorno com tipo, descrição, motivo e imagem.",
-  adornoDmApprovedMessage: "Sua solicitação de adorno foi aprovada.",
+  adornoDescription: "🎖️ Solicite análise de adorno com tipo, descrição, motivo e imagem.",
+  adornoDmApprovedMessage: "✅ Sua solicitação de adorno foi aprovada.",
   adornoApproverRoleIds: [],
   adornoBannerUrl: "",
   adornoCategoryId: null,
-  adornoDmMessage: "Sua solicitação de adorno foi atualizada pela equipe.",
-  adornoDmRejectedMessage: "Sua solicitação de adorno foi reprovada.",
+  adornoDmMessage: "🎖️ Sua solicitação de adorno foi atualizada pela equipe.",
+  adornoDmRejectedMessage: "❌ Sua solicitação de adorno foi recusada.",
   adornoEnabled: true,
   adornoFooterImageUrl: "",
-  adornoFooterText: "Solicitação de adorno",
+  adornoFooterText: "🎖️ Solicitação de adorno",
   adornoImagePosition: "side",
   adornoImageUrl: "",
   adornoLogChannelId: null,
   adornoPanelChannelId: null,
   adornoResponsibleRoleIds: [],
-  adornoTitle: "Sistema de Adornos",
+  adornoTitle: "🎖️ Sistema de Adornos",
   absenceApproverRoleIds: [],
   absenceBannerUrl: "",
   absenceCategoryId: null,
   absenceColor: "#f59e0b",
-  absenceDescription: "Informe a data de início, retorno e motivo da ausência.",
-  absenceDmApprovedMessage: "Sua solicitação de ausência foi aprovada.",
-  absenceDmMessage: "Sua solicitação de ausência foi atualizada pela equipe.",
-  absenceDmRejectedMessage: "Sua solicitação de ausência foi reprovada.",
-  absenceDmFinishedMessage: "Sua ausência acabou. Você pode voltar ao RP/trabalho.",
+  absenceDescription: "📅 Informe a data de início, retorno e motivo da ausência.",
+  absenceDmApprovedMessage: "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
+  absenceDmMessage: "📋 Sua solicitação de ausência foi atualizada pela equipe.",
+  absenceDmRejectedMessage: "❌ Sua solicitação de ausência foi recusada.",
+  absenceDmFinishedMessage: "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
   absenceEnabled: true,
   absenceFooterImageUrl: "",
-  absenceFooterText: "Solicitação de ausência",
+  absenceFooterText: "📝 Solicitação de ausência",
   absenceImagePosition: "side",
   absenceImageUrl: "",
   absenceLogChannelId: null,
   absencePanelChannelId: null,
   absenceRoleId: null,
-  absenceTitle: "Sistema de Ausência",
+  absenceTitle: "📝 Sistema de Ausência",
   enabled: false,
   panelBannerUrl: "",
   panelChannelId: null,
   panelColor: "#7c3aed",
-  panelDescription: "Solicite ausência ou adorno pelo painel abaixo.",
+  panelDescription: "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
   panelFooterImageUrl: "",
-  panelFooterText: "RH - Sistema interno",
+  panelFooterText: "📌 RH - Sistema interno",
   panelImagePosition: "side",
   panelImageUrl: "",
   panelMessageId: null,
-  panelTitle: "RH - Ausências e Adornos",
+  panelTitle: "🏢 RH - Ausências e Adornos",
   rhAllowedRoleIds: [],
   rhLogChannelId: null,
   rhPanelChannelId: null,
@@ -9216,12 +9216,12 @@ const defaultPoliceRhConfig: PoliceRhConfig = {
 
 function PoliceRhTabs({ active, onChange }: { active: PoliceRhTab; onChange: (tab: PoliceRhTab) => void }) {
   const tabs: Array<{ id: PoliceRhTab; label: string }> = [
-    { id: "general", label: "Configuração Geral" },
-    { id: "absence", label: "Ausência" },
-    { id: "adornos", label: "Adornos" },
-    { id: "panel", label: "Painel" },
-    { id: "logs", label: "Logs" },
-    { id: "permissions", label: "Permissões" }
+    { id: "general", label: "⚙️ Configuração Geral" },
+    { id: "absence", label: "📝 Ausência" },
+    { id: "adornos", label: "🎖️ Adornos" },
+    { id: "panel", label: "🖼️ Painel" },
+    { id: "logs", label: "📜 Logs" },
+    { id: "permissions", label: "🔐 Permissões" }
   ];
 
   return (
@@ -9321,8 +9321,8 @@ function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
             <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-300">{config.panelDescription}</p>
             {showMiddle ? <img alt="Preview meio" className="mt-3 max-h-40 w-full rounded-lg object-cover" src={imageUrl} /> : null}
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-100">Solicitar Ausência</span>
-              <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">Solicitar Adorno</span>
+              <span className="rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-100">📝 Solicitar Ausência</span>
+              <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">🎖️ Solicitar Adorno</span>
             </div>
           </div>
           {showSide ? <img alt="Preview lateral" className="h-24 w-24 shrink-0 rounded-lg object-cover" src={imageUrl} /> : null}

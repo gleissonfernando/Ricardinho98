@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DmSettings, SummonsRecord, SummonsSettings } from "../apiClient";
-import { createDmMessageModal, dmPayload, summonsDmPayload, summonsPanel } from "../communicationService";
+import { createDmMessageModal, createSummonsMessageModal, dmPayload, summonsDmPayload, summonsPanel } from "../communicationService";
 
 const settings: DmSettings = {
   authorizedRoleIds: [],
@@ -71,7 +71,16 @@ test("painel e DM de intimação ocultam o criador real", () => {
   const dm = JSON.stringify(summonsDmPayload(summonsSettings, summons, summons.guildId, summons.channelId!));
   assert.doesNotMatch(panel, new RegExp(summons.requesterId));
   assert.doesNotMatch(dm, new RegExp(summons.requesterId));
-  assert.match(panel, /Equipe NPD/);
-  assert.match(dm, /Responder intimação/);
+  assert.match(panel, /Equipe AB/);
+  assert.match(dm, /Acessar conversa/);
   assert.ok(dm.includes("discord.com/channels/333333/444444"));
+});
+
+test("modal da Equipe AB possui somente a descrição obrigatória", () => {
+  const modal = createSummonsMessageModal("888888").toJSON();
+  const rows = modal.components as Array<{ components: Array<{ custom_id?: string; max_length?: number; required?: boolean }> }>;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.components[0]?.custom_id, "description");
+  assert.equal(rows[0]?.components[0]?.max_length, 1000);
+  assert.equal(rows[0]?.components[0]?.required, true);
 });

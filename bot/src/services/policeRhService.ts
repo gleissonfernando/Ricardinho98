@@ -67,7 +67,7 @@ export async function handlePoliceRhInteraction(interaction: Interaction, contex
 
   const config = await loadConfig(interaction.guild.id, context);
   if (!config?.enabled) {
-    if (interaction.isRepliable()) await interaction.reply({ content: "O sistema RH está desativado.", ephemeral: true }).catch(() => null);
+    if (interaction.isRepliable()) await interaction.reply({ content: "❌ O sistema RH está desativado.", ephemeral: true }).catch(() => null);
     return true;
   }
 
@@ -97,10 +97,10 @@ export async function handlePoliceRhInteraction(interaction: Interaction, contex
 
 async function publishPoliceRhPanel(guild: Guild, context: BotContext, allowCreate: boolean) {
   const config = await loadConfig(guild.id, context);
-  if (!config?.enabled) throw new Error("Ative o RH - Ausências e Adornos antes de publicar.");
-  if (!config.panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
+  if (!config?.enabled) throw new Error("❌ Ative o RH - Ausências e Adornos antes de publicar.");
+  if (!config.panelChannelId) throw new Error("📢 Configure o canal do painel antes de publicar.");
   const channel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
-  if (!channel || !("messages" in channel) || !("send" in channel)) throw new Error("O canal configurado nao aceita mensagens.");
+  if (!channel || !("messages" in channel) || !("send" in channel)) throw new Error("❌ O canal configurado não aceita mensagens.");
   let message = config.panelMessageId ? await channel.messages.fetch(config.panelMessageId).catch(() => null) : null;
   if (message) {
     await message.edit(mainPanelPayload(config));
@@ -112,8 +112,8 @@ async function publishPoliceRhPanel(guild: Guild, context: BotContext, allowCrea
 
 function mainPanelPayload(config: PoliceRhConfig) {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:absence`).setLabel("Solicitar Ausência").setStyle(ButtonStyle.Primary).setDisabled(!config.absenceEnabled),
-    new ButtonBuilder().setCustomId(`${PREFIX}:adorno`).setLabel("Solicitar Adorno").setStyle(ButtonStyle.Success).setDisabled(!config.adornoEnabled)
+    new ButtonBuilder().setCustomId(`${PREFIX}:absence`).setEmoji("📝").setLabel("Solicitar Ausência").setStyle(ButtonStyle.Primary).setDisabled(!config.absenceEnabled),
+    new ButtonBuilder().setCustomId(`${PREFIX}:adorno`).setEmoji("🎖️").setLabel("Solicitar Adorno").setStyle(ButtonStyle.Success).setDisabled(!config.adornoEnabled)
   );
   return renderComponentsV2Panel({
     accentColor: colorToInt(config.panelColor),
@@ -123,30 +123,30 @@ function mainPanelPayload(config: PoliceRhConfig) {
     footerText: config.panelFooterText,
     image: visual(config.panelImageUrl, config.panelImagePosition),
     moduleId: MODULE_ID,
-    title: config.panelTitle
+    title: withEmoji(config.panelTitle, "🏢")
   });
 }
 
 function absenceModal() {
   return new ModalBuilder()
     .setCustomId(`${PREFIX}:absence_submit`)
-    .setTitle("Solicitar Ausência")
+    .setTitle("📝 Solicitar Ausência")
     .addComponents(
-      inputRow("startDate", "Data de início da ausência", "Ex: 05/07/2026"),
-      inputRow("returnDate", "Data de retorno", "Ex: 10/07/2026"),
-      inputRow("reason", "Motivo", "Explique o motivo da ausência", TextInputStyle.Paragraph)
+      inputRow("startDate", "📅 Data de início da ausência", "Ex: 05/07/2026"),
+      inputRow("returnDate", "📅 Data de retorno", "Ex: 10/07/2026"),
+      inputRow("reason", "📝 Motivo", "Explique o motivo da ausência", TextInputStyle.Paragraph)
     );
 }
 
 function adornoModal() {
   return new ModalBuilder()
     .setCustomId(`${PREFIX}:adorno_submit`)
-    .setTitle("Solicitar Adorno")
+    .setTitle("🎖️ Solicitar Adorno")
     .addComponents(
-      inputRow("adornmentType", "Tipo de adorno", "Ex: máscara, roupa, acessório"),
-      inputRow("description", "Descrição do adorno", "Descreva o adorno", TextInputStyle.Paragraph),
-      inputRow("reason", "Motivo da solicitação", "Explique o motivo", TextInputStyle.Paragraph),
-      inputRow("imageUrl", "Link da imagem (opcional)", "https://...")
+      inputRow("adornmentType", "🎖️ Tipo de adorno", "Ex: máscara, roupa, acessório"),
+      inputRow("description", "📝 Descrição do adorno", "Descreva o adorno", TextInputStyle.Paragraph),
+      inputRow("reason", "📌 Motivo da solicitação", "Explique o motivo", TextInputStyle.Paragraph),
+      inputRow("imageUrl", "🖼️ Link da imagem", "https://...")
     );
 }
 
@@ -160,14 +160,14 @@ async function createRhRequestChannel(interaction: ModalSubmitInteraction, conte
   const categoryId = type === "absence" ? config.absenceCategoryId : config.adornoCategoryId;
   const approverRoleIds = type === "absence" ? config.absenceApproverRoleIds : uniqueIds([...config.adornoApproverRoleIds, ...config.adornoResponsibleRoleIds]);
   if (!categoryId) {
-    await interaction.reply({ content: "Categoria temporária não configurada.", ephemeral: true });
+    await interaction.reply({ content: "📂 Categoria temporária não configurada.", ephemeral: true });
     return;
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guild = interaction.guild!;
   const category = await guild.channels.fetch(categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
-    await interaction.editReply("Categoria temporária inválida ou removida.");
+    await interaction.editReply("❌ Categoria temporária inválida ou removida.");
     return;
   }
   const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
@@ -187,40 +187,42 @@ async function createRhRequestChannel(interaction: ModalSubmitInteraction, conte
   });
   const fields = type === "absence"
     ? [
-        `**Solicitante:** <@${interaction.user.id}>`,
-        `**Início:** ${interaction.fields.getTextInputValue("startDate")}`,
-        `**Retorno:** ${interaction.fields.getTextInputValue("returnDate")}`,
-        `**Motivo:** ${interaction.fields.getTextInputValue("reason")}`
+        `**👤 Solicitante:** <@${interaction.user.id}>`,
+        `**📅 Início:** ${interaction.fields.getTextInputValue("startDate")}`,
+        `**📅 Retorno:** ${interaction.fields.getTextInputValue("returnDate")}`,
+        `**📝 Motivo:** ${interaction.fields.getTextInputValue("reason")}`,
+        "**⏳ Status:** Aguardando análise"
       ]
     : [
-        `**Solicitante:** <@${interaction.user.id}>`,
-        `**Tipo:** ${interaction.fields.getTextInputValue("adornmentType")}`,
-        `**Descrição:** ${interaction.fields.getTextInputValue("description")}`,
-        `**Motivo:** ${interaction.fields.getTextInputValue("reason")}`,
-        `**Imagem:** ${interaction.fields.getTextInputValue("imageUrl") || "Não informado"}`
+        `**👤 Solicitante:** <@${interaction.user.id}>`,
+        `**🎖️ Tipo:** ${interaction.fields.getTextInputValue("adornmentType")}`,
+        `**📝 Descrição:** ${interaction.fields.getTextInputValue("description")}`,
+        `**📌 Motivo:** ${interaction.fields.getTextInputValue("reason")}`,
+        `**🖼️ Imagem:** ${interaction.fields.getTextInputValue("imageUrl") || "Não informado"}`,
+        "**⏳ Status:** Aguardando análise"
       ];
   await channel.send({
     allowedMentions: { roles: approverRoleIds, users: [interaction.user.id] },
     content: [`<@${interaction.user.id}>`, ...approverRoleIds.map((roleId) => `<@&${roleId}>`)].join(" ")
   }).catch(() => null);
   await channel.send(requestPanelPayload(config, type, fields));
-  await writeLog(context, guild.id, interaction.user.id, `police-rh.${type}.created`, `Solicitação de ${type === "absence" ? "ausência" : "adorno"} criada.`, { channelId: channel.id, fields });
-  await interaction.editReply(`Solicitação criada: <#${channel.id}>`);
+  await writeLog(context, guild.id, interaction.user.id, `police-rh.${type}.created`, `📋 Solicitação de ${type === "absence" ? "ausência" : "adorno"} criada.`, { channelId: channel.id, fields });
+  await interaction.editReply(`✅ Solicitação criada: <#${channel.id}>`);
 }
 
-function requestPanelPayload(config: PoliceRhConfig, type: "absence" | "adorno", fields: string[], status = "Pendente") {
+function requestPanelPayload(config: PoliceRhConfig, type: "absence" | "adorno", fields: string[], status = "⏳ Pendente") {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Aprovar").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setLabel("Reprovar").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel("Fechar").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setEmoji("✅").setLabel(type === "absence" ? "Aprovar Ausência" : "Aprovar Adorno").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setEmoji("❌").setLabel(type === "absence" ? "Recusar Ausência" : "Recusar Adorno").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PREFIX}:close`).setEmoji("🔒").setLabel("Fechar Canal").setStyle(ButtonStyle.Secondary)
   );
   return renderComponentsV2Panel({
     accentColor: type === "absence" ? 0xf59e0b : 0x22c55e,
     actions: [buttons],
-    description: `Status: **${status}**`,
+    description: `📌 Status: **${status}**`,
     fields,
     moduleId: MODULE_ID,
-    title: type === "absence" ? "Solicitação de Ausência" : "Solicitação de Adorno"
+    title: type === "absence" ? "📋 Solicitação de Ausência criada" : "🎖️ Solicitação de Adorno criada"
   });
 }
 
@@ -232,12 +234,12 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || allowedRoles.some((roleId) => member?.roles.cache.has(roleId)));
   if (!allowed) {
-    await interaction.reply({ content: "Apenas cargos aprovadores configurados podem executar esta ação.", ephemeral: true });
+    await interaction.reply({ content: "❌ Apenas cargos aprovadores configurados podem executar esta ação.", ephemeral: true });
     return;
   }
   if (action === "close") {
-    await interaction.reply({ content: "Canal será fechado.", ephemeral: true });
-    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "Canal RH fechado.", { channelId: interaction.channel.id, requesterId: topic.userId, type: topic.type });
+    await interaction.reply({ content: "🔒 Canal será fechado.", ephemeral: true });
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "🔒 Canal RH fechado.", { channelId: interaction.channel.id, requesterId: topic.userId, type: topic.type });
     setTimeout(() => void interaction.channel?.delete("Canal RH fechado").catch(() => null), 1500);
     return;
   }
@@ -250,9 +252,9 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
   const dmMessage = topic.type === "absence"
     ? approved ? config.absenceDmApprovedMessage : config.absenceDmRejectedMessage
     : approved ? config.adornoDmApprovedMessage : config.adornoDmRejectedMessage;
-  await sendDm(interaction, topic.userId, approved ? "Solicitação aprovada" : "Solicitação reprovada", dmMessage, approved ? 0x22c55e : 0xef4444);
-  await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.${topic.type}.${approved ? "approved" : "rejected"}`, `Solicitação de ${topic.type === "absence" ? "ausência" : "adorno"} ${approved ? "aprovada" : "reprovada"}.`, { channelId: interaction.channel.id, requesterId: topic.userId });
-  await interaction.reply({ content: `Solicitação ${approved ? "aprovada" : "reprovada"}.`, ephemeral: true });
+  await sendDm(interaction, topic.userId, approved ? "✅ Solicitação aprovada" : "❌ Solicitação recusada", dmMessage, approved ? 0x22c55e : 0xef4444);
+  await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.${topic.type}.${approved ? "approved" : "rejected"}`, `${approved ? "✅" : "❌"} Solicitação de ${topic.type === "absence" ? "ausência" : "adorno"} ${approved ? "aprovada" : "recusada"}.`, { channelId: interaction.channel.id, requesterId: topic.userId });
+  await interaction.reply({ content: `${approved ? "✅" : "❌"} Solicitação ${approved ? "aprovada" : "recusada"}.`, ephemeral: true });
 }
 
 async function loadConfig(guildId: string, context: BotContext): Promise<PoliceRhConfig | null> {
@@ -264,28 +266,28 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     enabled: raw.enabled === true,
     panelChannelId: readString(raw.panelChannelId) ?? readString(raw.rhPanelChannelId) ?? readString(raw.absencePanelChannelId) ?? readString(raw.adornoPanelChannelId),
     panelMessageId: readString(raw.panelMessageId),
-    panelTitle: readString(raw.panelTitle) ?? "RH - Ausências e Adornos",
-    panelDescription: readString(raw.panelDescription) ?? "Solicite ausência ou adorno pelo painel abaixo.",
+    panelTitle: readString(raw.panelTitle) ?? "🏢 RH - Ausências e Adornos",
+    panelDescription: readString(raw.panelDescription) ?? "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
     panelColor: readString(raw.panelColor) ?? "#7c3aed",
     panelImageUrl: readString(raw.panelImageUrl) ?? "",
     panelImagePosition: readImagePosition(raw.panelImagePosition),
-    panelFooterText: readString(raw.panelFooterText) ?? "RH - Sistema interno",
+    panelFooterText: readString(raw.panelFooterText) ?? "📌 RH - Sistema interno",
     panelFooterImageUrl: readString(raw.panelFooterImageUrl) ?? "",
     absenceEnabled: raw.absenceEnabled !== false,
     absenceCategoryId: readString(raw.absenceCategoryId),
     absenceLogChannelId: readString(raw.absenceLogChannelId),
     absenceRoleId: readString(raw.absenceRoleId),
     absenceApproverRoleIds: idList(raw.absenceApproverRoleIds),
-    absenceDmApprovedMessage: readString(raw.absenceDmApprovedMessage) ?? "Sua solicitação de ausência foi aprovada.",
-    absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "Sua solicitação de ausência foi reprovada.",
-    absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "Sua ausência acabou.",
+    absenceDmApprovedMessage: readString(raw.absenceDmApprovedMessage) ?? "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
+    absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "❌ Sua solicitação de ausência foi recusada.",
+    absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
     adornoEnabled: raw.adornoEnabled !== false,
     adornoCategoryId: readString(raw.adornoCategoryId),
     adornoLogChannelId: readString(raw.adornoLogChannelId),
     adornoApproverRoleIds: idList(raw.adornoApproverRoleIds),
     adornoResponsibleRoleIds: idList(raw.adornoResponsibleRoleIds),
-    adornoDmApprovedMessage: readString(raw.adornoDmApprovedMessage) ?? "Sua solicitação de adorno foi aprovada.",
-    adornoDmRejectedMessage: readString(raw.adornoDmRejectedMessage) ?? "Sua solicitação de adorno foi reprovada.",
+    adornoDmApprovedMessage: readString(raw.adornoDmApprovedMessage) ?? "✅ Sua solicitação de adorno foi aprovada.",
+    adornoDmRejectedMessage: readString(raw.adornoDmRejectedMessage) ?? "❌ Sua solicitação de adorno foi recusada.",
     rhLogChannelId: readString(raw.rhLogChannelId)
   };
 }
@@ -314,9 +316,9 @@ function scheduleAbsenceRoleRemoval(guild: Guild, context: BotContext, config: P
         accentColor: 0x22c55e,
         description: config.absenceDmFinishedMessage,
         moduleId: MODULE_ID,
-        title: "Ausência finalizada"
+        title: "⏰ Ausência finalizada"
       })).catch(() => null);
-      await writeLog(context, guild.id, userId, "police-rh.absence.finished", "Cargo de ausência removido automaticamente na data de retorno.", { roleId: config.absenceRoleId, returnDate });
+      await writeLog(context, guild.id, userId, "police-rh.absence.finished", "⏰ Cargo de ausência removido automaticamente na data de retorno.", { roleId: config.absenceRoleId, returnDate });
     }).catch(() => null);
   }, delay).unref?.();
 }
@@ -327,6 +329,10 @@ function parseReturnDate(value: string) {
   if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), 12, 0, 0);
   const iso = new Date(trimmed);
   return Number.isNaN(iso.getTime()) ? null : iso;
+}
+
+function withEmoji(value: string, emoji: string) {
+  return value.trim().startsWith(emoji) || /\p{Extended_Pictographic}/u.test(value.slice(0, 4)) ? value : `${emoji} ${value}`;
 }
 
 function visual(imageUrl: string, imagePosition: PanelVisualPosition): PanelVisualConfig | null {

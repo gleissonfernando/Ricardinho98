@@ -67,10 +67,10 @@ export async function getSummonsSettings(botId: string, guildId: string) {
   const value: MongoSummonsSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, categoryId: null, temporaryCategoryId: null,
     authorizedRoleIds: [], moderatorRoleIds: [], logChannelId: null, bannerUrl: null, color: "#f59e0b",
-    publicResponsibleName: "Equipe NPD", dmTitle: "Você recebeu uma intimação",
-    dmDescription: "Você foi intimado pela equipe responsável.\nAcesse o canal abaixo para responder sua intimação.",
-    dmButtonText: "Responder intimação",
-    defaultMessage: "Use este canal para conversar sobre a solicitação.", deleteDelaySeconds: 10,
+    publicResponsibleName: "Equipe AB", dmTitle: "📨 Solicitação da Equipe AB",
+    dmDescription: "A Equipe AB está solicitando sua presença para uma conversa.",
+    dmButtonText: "🔗 Acessar conversa",
+    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe AB.", deleteDelaySeconds: 10,
     transcriptEnabled: true, createdAt: now, updatedAt: now, updatedBy: null
   };
   await summonsSettings.updateOne({ botId, guildId }, { $setOnInsert: value }, { upsert: true });
@@ -117,10 +117,11 @@ function dmSettingsDto(value: MongoDmSettings) {
 function summonsSettingsDto(value: MongoSummonsSettings) {
   return {
     ...value,
-    publicResponsibleName: value.publicResponsibleName ?? "Equipe NPD",
-    dmTitle: value.dmTitle ?? "Você recebeu uma intimação",
-    dmDescription: value.dmDescription ?? "Você foi intimado pela equipe responsável.\nAcesse o canal abaixo para responder sua intimação.",
-    dmButtonText: value.dmButtonText ?? "Responder intimação",
+    publicResponsibleName: "Equipe AB",
+    dmTitle: "📨 Solicitação da Equipe AB",
+    dmDescription: "A Equipe AB está solicitando sua presença para uma conversa.",
+    dmButtonText: "🔗 Acessar conversa",
+    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe AB.",
     id: value._id,
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString()
