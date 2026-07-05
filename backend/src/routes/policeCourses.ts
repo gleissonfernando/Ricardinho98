@@ -17,6 +17,8 @@ const style = z.enum(["primary", "secondary", "success", "danger"]);
 const courseSchema = z.object({
   courseNumber: z.string().trim().min(1).max(50),
   title: z.string().trim().min(1).max(100),
+  category: z.string().trim().max(100).nullable().optional(),
+  displayOrder: z.coerce.number().int().min(0).max(10000).optional(),
   emoji: z.string().trim().max(40).nullable().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
   instructorId: snowflake.nullable().optional(),
@@ -33,16 +35,26 @@ const courseSchema = z.object({
   authorizedUserIds: z.array(snowflake).max(100).optional(),
   participantRoleIds: z.array(snowflake).max(100).optional(),
   viewerRoleIds: z.array(snowflake).max(100).optional(),
-  panelChannelId: snowflake.nullable().optional()
+  panelChannelId: snowflake.nullable().optional(),
+  status: z.enum(["draft", "open", "in_progress", "finished", "canceled"]).optional()
 });
 const configSchema = z.object({
   enabled: z.boolean().optional(),
   logChannelId: snowflake.nullable().optional(),
+  approvalChannelId: snowflake.nullable().optional(),
+  certificateChannelId: snowflake.nullable().optional(),
+  notificationChannelId: snowflake.nullable().optional(),
   defaultCategoryId: snowflake.nullable().optional(),
   defaultPanelChannelId: snowflake.nullable().optional(),
   generalManagerUserIds: z.array(snowflake).max(100).optional(),
   allowedManagerRoles: z.array(snowflake).max(100).optional(),
   allowedFinishRoles: z.array(snowflake).max(100).optional(),
+  createRoleIds: z.array(snowflake).max(100).optional(),
+  editRoleIds: z.array(snowflake).max(100).optional(),
+  deleteRoleIds: z.array(snowflake).max(100).optional(),
+  approveRoleIds: z.array(snowflake).max(100).optional(),
+  cancelRoleIds: z.array(snowflake).max(100).optional(),
+  concludeRoleIds: z.array(snowflake).max(100).optional(),
   allowJoinAfterStart: z.boolean().optional(),
   allowLeaveAfterStart: z.boolean().optional(),
   dmOnFinish: z.boolean().optional(),

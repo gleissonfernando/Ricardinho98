@@ -11,8 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Switch } from "../ui/switch";
 
 type Props = { botId: string | null; canManage: boolean; guild: DashboardGuild };
-type Draft = { id?: string; courseNumber: string; title: string; emoji: string | null; color: string | null; description: string; bannerUrl?: string | null; imagePosition: "top" | "thumbnail" | "bottom" | "none"; panelChannelId: string | null; authorizedRoleIds: string[]; authorizedUserIds: string[]; participantRoleIds: string[]; viewerRoleIds: string[] };
-const emptyDraft: Draft = { courseNumber: "", title: "", emoji: null, color: "#2563eb", description: "", imagePosition: "top", panelChannelId: null, authorizedRoleIds: [], authorizedUserIds: [], participantRoleIds: [], viewerRoleIds: [] };
+type Draft = { id?: string; courseNumber: string; title: string; category: string | null; displayOrder: number; status: PoliceCourse["status"]; emoji: string | null; color: string | null; description: string; bannerUrl?: string | null; imagePosition: "top" | "thumbnail" | "bottom" | "none"; panelChannelId: string | null; authorizedRoleIds: string[]; authorizedUserIds: string[]; participantRoleIds: string[]; viewerRoleIds: string[] };
+const emptyDraft: Draft = { courseNumber: "", title: "", category: null, displayOrder: 0, status: "draft", emoji: null, color: "#2563eb", description: "", imagePosition: "top", panelChannelId: null, authorizedRoleIds: [], authorizedUserIds: [], participantRoleIds: [], viewerRoleIds: [] };
 
 export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
   const [config, setConfig] = useState<PoliceCourseConfig | null>(null);
@@ -94,9 +94,12 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
       <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
         <Field label="Identificador" value={draft.courseNumber} onChange={(courseNumber) => setDraft({ ...draft, courseNumber })} required />
         <Field label="Nome" value={draft.title} onChange={(title) => setDraft({ ...draft, title })} required />
+        <Field label="Categoria" value={draft.category ?? ""} onChange={(category) => setDraft({ ...draft, category: category || null })} />
+        <Field label="Ordem de exibição" type="number" value={String(draft.displayOrder)} onChange={(displayOrder) => setDraft({ ...draft, displayOrder: Math.max(0, Number(displayOrder) || 0) })} />
         <Field label="Emoji" value={draft.emoji ?? ""} onChange={(emoji) => setDraft({ ...draft, emoji: emoji || null })} />
         <Field label="Cor da Embed" type="color" value={draft.color ?? "#2563eb"} onChange={(color) => setDraft({ ...draft, color })} />
         <Channel label="Canal do painel" channels={channels} value={draft.panelChannelId || ""} change={(panelChannelId) => setDraft({ ...draft, panelChannelId: panelChannelId || null })} />
+        <label className="space-y-2 text-sm"><span>Status</span><select className="h-10 w-full rounded-md border bg-background px-3" value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as PoliceCourse["status"] })}><option value="draft">Rascunho</option><option value="open">Aberto</option><option value="in_progress">Em andamento</option><option value="finished">Finalizado</option><option value="canceled">Cancelado</option></select></label>
         <label className="space-y-2 text-sm"><span>Posição da imagem</span><select className="h-10 w-full rounded-md border bg-background px-3" value={draft.imagePosition} onChange={(event) => setDraft({ ...draft, imagePosition: event.target.value as Draft["imagePosition"] })}><option value="top">Banner superior</option><option value="thumbnail">Thumbnail lateral</option><option value="bottom">Rodapé</option><option value="none">Desativada</option></select></label>
         <MultiSelect label="Cargos de instrutor" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={draft.authorizedRoleIds} change={(authorizedRoleIds) => setDraft({ ...draft, authorizedRoleIds })} />
         <MultiSelect label="Instrutores específicos" options={members.map((member) => ({ id: member.id, name: member.displayName }))} values={draft.authorizedUserIds} change={(authorizedUserIds) => setDraft({ ...draft, authorizedUserIds })} />
@@ -139,8 +142,17 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
         <Toggle label="Bloquear canal ao cancelar" value={config.lockChannelOnCancel} change={(lockChannelOnCancel) => patchConfig({ lockChannelOnCancel })} />
         <Toggle label="Apagar painel ao cancelar" value={config.deletePanelOnCancel} change={(deletePanelOnCancel) => patchConfig({ deletePanelOnCancel })} />
         <Channel label="Canal de logs" channels={channels} value={config.logChannelId || ""} change={(logChannelId) => patchConfig({ logChannelId: logChannelId || null })} />
+        <Channel label="Canal de aprovações" channels={channels} value={config.approvalChannelId || ""} change={(approvalChannelId) => patchConfig({ approvalChannelId: approvalChannelId || null })} />
+        <Channel label="Canal de certificados" channels={channels} value={config.certificateChannelId || ""} change={(certificateChannelId) => patchConfig({ certificateChannelId: certificateChannelId || null })} />
+        <Channel label="Canal de notificações" channels={channels} value={config.notificationChannelId || ""} change={(notificationChannelId) => patchConfig({ notificationChannelId: notificationChannelId || null })} />
         <Channel label="Canal padrao" channels={channels} value={config.defaultPanelChannelId || ""} change={(defaultPanelChannelId) => patchConfig({ defaultPanelChannelId: defaultPanelChannelId || null })} />
         <MultiSelect label="Administrador Geral da Unidade" options={members.map((member) => ({ id: member.id, name: member.displayName }))} values={config.generalManagerUserIds} change={(generalManagerUserIds) => patchConfig({ generalManagerUserIds })} />
+        <MultiSelect label="Cargos que criam cursos" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.createRoleIds} change={(createRoleIds) => patchConfig({ createRoleIds })} />
+        <MultiSelect label="Cargos que editam cursos" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.editRoleIds} change={(editRoleIds) => patchConfig({ editRoleIds })} />
+        <MultiSelect label="Cargos que excluem cursos" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.deleteRoleIds} change={(deleteRoleIds) => patchConfig({ deleteRoleIds })} />
+        <MultiSelect label="Cargos que aprovam" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.approveRoleIds} change={(approveRoleIds) => patchConfig({ approveRoleIds })} />
+        <MultiSelect label="Cargos que cancelam" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.cancelRoleIds} change={(cancelRoleIds) => patchConfig({ cancelRoleIds })} />
+        <MultiSelect label="Cargos que concluem" options={roles.map((role) => ({ id: role.id, name: role.name }))} values={config.concludeRoleIds} change={(concludeRoleIds) => patchConfig({ concludeRoleIds })} />
       </CardContent>
     </Card>
     <div className="grid gap-4 xl:grid-cols-2">{courses.map((course) => <Card key={course.id}>
@@ -148,7 +160,7 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
       <CardHeader><CardTitle>{course.courseNumber} - {course.title}</CardTitle><CardDescription>{course.status} • {course.participants.length}{course.maxSlots ? `/${course.maxSlots}` : ""} inscritos</CardDescription></CardHeader>
       <CardContent className="space-y-4"><p className="text-sm">{course.authorizedRoleIds.length} cargo(s) e {course.authorizedUserIds.length} usuário(s) instrutores • {course.panelChannelId ? `#${channels.find((item) => item.id === course.panelChannelId)?.name ?? course.panelChannelId}` : "canal não configurado"}</p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setDraft({ id: course.id, courseNumber: course.courseNumber, title: course.title, emoji: course.emoji, color: course.color, description: course.description, bannerUrl: course.bannerUrl, imagePosition: course.imagePosition, panelChannelId: course.panelChannelId, authorizedRoleIds: course.authorizedRoleIds, authorizedUserIds: course.authorizedUserIds, participantRoleIds: course.participantRoleIds, viewerRoleIds: course.viewerRoleIds }); setEditing(true); }}><Pencil className="mr-2 h-4 w-4" />Editar</Button>
+          <Button size="sm" variant="outline" onClick={() => { setDraft({ id: course.id, courseNumber: course.courseNumber, title: course.title, category: course.category, displayOrder: course.displayOrder, status: course.status, emoji: course.emoji, color: course.color, description: course.description, bannerUrl: course.bannerUrl, imagePosition: course.imagePosition, panelChannelId: course.panelChannelId, authorizedRoleIds: course.authorizedRoleIds, authorizedUserIds: course.authorizedUserIds, participantRoleIds: course.participantRoleIds, viewerRoleIds: course.viewerRoleIds }); setEditing(true); }}><Pencil className="mr-2 h-4 w-4" />Editar</Button>
           <Button size="sm" variant="outline" onClick={async () => { await publishPoliceCourse(guild.id, botId, course.id, course.panelChannelId || config.defaultPanelChannelId); setMessage("Publicacao do painel solicitada."); }}>Publicar painel</Button>
           <Button size="sm" variant="destructive" onClick={async () => { if (window.confirm("Excluir este curso?")) { await deletePoliceCourse(guild.id, botId, course.id); setCourses((items) => items.filter((item) => item.id !== course.id)); } }}><Trash2 className="mr-2 h-4 w-4" />Excluir</Button>
         </div>

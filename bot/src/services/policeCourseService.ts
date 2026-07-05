@@ -36,7 +36,12 @@ export function startPoliceCourseService(context: BotContext) {
   context.socket.onPoliceCoursePanelUpdate((payload) => {
     const runtimeBotId = currentRuntimeBotId();
     if (payload.botId && runtimeBotId && payload.botId !== runtimeBotId) return;
-    if (!payload.courseId) return;
+    if (payload.action === "config_updated") {
+      void refreshPublishedCourses(context, payload.guildId)
+        .catch((error) => console.warn("[police-courses] falha ao sincronizar configuracao:", error instanceof Error ? error.message : error));
+      return;
+    }
+    if (!payload.courseId || payload.action === "course_deleted") return;
     void refreshOrPublishCourse(context, payload.guildId, payload.courseId, payload.action === "publish" ? payload.channelId : null)
       .catch((error) => console.warn("[police-courses] falha ao sincronizar painel:", error instanceof Error ? error.message : error));
   });
@@ -404,6 +409,21 @@ async function refreshOrPublishCourse(context: BotContext, guildId: string, cour
   else await updatePublishedPanel(context, guild, course, config);
 }
 
+async function refreshPublishedCourses(context: BotContext, guildId: string) {
+  const guild = context.client.guilds.cache.get(guildId);
+  if (!guild) return;
+  const [config, courses] = await Promise.all([
+    context.api.getPoliceCourseConfig(guildId),
+    context.api.listPoliceCourses(guildId)
+  ]);
+
+  await Promise.allSettled(
+    courses
+      .filter((course) => course.panelChannelId && course.panelMessageId)
+      .map((course) => updatePublishedPanel(context, guild, course, config))
+  );
+}
+
 async function publishCourse(context: BotContext, guild: Interaction["guild"] & {}, courseId: string, channelId: string, actorId: string | null) {
   const channel = await guild.channels.fetch(channelId);
   if (!channel?.isTextBased() || channel.isDMBased()) throw new Error("Canal de texto invalido.");
@@ -474,6 +494,7 @@ function coursePanel(course: PoliceCourse, config: PoliceCourseConfig) {
     `### ${escapeMarkdown(config.panelHeader || "North Police Department - Instructor Team")}`,
     "",
     `🚨 **CURSO DISPONÍVEL: ${escapeMarkdown(course.title.toUpperCase())}**`,
+    course.category ? `**Categoria:** ${escapeMarkdown(course.category)}` : "",
     "",
     `🚔 **INSTRUTOR**                                   ⏰ **HORÁRIO ${course.participants.length}${participantLimit}**`,
     `${formatInstructor(course)}                    ${formatSchedule(course)}`,
@@ -623,7 +644,14 @@ async function sendCourseLog(guild: Interaction["guild"] & {}, config: PoliceCou
 }
 
 function canManage(member: GuildMember, ownerId: string, configOrRoleIds: PoliceCourseConfig | string[]) {
-  const roleIds = Array.isArray(configOrRoleIds) ? configOrRoleIds : configOrRoleIds.allowedManagerRoles;
+  const roleIds = Array.isArray(configOrRoleIds)
+    ? configOrRoleIds
+    : [
+      ...configOrRoleIds.allowedManagerRoles,
+      ...configOrRoleIds.createRoleIds,
+      ...configOrRoleIds.editRoleIds,
+      ...configOrRoleIds.deleteRoleIds
+    ];
   const userIds = Array.isArray(configOrRoleIds) ? [] : configOrRoleIds.generalManagerUserIds;
   return member.id === ownerId || userIds.includes(member.id) || member.permissions.has(PermissionFlagsBits.Administrator) || roleIds.some((roleId) => member.roles.cache.has(roleId));
 }
@@ -635,7 +663,16 @@ function canTeach(member: GuildMember, ownerId: string, config: PoliceCourseConf
 function canControlCourse(member: GuildMember, ownerId: string, config: PoliceCourseConfig, course: PoliceCourse) {
   return member.id === course.instructorId
     || course.authorizedUserIds.includes(member.id)
-    || canManage(member, ownerId, { ...config, allowedManagerRoles: [...config.allowedManagerRoles, ...config.allowedFinishRoles] });
+    || canManage(member, ownerId, {
+      ...config,
+      allowedManagerRoles: [
+        ...config.allowedManagerRoles,
+        ...config.allowedFinishRoles,
+        ...config.cancelRoleIds,
+        ...config.concludeRoleIds,
+        ...config.approveRoleIds
+      ]
+    });
 }
 function inputRow(id: string, label: string, style: TextInputStyle, required: boolean) {
   return new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(style === TextInputStyle.Paragraph ? 1000 : 100));

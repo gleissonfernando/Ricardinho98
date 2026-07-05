@@ -12,11 +12,20 @@ export const POLICE_COURSES_MODULE_ID = "police-courses";
 const DEFAULT_CONFIG = {
   enabled: true,
   logChannelId: null,
+  approvalChannelId: null,
+  certificateChannelId: null,
+  notificationChannelId: null,
   defaultCategoryId: null,
   defaultPanelChannelId: null,
   generalManagerUserIds: [] as string[],
   allowedManagerRoles: [] as string[],
   allowedFinishRoles: [] as string[],
+  createRoleIds: [] as string[],
+  editRoleIds: [] as string[],
+  deleteRoleIds: [] as string[],
+  approveRoleIds: [] as string[],
+  cancelRoleIds: [] as string[],
+  concludeRoleIds: [] as string[],
   allowJoinAfterStart: false,
   allowLeaveAfterStart: true,
   dmOnFinish: false,
@@ -59,8 +68,10 @@ export async function savePoliceCourseConfig(botId: string, guildId: string, pat
   await getPoliceCourseConfig(botId, guildId);
   const { policeCourseConfigs } = await getMongoCollections();
   const allowed = pick(patch, [
-    "enabled", "logChannelId", "defaultCategoryId", "defaultPanelChannelId", "generalManagerUserIds",
-    "allowedManagerRoles", "allowedFinishRoles", "allowJoinAfterStart", "allowLeaveAfterStart",
+    "enabled", "logChannelId", "approvalChannelId", "certificateChannelId", "notificationChannelId",
+    "defaultCategoryId", "defaultPanelChannelId", "generalManagerUserIds",
+    "allowedManagerRoles", "allowedFinishRoles", "createRoleIds", "editRoleIds", "deleteRoleIds",
+    "approveRoleIds", "cancelRoleIds", "concludeRoleIds", "allowJoinAfterStart", "allowLeaveAfterStart",
     "dmOnFinish", "dmOnCancel", "lockChannelOnFinish", "lockChannelOnCancel",
     "deletePanelOnCancel", "removeDepartedMembers", "panelHeader", "panelText", "accentColor",
     "joinButtonStyle", "leaveButtonStyle"
@@ -78,7 +89,7 @@ export async function savePoliceCourseConfig(botId: string, guildId: string, pat
 
 export async function listPoliceCourses(botId: string, guildId: string) {
   const { policeCourses } = await getMongoCollections();
-  return (await policeCourses.find({ botId, guildId }).sort({ createdAt: -1 }).toArray()).map(courseDto);
+  return (await policeCourses.find({ botId, guildId }).sort({ displayOrder: 1, createdAt: -1 }).toArray()).map(courseDto);
 }
 
 export async function getPoliceCourse(botId: string, guildId: string, courseId: string) {
@@ -92,7 +103,7 @@ export async function createPoliceCourse(botId: string, guildId: string, input: 
   const { policeCourses } = await getMongoCollections();
   const now = new Date();
   const course: MongoPoliceCourse = {
-    _id: randomUUID(), botId, guildId, ...normalizeCourseInput(input), status: "draft",
+    _id: randomUUID(), botId, guildId, ...normalizeCourseInput(input), status: input.status ?? "draft",
     panelChannelId: input.panelChannelId?.trim() || null, panelMessageId: null, participants: [], createdBy: actorId,
     createdAt: now, updatedAt: now, updatedBy: actorId
   };
@@ -159,6 +170,12 @@ export async function setPoliceCoursePanel(botId: string, guildId: string, cours
   );
   if (!result) throw serviceError("Curso nao encontrado.", 404);
   await audit(botId, guildId, courseId, "course_published", actorId, { panelChannelId, panelMessageId });
+  emitRealtimeToRoom(dashboardLogRealtimeRoom(guildId, botId), "police-courses:updated", {
+    action: "course_published",
+    botId,
+    guildId,
+    courseId
+  });
   return courseDto(result);
 }
 
@@ -284,6 +301,8 @@ function emitChanged(botId: string, guildId: string, courseId: string | null, ac
 type CourseInput = {
   courseNumber: string;
   title: string;
+  category?: string | null;
+  displayOrder?: number;
   emoji?: string | null;
   color?: string | null;
   instructorId?: string | null;
@@ -301,12 +320,15 @@ type CourseInput = {
   participantRoleIds?: string[];
   viewerRoleIds?: string[];
   panelChannelId?: string | null;
+  status?: "draft" | "open" | "in_progress" | "finished" | "canceled";
 };
 
 function normalizeCourseInput(input: CourseInput) {
   return {
     courseNumber: input.courseNumber.trim(),
     title: input.title.trim(),
+    category: input.category?.trim() || null,
+    displayOrder: Number.isFinite(input.displayOrder) ? Math.max(0, Math.floor(input.displayOrder ?? 0)) : 0,
     emoji: input.emoji?.trim() || null,
     color: /^#[0-9a-f]{6}$/i.test(input.color ?? "") ? input.color ?? null : null,
     instructorId: input.instructorId?.trim() || null,
@@ -331,8 +353,10 @@ function normalizeCoursePatch(input: Partial<CourseInput>) {
   for (const [key, raw] of Object.entries(input)) {
     if (raw === undefined) continue;
     if (key === "maxSlots") value[key] = typeof raw === "number" && raw > 0 ? Math.floor(raw) : null;
+    else if (key === "displayOrder") value[key] = Number.isFinite(Number(raw)) ? Math.max(0, Math.floor(Number(raw))) : 0;
+    else if (key === "status" && ["draft", "open", "in_progress", "finished", "canceled"].includes(String(raw))) value[key] = raw;
     else if (key === "authorizedRoleIds" || key === "authorizedUserIds" || key === "participantRoleIds" || key === "viewerRoleIds") value[key] = Array.isArray(raw) ? [...new Set(raw.filter((item): item is string => typeof item === "string"))] : [];
-    else if (key === "instructorId" || key === "bannerUrl" || key === "panelChannelId" || key === "emoji" || key === "color") value[key] = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+    else if (key === "instructorId" || key === "bannerUrl" || key === "panelChannelId" || key === "emoji" || key === "color" || key === "category") value[key] = typeof raw === "string" && raw.trim() ? raw.trim() : null;
     else value[key] = typeof raw === "string" ? raw.trim() : raw;
   }
   return value;
@@ -341,7 +365,18 @@ function normalizeCoursePatch(input: Partial<CourseInput>) {
 function configDto(value: MongoPoliceCourseConfig) {
   return {
     ...value,
+    approvalChannelId: value.approvalChannelId ?? null,
+    certificateChannelId: value.certificateChannelId ?? null,
+    notificationChannelId: value.notificationChannelId ?? null,
     generalManagerUserIds: value.generalManagerUserIds ?? [],
+    allowedManagerRoles: value.allowedManagerRoles ?? [],
+    allowedFinishRoles: value.allowedFinishRoles ?? [],
+    createRoleIds: value.createRoleIds ?? [],
+    editRoleIds: value.editRoleIds ?? [],
+    deleteRoleIds: value.deleteRoleIds ?? [],
+    approveRoleIds: value.approveRoleIds ?? [],
+    cancelRoleIds: value.cancelRoleIds ?? [],
+    concludeRoleIds: value.concludeRoleIds ?? [],
     allowJoinAfterStart: value.allowJoinAfterStart === true,
     allowLeaveAfterStart: value.allowLeaveAfterStart !== false,
     id: value._id,
@@ -355,6 +390,8 @@ function courseDto(value: MongoPoliceCourse) {
     ...value,
     emoji: value.emoji ?? null,
     color: value.color ?? null,
+    category: value.category ?? null,
+    displayOrder: value.displayOrder ?? 0,
     authorizedRoleIds: value.authorizedRoleIds ?? [],
     authorizedUserIds: value.authorizedUserIds ?? [],
     participantRoleIds: value.participantRoleIds ?? [],
