@@ -152,7 +152,7 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
   const nameChanged = oldMember.displayName !== newMember.displayName || oldMember.nickname !== newMember.nickname;
   if (!changedRoleIds.size && !nameChanged) return;
   console.log(`[HIERARQUIA] Alteracao relevante detectada para ${newMember.user.tag}. Sincronizando os paineis do servidor.`);
-  scheduleHierarchyRefresh(newMember.guild, context);
+  await refreshHierarchyPanelsForGuild(newMember.guild, context, null, { allowCreate: false });
 }
 
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null, options: HierarchyRefreshOptions = {}) {
@@ -358,17 +358,17 @@ function renderHierarchyTextBlocks(memberSource: HierarchyMemberSource, panel: F
 
 export function collectHierarchyMembersForPanel(memberSource: HierarchyMemberSource, panel: FivemHierarchyPanel) {
   const entries: Array<{ blockId: string; member: GuildMember; panelId: string; roleId: string; userId: string }> = [];
-  const seenInBlock = new Set<string>();
   const members = getHierarchyMemberCache(memberSource);
+  const assignedUserIds = new Set<string>();
+  const activeBlocks = panel.hierarchies
+    .filter((item) => item.active && item.roleId)
+    .sort((a, b) => a.order - b.order);
 
-  for (const block of panel.hierarchies.filter((item) => item.active)) {
-    if (!block.roleId) continue;
-
+  for (const block of activeBlocks) {
     const membersWithRole = members.filter((member) => member.roles.cache.has(block.roleId) && !member.user?.bot);
     for (const member of membersWithRole.values()) {
-      const key = `${panel.id}:${block.id}:${member.id}`;
-      if (seenInBlock.has(key)) continue;
-      seenInBlock.add(key);
+      if (assignedUserIds.has(member.id)) continue;
+      assignedUserIds.add(member.id);
       entries.push({
         blockId: block.id,
         member,
