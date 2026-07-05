@@ -127,36 +127,12 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
 
   const nameChanged = oldMember.displayName !== newMember.displayName || oldMember.nickname !== newMember.nickname;
   if (!changedRoleIds.size && !nameChanged) return;
-
-  const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
-  const affectedPanelIds = new Set<string>();
-
-  for (const panel of panels) {
-    if (panel.guildId !== newMember.guild.id || !panel.enabled) continue;
-
-    const configuredRoleIds = configuredHierarchyRoleIds(panel);
-    if (!configuredRoleIds.size) continue;
-
-    if (changedRoleIds.size && intersects(changedRoleIds, configuredRoleIds)) {
-      affectedPanelIds.add(panel.id);
-      continue;
-    }
-
-    if (nameChanged && (memberHasAnyRole(oldMember, configuredRoleIds) || memberHasAnyRole(newMember, configuredRoleIds))) {
-      affectedPanelIds.add(panel.id);
-    }
-  }
-
-  if (!affectedPanelIds.size) return;
-
-  console.log(`[HIERARQUIA] Alteracao relevante detectada para ${newMember.user.tag}. Atualizando ${affectedPanelIds.size} painel(is).`);
-  for (const panelId of affectedPanelIds) {
-    scheduleHierarchyRefresh(newMember.guild, context, panelId);
-  }
+  console.log(`[HIERARQUIA] Alteracao relevante detectada para ${newMember.user.tag}. Sincronizando os paineis do servidor.`);
+  scheduleHierarchyRefresh(newMember.guild, context);
 }
 
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null, options: HierarchyRefreshOptions = {}) {
-  const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
+  const panels = await loadActiveHierarchyPanels(context);
   const lookup = panelId?.trim().toLowerCase() ?? null;
   const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
   if (!scoped.length) return;
@@ -354,34 +330,28 @@ function getHierarchyMemberCache(source: HierarchyMemberSource): HierarchyMember
   return "members" in source ? source.members.cache : source;
 }
 
-function configuredHierarchyRoleIds(panel: FivemHierarchyPanel) {
-  return new Set(panel.hierarchies
-    .filter((item) => item.active && item.roleId)
-    .map((item) => item.roleId));
-}
-
-function intersects(left: Set<string>, right: Set<string>) {
-  for (const value of left) {
-    if (right.has(value)) return true;
-  }
-  return false;
-}
-
-function memberHasAnyRole(member: GuildMember, roleIds: Set<string>) {
-  for (const roleId of roleIds) {
-    if (member.roles.cache.has(roleId)) return true;
-  }
-  return false;
-}
-
 function canEditHierarchyPanel(member: GuildMember, panel: FivemHierarchyPanel, hasManageGuild: boolean) {
   return hasManageGuild || panel.editorRoleIds.some((roleId) => member.roles.cache.has(roleId));
 }
 
 async function findHierarchyPanel(guildId: string, context: BotContext, unitId: string | null) {
-  const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
+  const panels = await loadActiveHierarchyPanels(context);
   const lookup = unitId?.toLowerCase() ?? "";
   return panels.find((panel) => panel.guildId === guildId && (panel.unitId?.toLowerCase() === lookup || panel.id === unitId)) ?? null;
+}
+
+async function loadActiveHierarchyPanels(context: BotContext) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await context.api.getActiveFivemHierarchyPanels();
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  console.error("[HIERARQUIA] Falha ao carregar paineis ativos apos 3 tentativas.", lastError);
+  return [];
 }
 
 function formatHierarchyMember(member: GuildMember, mode: FivemHierarchyPanel["displayMode"]) {
