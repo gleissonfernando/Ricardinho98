@@ -21,7 +21,7 @@ import {
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
 import type { PoliceCourse, PoliceCourseConfig } from "./apiClient";
-import { renderComponentsV2Panel } from "./panelVisualRenderer";
+import { resolvePanelImageUrl } from "./panelVisualRenderer";
 
 const MODULE_ID = "police-courses";
 const PREFIX = "police_course";
@@ -460,42 +460,75 @@ function coursePanel(course: PoliceCourse, config: PoliceCourseConfig) {
   const full = Boolean(course.maxSlots && course.participants.length >= course.maxSlots);
   const inProgressJoinBlocked = course.status === "in_progress" && !config.allowJoinAfterStart;
   const inProgressLeaveBlocked = course.status === "in_progress" && !config.allowLeaveAfterStart;
+  const participantLimit = course.maxSlots ? `/${course.maxSlots}` : "";
   const confirmed = course.participants.length
-    ? course.participants.map((item, index) => `${index + 1}. <@${item.userId}>`).join("\n")
+    ? course.participants.slice(0, 20).map((item, index) => {
+      const name = item.guildNickname || item.username || item.userId;
+      return `${index + 1}. ${escapeMarkdown(name)} | ${item.userId}`;
+    }).join("\n")
     : "Nenhum participante confirmado.";
-  const statusText = course.status === "finished"
-    ? "## Curso finalizado\nEste curso foi encerrado pela equipe responsavel."
-    : course.status === "canceled"
-      ? "## Curso cancelado\nEste curso foi cancelado pela equipe responsavel."
-      : course.status === "in_progress"
-        ? "## Curso em andamento\nAcompanhe as informacoes e a lista de participantes abaixo."
-        : config.panelText;
-  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:join:${course.id}`).setLabel("Entrar no Curso").setEmoji("✅").setStyle(STYLE[config.joinButtonStyle]).setDisabled(closed || full || inProgressJoinBlocked),
-    new ButtonBuilder().setCustomId(`${PREFIX}:leave:${course.id}`).setLabel("Sair do Curso").setEmoji("🚪").setStyle(STYLE[config.leaveButtonStyle]).setDisabled(closed || inProgressLeaveBlocked),
-    new ButtonBuilder().setCustomId(`${PREFIX}:begin:${course.id}`).setLabel("Iniciar Curso").setEmoji("▶️").setStyle(ButtonStyle.Primary).setDisabled(closed || course.status === "in_progress"),
-    new ButtonBuilder().setCustomId(`${PREFIX}:cancel:${course.id}`).setLabel("Cancelar Curso").setEmoji("❌").setStyle(ButtonStyle.Danger).setDisabled(closed)
+  const overflow = course.participants.length > 20 ? `\n...mais ${course.participants.length - 20} participante(s).` : "";
+  const statusLine = courseStatusLine(course);
+  const imageUrl = course.bannerUrl && course.imagePosition !== "none" ? resolvePanelImageUrl(course.bannerUrl) : null;
+  const content = [
+    `### ${escapeMarkdown(config.panelHeader || "North Police Department - Instructor Team")}`,
+    "",
+    `🚨 **CURSO DISPONÍVEL: ${escapeMarkdown(course.title.toUpperCase())}**`,
+    "",
+    `🚔 **INSTRUTOR**                                   ⏰ **HORÁRIO ${course.participants.length}${participantLimit}**`,
+    `${formatInstructor(course)}                    ${formatSchedule(course)}`,
+    "",
+    `📍 **LOCAL**`,
+    escapeMarkdown(course.location || "A definir"),
+    "",
+    `✅ **CONFIRMADOS (${course.participants.length}${participantLimit})**`,
+    `${confirmed}${overflow}`,
+    "",
+    `🆔 **ID DO CURSO**`,
+    escapeMarkdown(course.courseNumber),
+    statusLine ? `\n${statusLine}` : "",
+    course.description ? `\n📝 **DESCRIÇÃO**\n${escapeMarkdown(course.description)}` : ""
+  ].filter((line) => line !== "").join("\n");
+  const memberActions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:join:${course.id}`).setLabel("INSCREVER").setEmoji("✅").setStyle(STYLE[config.joinButtonStyle]).setDisabled(closed || full || inProgressJoinBlocked),
+    new ButtonBuilder().setCustomId(`${PREFIX}:leave:${course.id}`).setLabel("SAIR").setEmoji("🚪").setStyle(STYLE[config.leaveButtonStyle]).setDisabled(closed || inProgressLeaveBlocked)
   );
-  return renderComponentsV2Panel({
-    accentColor: color(course.color || config.accentColor),
-    moduleId: MODULE_ID,
-    headerText: `### ${config.panelHeader}`,
-    title: `${course.emoji ? `${course.emoji} ` : ""}CURSO DISPONIVEL: ${course.title}`,
-    description: statusText,
-    fields: [
-      `**INSTRUTOR**\n${course.instructorId ? `<@${course.instructorId}>` : escapeMarkdown(course.instructorName)}`,
-      `**DATA**\n${escapeMarkdown(course.date)}`,
-      `**HORARIO**\n${escapeMarkdown(course.time)}`,
-      `**LOCAL**\n${escapeMarkdown(course.location)}`,
-      `**CONFIRMADOS (${course.participants.length}${course.maxSlots ? `/${course.maxSlots}` : ""})**\n${confirmed}`,
-      `**ID DO CURSO**\n${escapeMarkdown(course.courseNumber)}`,
-      course.description ? `**DESCRICAO**\n${escapeMarkdown(course.description)}` : ""
-    ].filter(Boolean),
-    image: course.bannerUrl && course.imagePosition !== "none"
-      ? { imageEnabled: true, imagePosition: course.imagePosition === "thumbnail" ? "side" : course.imagePosition, imageUrl: course.bannerUrl }
-      : null,
-    actions: [actions.toJSON()]
-  });
+  const managerActions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:begin:${course.id}`).setLabel("INICIAR CURSO").setEmoji("▶️").setStyle(ButtonStyle.Primary).setDisabled(closed || course.status === "in_progress"),
+    new ButtonBuilder().setCustomId(`${PREFIX}:cancel:${course.id}`).setLabel("CANCELAR CURSO").setEmoji("❌").setStyle(ButtonStyle.Danger).setDisabled(closed)
+  );
+  const components: unknown[] = [{ type: 10, content }];
+
+  if (imageUrl) {
+    components.push({ type: 12, items: [{ media: { url: imageUrl }, description: course.title }] });
+  }
+
+  components.push({ type: 10, content: `<t:${Math.floor(Date.now() / 1000)}:d>, <t:${Math.floor(Date.now() / 1000)}:t>` });
+  components.push(memberActions.toJSON(), managerActions.toJSON());
+
+  return {
+    allowedMentions: { parse: [] as never[] },
+    components: [{ type: 17, accent_color: color(course.color || config.accentColor), components }],
+    flags: MessageFlags.IsComponentsV2 as const
+  };
+}
+
+function formatInstructor(course: PoliceCourse) {
+  const mention = course.instructorId ? `<@${course.instructorId}>` : escapeMarkdown(course.instructorName || "A definir");
+  return course.instructorId ? `${mention} | ${course.instructorId}` : mention;
+}
+
+function formatSchedule(course: PoliceCourse) {
+  const date = course.date && course.date !== "A definir" ? course.date : "A definir";
+  const time = course.time && course.time !== "A definir" ? course.time : "A definir";
+  return `${escapeMarkdown(date)} | ${escapeMarkdown(time)} | tarde`;
+}
+
+function courseStatusLine(course: PoliceCourse) {
+  if (course.status === "finished") return "🔒 **STATUS**\nCurso finalizado.";
+  if (course.status === "canceled") return "🔒 **STATUS**\nCurso cancelado.";
+  if (course.status === "in_progress") return "▶️ **STATUS**\nCurso em andamento.";
+  return "";
 }
 
 function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[], notice?: string) {
