@@ -623,7 +623,6 @@ async function publishFivemFacPanel(client: Client, context: BotContext, guildId
     guildId,
     messageId
   });
-  await sendFacLog(guild, settings, "Painel publicado", null, client.user?.id ?? null);
   console.log(`[fivem-fac] painel publicado em ${guild.name}.`);
   return saved;
 }
