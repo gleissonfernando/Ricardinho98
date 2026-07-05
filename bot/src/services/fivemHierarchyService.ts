@@ -471,11 +471,10 @@ function normalizeAutoUpdateIntervalSeconds(value: number | undefined) {
 }
 
 function formatHierarchyMember(member: GuildMember, mode: FivemHierarchyPanel["displayMode"]) {
-  const mentionWithDisplayName = `<@${member.id}> — ${member.displayName}`;
   if (mode === "display_name") return member.displayName;
   if (mode === "nickname") return member.nickname || member.displayName;
   if (mode === "name_with_id") return `${member.displayName} - ${member.id}`;
-  return mentionWithDisplayName;
+  return `<@${member.id}>`;
 }
 
 function formatHierarchyTitle(panel: FivemHierarchyPanel) {

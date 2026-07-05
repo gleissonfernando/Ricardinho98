@@ -3607,7 +3607,7 @@ function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; ro
               return (
                 <div className="rounded-md border border-zinc-800 bg-black/25 px-3 py-2" key={item.id}>
                   <p className="font-bold text-white">{[item.emoji, item.name].filter(Boolean).join(" ")}</p>
-                  <p className="mt-2 whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-zinc-300">{role ? `@${role.name} — ${role.name}` : empty}</p>
+                  <p className="mt-2 whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-zinc-300">{role ? `@${role.name}` : empty}</p>
                 </div>
               );
             })}
