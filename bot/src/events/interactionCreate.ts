@@ -18,6 +18,7 @@ import { handleFivemFinanceInteraction } from "../services/fivemFinanceService";
 import { handleFivemOrderInteraction } from "../services/fivemOrderService";
 import { handleFivemHierarchyInteraction } from "../services/fivemHierarchyService";
 import { handleFivemActionInteraction } from "../services/fivemActionService";
+import { handleAbsenceRemovalInteraction } from "../services/absenceRemovalService";
 import { handlePolicePatrolInteraction } from "../services/policePatrolReportService";
 import { handleManualPaymentInteraction } from "../services/manualPaymentService";
 import { handlePriceTableInteraction } from "../services/priceTableService";
@@ -99,6 +100,7 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
     return;
   }
   if (await handleFivemActionInteraction(interaction, context)) return;
+  if (await handleAbsenceRemovalInteraction(interaction, context)) return;
   if (await handlePolicePatrolInteraction(interaction, context)) return;
   if (await handlePoliceReportsInteraction(interaction, context)) return;
   if (await handlePoliceRhInteraction(interaction, context)) return;

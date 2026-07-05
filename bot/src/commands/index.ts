@@ -20,6 +20,7 @@ import { ticketCommand } from "./ticket";
 import { summonsCommand } from "./summons";
 import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./policePatrolReports";
 import { policeReportsCommand } from "../services/policeReportsService";
+import { removeCommand } from "../services/absenceRemovalService";
 import type { BotCommand } from "../types";
 
 export function createCommandCollection() {
@@ -48,6 +49,7 @@ export function createCommandCollection() {
     policePatrolReportCommand,
     viewPolicePatrolReportCommand,
     policeReportsCommand,
+    removeCommand,
     serverClonerCommand,
     serverGeneratorCommand
   ].forEach((command) => {
