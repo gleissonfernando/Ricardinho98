@@ -97,6 +97,7 @@ export const DEV_MODULES = [
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
   { id: "police-rh", label: "Policia - RH Ausencias e Adornos" },
   { id: "police-flight", label: "Policia - Escalacao DAF" },
+  { id: "police-courses", label: "Policia - Cursos e Treinamentos" },
   { id: "police-reports", label: "Policia - Denuncias IAB" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalizacao" }

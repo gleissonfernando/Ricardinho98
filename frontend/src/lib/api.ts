@@ -2111,6 +2111,44 @@ export async function uploadPoliceRhPanelImage(botId: string, guildId: string, f
   return data;
 }
 
+export async function getPoliceCoursesDashboard(guildId: string, botId: string) {
+  const { data } = await api.get<import("../types").PoliceCoursesDashboard>(`/police-courses/${guildId}`, { params: botParams(botId) });
+  return data;
+}
+
+export async function savePoliceCourseConfig(guildId: string, botId: string, payload: Partial<import("../types").PoliceCourseConfig>) {
+  const { data } = await api.patch<{ config: import("../types").PoliceCourseConfig }>(`/police-courses/${guildId}/config`, payload, { params: botParams(botId) });
+  return data.config;
+}
+
+export async function createPoliceCourse(guildId: string, botId: string, payload: Record<string, unknown>) {
+  const { data } = await api.post<{ course: import("../types").PoliceCourse }>(`/police-courses/${guildId}/courses`, payload, { params: botParams(botId) });
+  return data.course;
+}
+
+export async function updatePoliceCourse(guildId: string, botId: string, courseId: string, payload: Record<string, unknown>) {
+  const { data } = await api.patch<{ course: import("../types").PoliceCourse }>(`/police-courses/${guildId}/courses/${courseId}`, payload, { params: botParams(botId) });
+  return data.course;
+}
+
+export async function deletePoliceCourse(guildId: string, botId: string, courseId: string) {
+  await api.delete(`/police-courses/${guildId}/courses/${courseId}`, { params: botParams(botId) });
+}
+
+export async function publishPoliceCourse(guildId: string, botId: string, courseId: string, channelId?: string | null) {
+  await api.post(`/police-courses/${guildId}/courses/${courseId}/publish`, { channelId: channelId || null }, { params: botParams(botId) });
+}
+
+export async function uploadPoliceCourseBanner(guildId: string, botId: string, courseId: string, file: File) {
+  const uploadFile = await optimizeImageForUpload(file);
+  const { data } = await api.put<{ course: import("../types").PoliceCourse }>(
+    `/police-courses/${guildId}/courses/${courseId}/banner`,
+    uploadFile,
+    { headers: { "Content-Type": uploadFile.type }, params: botParams(botId) }
+  );
+  return data.course;
+}
+
 export async function runTagVerificationNow(botId: string, guildId: string) {
   const { data } = await api.post<{ result: import("../types").TagVerificationRunResult }>(
     `/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/tag-verification/run`,

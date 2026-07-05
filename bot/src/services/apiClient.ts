@@ -66,6 +66,9 @@ export type PolicePatrolReport = { id: string; botId: string; guildId: string; o
 export type PolicePatrolMessage = { id: string; discordMessageId: string; authorId: string; content: string; attachments: Array<{ id: string; name: string; url: string; contentType: string | null; size: number }>; embeds: unknown[]; stickers: Array<{ id: string; name: string; format: number }>; emojis: string[]; createdAt: string };
 export type OpenPointSettings = { id: string; botId: string; guildId: string; enabled: boolean; allowedRoleIds: string[]; fineChannelId: string | null; fineRoleId: string | null; justificationChannelId: string | null; logChannelId: string | null; dmBannerUrl: string | null; fineBannerUrl: string | null; fineMode: "once_at_3" | "every_after_3"; createdAt: string; updatedAt: string };
 export type OpenPointCounter = { id: string; botId: string; guildId: string; userId: string; totalNotifications: number; lastNotificationAt: string | null; fineGeneratedAt: string | null; history: Array<{ appliedBy: string; at: string; reason: string }>; resetHistory: Array<{ resetBy: string; at: string; previousTotal: number }>; updatedAt: string };
+export type PoliceCourseConfig = { id: string; botId: string; guildId: string; enabled: boolean; logChannelId: string | null; defaultCategoryId: string | null; defaultPanelChannelId: string | null; allowedManagerRoles: string[]; allowedFinishRoles: string[]; dmOnFinish: boolean; dmOnCancel: boolean; lockChannelOnFinish: boolean; lockChannelOnCancel: boolean; deletePanelOnCancel: boolean; removeDepartedMembers: boolean; panelHeader: string; panelText: string; accentColor: string; joinButtonStyle: "primary" | "secondary" | "success" | "danger"; leaveButtonStyle: "primary" | "secondary" | "success" | "danger"; createdAt: string; updatedAt: string };
+export type PoliceCourseParticipant = { userId: string; guildNickname: string | null; username: string; passportId: string | null; joinedAt: string };
+export type PoliceCourse = { id: string; botId: string; guildId: string; courseNumber: string; title: string; instructorId: string | null; instructorName: string; date: string; time: string; location: string; description: string; notes: string; maxSlots: number | null; bannerUrl: string | null; status: "open" | "in_progress" | "finished" | "canceled"; panelChannelId: string | null; panelMessageId: string | null; participants: PoliceCourseParticipant[]; createdBy: string | null; createdAt: string; updatedAt: string };
 
 export type ManualRegistrationField = {
   enabled: boolean;
@@ -2399,6 +2402,51 @@ export class ApiClient {
       timeout: 12_000
     });
     return data;
+  }
+
+  async getPoliceCourseConfig(guildId: string) {
+    const { data } = await this.http.get<{ config: PoliceCourseConfig }>(`/police-courses/bot/${guildId}/config`);
+    return data.config;
+  }
+
+  async savePoliceCourseConfig(guildId: string, input: Partial<PoliceCourseConfig> & { actorId?: string }) {
+    const { data } = await this.http.patch<{ config: PoliceCourseConfig }>(`/police-courses/bot/${guildId}/config`, input);
+    return data.config;
+  }
+
+  async listPoliceCourses(guildId: string) {
+    const { data } = await this.http.get<{ courses: PoliceCourse[] }>(`/police-courses/bot/${guildId}/courses`);
+    return data.courses;
+  }
+
+  async getPoliceCourse(guildId: string, courseId: string) {
+    const { data } = await this.http.get<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}`);
+    return data.course;
+  }
+
+  async createPoliceCourse(guildId: string, input: Record<string, unknown>) {
+    const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses`, input);
+    return data.course;
+  }
+
+  async joinPoliceCourse(guildId: string, courseId: string, input: { userId: string; guildNickname: string | null; username: string; passportId?: string | null }) {
+    const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/join`, input);
+    return data.course;
+  }
+
+  async leavePoliceCourse(guildId: string, courseId: string, userId: string) {
+    const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/leave`, { userId });
+    return data.course;
+  }
+
+  async closePoliceCourse(guildId: string, courseId: string, status: "finished" | "canceled", actorId: string) {
+    const { data } = await this.http.post<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/close`, { actorId, status });
+    return data.course;
+  }
+
+  async setPoliceCoursePanel(guildId: string, courseId: string, input: { panelChannelId: string; panelMessageId: string; actorId?: string | null }) {
+    const { data } = await this.http.patch<{ course: PoliceCourse }>(`/police-courses/bot/${guildId}/courses/${courseId}/panel`, input);
+    return data.course;
   }
 }
 

@@ -19,6 +19,7 @@ import { startPolicePatrolReportService } from "../services/policePatrolReportSe
 import { startPoliceReportsService } from "../services/policeReportsService";
 import { startPoliceRhService } from "../services/policeRhService";
 import { startPoliceFlightService } from "../services/policeFlightService";
+import { startPoliceCourseService } from "../services/policeCourseService";
 import { startGiveawayService } from "../services/giveawayService";
 import { startGuildSettingsCache } from "../services/guildSettingsCache";
 import { startImageAntiSpamService } from "../services/imageAntiSpamService";
@@ -105,6 +106,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
     if (wasTagVerificationEnabled && !isBotModuleEnabled("tag-verification")) stopTagVerificationService();
     if (!wasHierarchyEnabled && isBotModuleEnabled("fivem-hierarchy")) startFivemHierarchyService(client, context);
     if (!wasPoliceFlightEnabled && isBotModuleEnabled("police-flight")) startPoliceFlightService(client, context);
+    if (isBotModuleEnabled("police-courses")) startPoliceCourseService(context);
     if (isBotModuleEnabled("police-rh")) startPoliceRhService(client, context);
   });
   context.socket.onSelfBotEnsureSetup((payload) => {
@@ -186,6 +188,9 @@ export async function handleReady(client: Client<true>, context: BotContext) {
   }
   if (isBotModuleEnabled("police-flight")) {
     startPoliceFlightService(client, context);
+  }
+  if (isBotModuleEnabled("police-courses")) {
+    startPoliceCourseService(context);
   }
   if (isBotModuleEnabled("manual-registration")) {
     startManualRegistrationService(client, context);

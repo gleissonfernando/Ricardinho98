@@ -53,6 +53,7 @@ import { FacAbsencePanel } from "../components/fivem/FacAbsencePanel";
 import { FivemActionsPanel } from "../components/fivem/FivemActionsPanel";
 import { CommunicationPanel } from "../components/communication/CommunicationPanel";
 import { PolicePatrolReportsPanel } from "../components/fivem/PolicePatrolReportsPanel";
+import { PoliceCoursesPanel } from "../components/police/PoliceCoursesPanel";
 import { FivemFinancePanel } from "../components/fivem/FivemFinancePanel";
 import { FivemOrdersManager } from "../components/fivem/FivemOrdersPanel";
 import { FivemResourceMultiSelect, FivemResourceSelect } from "../components/fivem/FivemResourceSelect";
@@ -527,6 +528,13 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "police-patrol-reports"
   },
   {
+    id: "police-courses",
+    title: "Cursos / Treinamentos",
+    description: "Cadastro, publicacao e controle de participantes em cursos policiais.",
+    icon: ListChecks,
+    view: "police-courses"
+  },
+  {
     id: "verification",
     title: "Usuarios",
     description: "Define quais usuários podem entrar e configurar este painel.",
@@ -601,6 +609,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "police-reports": "police-reports",
   "police-flight": "police-flight",
   "police-rh": "police-rh",
+  "police-courses": "police-courses",
   "rh-ausencias-adornos": "police-rh",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
@@ -1364,6 +1373,13 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           <PoliceFlightPanel
             botId={activeBotId}
             canManage={canManageModule(selectedBot, "police-flight", canManageDashboard)}
+            guild={selectedGuild}
+          />
+        ) : null}
+        {activeView === "police-courses" && selectedGuild ? (
+          <PoliceCoursesPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "police-courses", canManageDashboard)}
             guild={selectedGuild}
           />
         ) : null}

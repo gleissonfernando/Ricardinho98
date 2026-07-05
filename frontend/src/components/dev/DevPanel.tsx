@@ -166,6 +166,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "police-reports", label: "Policia - Denuncias IAB" },
   { id: "police-rh", label: "Policia - RH Ausencias e Adornos" },
   { id: "police-flight", label: "Policia - Escalacao DAF" },
+  { id: "police-courses", label: "Policia - Cursos e Treinamentos" },
   { id: "dm-system", label: "Policia - Sistema de DM" },
   { id: "summons-system", label: "Policia - Sistema de Intimacao" },
   { id: "open-point-notification", label: "Policia - Notificacao de Ponto Aberto" },
@@ -514,7 +515,7 @@ const botMenuItems: BotMenuItem[] = [
     label: "Policia",
     description: "RH, comunicacao, intimacoes, ponto aberto, hierarquia, acoes e relatorios policiais",
     icon: ShieldCheck,
-    moduleIds: ["police-rh", "fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports", "police-flight", "dm-system", "summons-system", "open-point-notification"]
+    moduleIds: ["police-rh", "fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports", "police-flight", "police-courses", "dm-system", "summons-system", "open-point-notification"]
   },
   {
     id: "integrations",
@@ -4446,6 +4447,7 @@ function isPoliceReleaseModule(moduleId: string) {
     || moduleId === "police-reports"
     || moduleId === "police-flight"
     || moduleId === "police-rh"
+    || moduleId === "police-courses"
     || moduleId === "dm-system"
     || moduleId === "summons-system"
     || moduleId === "open-point-notification";

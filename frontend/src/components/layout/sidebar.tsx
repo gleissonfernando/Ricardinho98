@@ -84,6 +84,7 @@ export type ViewId =
   | "police-reports"
   | "police-flight"
   | "police-rh"
+  | "police-courses"
   | "rh-ausencias-adornos"
   | "fivem-orders"
   | "fivem-families"
@@ -167,6 +168,7 @@ const navItems: NavItem[] = [
   { id: "police-reports", label: "Denuncias IAB", icon: ShieldAlert, moduleId: "police-reports" },
   { id: "police-flight", label: "Escalacao DAF", icon: Radio, moduleId: "police-flight" },
   { id: "rh-ausencias-adornos", label: "RH - Ausências e Adornos", icon: CalendarClock, moduleIds: ["police-rh", "fivem-absences", "fivem-fac"] },
+  { id: "police-courses", label: "Cursos / Treinamentos", icon: ListChecks, moduleId: "police-courses" },
   { id: "fivem-orders", label: "Encomendas RP", icon: Archive, moduleId: "fivem-orders" },
   { id: "fivem-families", label: "Famílias", icon: Users, moduleIds: ["fivem-orders", "fivem-drugs", "fivem-washing"] },
   { id: "fivem-washing", label: "Sistema de Lavagem", icon: CircleDollarSign, moduleId: "fivem-washing" },
@@ -197,6 +199,7 @@ function navSectionForItem(item: NavItem): NavSectionId {
     || item.id === "police-flight"
     || item.id === "police-rh"
     || item.id === "rh-ausencias-adornos"
+    || item.id === "police-courses"
     || item.id === "dm-system"
     || item.id === "summons-system"
     || item.id === "open-point-notification"
@@ -206,6 +209,7 @@ function navSectionForItem(item: NavItem): NavSectionId {
     || item.moduleId === "police-reports"
     || item.moduleId === "police-flight"
     || item.moduleId === "police-rh"
+    || item.moduleId === "police-courses"
     || item.moduleId === "dm-system"
     || item.moduleId === "summons-system"
     || item.moduleId === "open-point-notification"

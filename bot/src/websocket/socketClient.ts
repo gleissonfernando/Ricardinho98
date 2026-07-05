@@ -254,6 +254,7 @@ export class BotSocketClient {
   private policeReportsPanelUpdateHandler: ((payload: PoliceReportsPanelUpdateEvent) => void) | null = null;
   private policeRhPanelUpdateHandler: ((payload: PoliceRhPanelUpdateEvent) => void) | null = null;
   private policeFlightPanelUpdateHandler: ((payload: PoliceFlightPanelUpdateEvent, acknowledge?: (result: PoliceFlightPanelUpdateResult) => void) => void) | null = null;
+  private policeCoursePanelUpdateHandler: ((payload: { action: string; botId?: string | null; guildId: string; courseId?: string | null; channelId?: string | null }) => void) | null = null;
   private fivemFacAbsenceUpdateHandler: ((payload: FivemFacAbsenceUpdateEvent) => void) | null = null;
   private missionToolsSettingsHandler: ((payload: MissionToolsSettingsEvent) => void) | null = null;
   private missionToolsPanelPublishHandler: ((payload: MissionToolsPanelPublishEvent) => void) | null = null;
@@ -365,6 +366,7 @@ export class BotSocketClient {
     if (this.policeReportsPanelUpdateHandler) this.socket.on("police-reports:panel_update", this.policeReportsPanelUpdateHandler);
     if (this.policeRhPanelUpdateHandler) this.socket.on("police-rh:panel_update", this.policeRhPanelUpdateHandler);
     if (this.policeFlightPanelUpdateHandler) this.socket.on("police-flight:panel_update", this.policeFlightPanelUpdateHandler);
+    if (this.policeCoursePanelUpdateHandler) this.socket.on("police-courses:panel_update", this.policeCoursePanelUpdateHandler);
 
     if (this.fivemFacAbsenceUpdateHandler) {
       this.socket.on("fivem:fac:absence_updated", this.fivemFacAbsenceUpdateHandler);
@@ -586,6 +588,12 @@ export class BotSocketClient {
     this.policeFlightPanelUpdateHandler = handler;
     this.socket?.off("police-flight:panel_update");
     this.socket?.on("police-flight:panel_update", handler);
+  }
+
+  onPoliceCoursePanelUpdate(handler: (payload: { action: string; botId?: string | null; guildId: string; courseId?: string | null; channelId?: string | null }) => void) {
+    this.policeCoursePanelUpdateHandler = handler;
+    this.socket?.off("police-courses:panel_update");
+    this.socket?.on("police-courses:panel_update", handler);
   }
 
   onFivemFacAbsenceUpdated(handler: (payload: FivemFacAbsenceUpdateEvent) => void) {

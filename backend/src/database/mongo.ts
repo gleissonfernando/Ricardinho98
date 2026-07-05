@@ -763,6 +763,76 @@ export type MongoLogEntry = {
   createdAt: Date;
 };
 
+export type MongoPoliceCourseParticipant = {
+  userId: string;
+  guildNickname: string | null;
+  username: string;
+  passportId: string | null;
+  joinedAt: Date;
+};
+
+export type MongoPoliceCourseConfig = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  enabled: boolean;
+  logChannelId: string | null;
+  defaultCategoryId: string | null;
+  defaultPanelChannelId: string | null;
+  allowedManagerRoles: string[];
+  allowedFinishRoles: string[];
+  dmOnFinish: boolean;
+  dmOnCancel: boolean;
+  lockChannelOnFinish: boolean;
+  lockChannelOnCancel: boolean;
+  deletePanelOnCancel: boolean;
+  removeDepartedMembers: boolean;
+  panelHeader: string;
+  panelText: string;
+  accentColor: string;
+  joinButtonStyle: "primary" | "secondary" | "success" | "danger";
+  leaveButtonStyle: "primary" | "secondary" | "success" | "danger";
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
+};
+
+export type MongoPoliceCourse = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  courseNumber: string;
+  title: string;
+  instructorId: string | null;
+  instructorName: string;
+  date: string;
+  time: string;
+  location: string;
+  description: string;
+  notes: string;
+  maxSlots: number | null;
+  bannerUrl: string | null;
+  status: "open" | "in_progress" | "finished" | "canceled";
+  panelChannelId: string | null;
+  panelMessageId: string | null;
+  participants: MongoPoliceCourseParticipant[];
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: string | null;
+};
+
+export type MongoPoliceCourseLog = {
+  _id: string;
+  botId: string;
+  guildId: string;
+  courseId: string | null;
+  action: string;
+  actorId: string | null;
+  details: Record<string, unknown>;
+  createdAt: Date;
+};
+
 export type MongoSocialNotification = {
   _id: string;
   botId?: string | null;
@@ -2850,6 +2920,9 @@ export async function getMongoCollections() {
     policePatrolMessages: db.collection<MongoPolicePatrolMessage>("police_patrol_messages"),
     policePatrolAudits: db.collection<MongoPolicePatrolAudit>("police_patrol_audits"),
     policePatrolFiles: db.collection<MongoPolicePatrolFile>("police_patrol_files"),
+    policeCourseConfigs: db.collection<MongoPoliceCourseConfig>("police_course_configs"),
+    policeCourses: db.collection<MongoPoliceCourse>("police_courses"),
+    policeCourseLogs: db.collection<MongoPoliceCourseLog>("police_course_logs"),
     fivemFacSettings: db.collection<MongoFivemFacSettings>("fivem_fac_settings"),
     fivemFacAbsences: db.collection<MongoFivemFacAbsence>("fivem_fac_absences"),
     imageAntiSpamSettings: db.collection<MongoImageAntiSpamSettings>("image_anti_spam_settings"),
@@ -2992,6 +3065,10 @@ async function createMongoIndexes(db: Db) {
     db.collection<MongoFivemHierarchyPanel>("fivem_hierarchy_panels").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
     db.collection<MongoFivemHierarchyPanel>("fivem_hierarchy_panels").createIndex({ botId: 1, guildId: 1, enabled: 1 }),
     db.collection<MongoFivemHierarchyLog>("fivem_hierarchy_logs").createIndex({ botId: 1, guildId: 1, panelId: 1, createdAt: -1 }),
+    db.collection<MongoPoliceCourseConfig>("police_course_configs").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
+    db.collection<MongoPoliceCourse>("police_courses").createIndex({ botId: 1, guildId: 1, courseNumber: 1 }, { unique: true }),
+    db.collection<MongoPoliceCourse>("police_courses").createIndex({ botId: 1, guildId: 1, status: 1, updatedAt: -1 }),
+    db.collection<MongoPoliceCourseLog>("police_course_logs").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
     db.collection<MongoGlobalBlacklistSafeBotSettings>("global_blacklist_settings").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
     db.collection<MongoGlobalBlacklistEntry>("global_blacklist_entries").createIndex({ userId: 1, active: 1 }),
     db.collection<MongoGlobalBlacklistEntry>("global_blacklist_entries").createIndex({ botId: 1, guildId: 1, active: 1 }),

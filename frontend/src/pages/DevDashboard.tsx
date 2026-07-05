@@ -1105,6 +1105,7 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "police-reports": ShieldAlert,
     "police-flight": Radio,
     "police-rh": CalendarClock,
+    "police-courses": CalendarClock,
     "dm-system": AtSign,
     "summons-system": ShieldAlert
   };
@@ -1119,6 +1120,7 @@ function isPoliceModule(moduleId: string) {
     || moduleId === "patrol-reports"
     || moduleId === "police-reports"
     || moduleId === "police-rh"
+    || moduleId === "police-courses"
     || moduleId === "dm-system"
     || moduleId === "summons-system";
 }
