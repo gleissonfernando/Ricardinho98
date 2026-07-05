@@ -48,7 +48,8 @@ export const hierarchyCommand: BotCommand = {
         await interaction.editReply("Unidade de hierarquia nao encontrada ou desativada.");
         return;
       }
-      await interaction.editReply(createHierarchyPayload(interaction.guild, panel, panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition, imageUrl: panel.imageUrl } : null));
+      const members = await fetchHierarchyMembers(interaction.guild);
+      await interaction.editReply(createHierarchyPayload(interaction.guild, panel, panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition, imageUrl: panel.imageUrl } : null, [], members));
       return;
     }
     const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
@@ -137,13 +138,13 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
   const lookup = panelId?.trim().toLowerCase() ?? null;
   const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
   if (!scoped.length) return;
-  await Promise.all([
-    guild.members.fetch(),
+  const [members] = await Promise.all([
+    fetchHierarchyMembers(guild),
     guild.roles.fetch(),
     guild.channels.fetch()
   ]);
   for (const panel of scoped) {
-    await publishHierarchyPanelOnce(guild, context, panel);
+    await publishHierarchyPanelOnce(guild, context, panel, members);
   }
 }
 
@@ -151,7 +152,7 @@ export async function atualizarTodasHierarquias(guild: Guild, context: BotContex
   await refreshHierarchyPanelsForGuild(guild, context, null);
 }
 
-async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel) {
+async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache) {
   const key = `${guild.id}:${panel.id}`;
   const current = publishingPanels.get(key);
   if (current) {
@@ -159,19 +160,19 @@ async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, pane
     return;
   }
 
-  const task = publishHierarchyPanel(guild, context, panel).finally(() => {
+  const task = publishHierarchyPanel(guild, context, panel, members).finally(() => {
     publishingPanels.delete(key);
   });
   publishingPanels.set(key, task);
   await task;
 }
 
-async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel) {
+async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache) {
   if (!panel.enabled || !panel.panelChannelId) return;
   const channel = await guild.channels.fetch(panel.panelChannelId).catch(() => null);
   if (!channel || !("send" in channel) || !("messages" in channel)) return;
   const visuals = await getPanelVisualSlots(context, guild.id, panel.id);
-  const payload = createHierarchyPayload(guild, panel, visuals[0] ?? null, visuals.slice(1));
+  const payload = createHierarchyPayload(guild, panel, visuals[0] ?? null, visuals.slice(1), members);
   let message = panel.panelMessageId ? await channel.messages.fetch(panel.panelMessageId).catch(() => null) : null;
   if (message) {
     await message.edit(payload);
@@ -183,7 +184,7 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
   }
 }
 
-function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual: PanelVisualConfig | null, extraImages: PanelVisualConfig[] = []) {
+function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual: PanelVisualConfig | null, extraImages: PanelVisualConfig[] = [], members?: HierarchyMemberCache) {
   const fallbackVisual: PanelVisualConfig | null = panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition === "bottom" ? "bottom" : panel.imagePosition, imageUrl: panel.imageUrl } : null;
   const footerText = panel.footerEnabled ? (panel.useGlobalFooter ? panel.globalFooterText : panel.footerText) : null;
   const footerIconUrl = panel.footerEnabled ? (panel.useGlobalFooter ? panel.globalFooterIconUrl : panel.footerIconUrl) : null;
@@ -202,7 +203,7 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
     : { type: 10, content: header });
 
   pushExtraHierarchyMedia(components, extraImages, ["below_title"], panel.title);
-  renderHierarchyTextChunks(guild, panel).forEach((content) => components.push({ type: 10, content }));
+  renderHierarchyTextChunks(members ?? guild, panel).forEach((content) => components.push({ type: 10, content }));
   pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["bottom", "footer"], panel.title);
   pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer", "below_text"], panel.title);
 
@@ -236,8 +237,8 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
   });
 }
 
-function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
-  const membersByBlock = collectHierarchyMembersForPanel(guild, panel).reduce((acc, item) => {
+function renderHierarchyTextChunks(memberSource: HierarchyMemberSource, panel: FivemHierarchyPanel) {
+  const membersByBlock = collectHierarchyMembersForPanel(memberSource, panel).reduce((acc, item) => {
     const current = acc.get(item.blockId) ?? [];
     current.push(item.member);
     acc.set(item.blockId, current);
@@ -262,14 +263,15 @@ function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
   return chunkHierarchyBlocks(blocks);
 }
 
-export function collectHierarchyMembersForPanel(guild: Pick<Guild, "members">, panel: FivemHierarchyPanel) {
+export function collectHierarchyMembersForPanel(memberSource: HierarchyMemberSource, panel: FivemHierarchyPanel) {
   const entries: Array<{ blockId: string; member: GuildMember; panelId: string; roleId: string; userId: string }> = [];
   const seenInBlock = new Set<string>();
+  const members = getHierarchyMemberCache(memberSource);
 
   for (const block of panel.hierarchies.filter((item) => item.active)) {
     if (!block.roleId) continue;
 
-    const membersWithRole = guild.members.cache.filter((member) => member.roles.cache.has(block.roleId));
+    const membersWithRole = members.filter((member) => member.roles.cache.has(block.roleId));
     for (const member of membersWithRole.values()) {
       const key = `${panel.id}:${block.id}:${member.id}`;
       if (seenInBlock.has(key)) continue;
@@ -285,6 +287,25 @@ export function collectHierarchyMembersForPanel(guild: Pick<Guild, "members">, p
   }
 
   return entries;
+}
+
+type HierarchyMemberCache = {
+  filter(predicate: (member: GuildMember) => boolean): { values(): IterableIterator<GuildMember> };
+};
+
+type HierarchyMemberSource = Pick<Guild, "members"> | HierarchyMemberCache;
+
+async function fetchHierarchyMembers(guild: Guild): Promise<HierarchyMemberCache> {
+  try {
+    return await guild.members.fetch();
+  } catch (error) {
+    console.error(`[HIERARQUIA] Falha ao buscar membros atualizados do servidor ${guild.id}. Verifique SERVER MEMBERS INTENT no Developer Portal.`, error);
+    return guild.members.cache;
+  }
+}
+
+function getHierarchyMemberCache(source: HierarchyMemberSource): HierarchyMemberCache {
+  return "members" in source ? source.members.cache : source;
 }
 
 function configuredHierarchyRoleIds(panel: FivemHierarchyPanel) {

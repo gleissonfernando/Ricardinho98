@@ -76,6 +76,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
     const wasTemporaryVoiceEnabled = isBotModuleEnabled("temporary-voice");
     const wereLogsEnabled = isBotModuleEnabled("logs");
     const wasTagVerificationEnabled = isBotModuleEnabled("tag-verification");
+    const wasHierarchyEnabled = isBotModuleEnabled("fivem-hierarchy");
     setRuntimeEnabledModules(payload.enabledModules);
     lastRuntimeModuleSignature = nextSignature;
     clearRuntimeModuleAuthorization();
@@ -100,6 +101,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
     if (!wereLogsEnabled && isBotModuleEnabled("logs")) startAutomatedLogService(client, context);
     if (!wasTagVerificationEnabled && isBotModuleEnabled("tag-verification")) void startTagVerificationService(client, context);
     if (wasTagVerificationEnabled && !isBotModuleEnabled("tag-verification")) stopTagVerificationService();
+    if (!wasHierarchyEnabled && isBotModuleEnabled("fivem-hierarchy")) startFivemHierarchyService(client, context);
   });
   context.socket.onSelfBotEnsureSetup((payload) => {
     if (payload.botId && runtimeBotId && payload.botId !== runtimeBotId) {
@@ -252,6 +254,7 @@ async function reconcileRuntimeModules(client: Client<true>, context: BotContext
   const wasMissionToolsEnabled = isBotModuleEnabled("mission-tools");
   const wasTemporaryVoiceEnabled = isBotModuleEnabled("temporary-voice");
   const wasTagVerificationEnabled = isBotModuleEnabled("tag-verification");
+  const wasHierarchyEnabled = isBotModuleEnabled("fivem-hierarchy");
   const runtimeModules = runtimeAccess.active ? runtimeAccess.enabledModules : [];
   const nextSignature = runtimeModuleSignature(runtimeAccess.active, runtimeAccess.botId, runtimeModules);
 
@@ -286,6 +289,9 @@ async function reconcileRuntimeModules(client: Client<true>, context: BotContext
   }
   if (wasTagVerificationEnabled && !isBotModuleEnabled("tag-verification")) {
     stopTagVerificationService();
+  }
+  if (!wasHierarchyEnabled && isBotModuleEnabled("fivem-hierarchy")) {
+    startFivemHierarchyService(client, context);
   }
 }
 

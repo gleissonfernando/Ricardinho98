@@ -29,6 +29,16 @@ test('mantem o mesmo membro em todos os paineis onde possui cargo', () => {
   assert.deepStrictEqual(swatMembers.map((entry) => `${entry.panelId}:${entry.blockId}:${entry.userId}`), ['panel-swat:block-swat:user-1']);
 });
 
+test('usa a colecao de membros retornada pelo fetch para montar o painel', () => {
+  const member = fakeMember('user-1', ['role-traffic']);
+  const members = fakeMemberCollection([member]);
+  const panel = fakePanel('panel-traffic', 'traffic', 'role-traffic');
+
+  const trafficMembers = collectHierarchyMembersForPanel(members as any, panel as any);
+
+  assert.deepStrictEqual(trafficMembers.map((entry) => `${entry.panelId}:${entry.blockId}:${entry.userId}`), ['panel-traffic:block-traffic:user-1']);
+});
+
 test('mantem o mesmo membro em dez paineis independentes quando ele possui dez cargos', () => {
   const units = ['daf', 'swat', 'pf', 'prf', 'trafico', 'bope', 'core', 'exercito', 'rota', 'pc'];
   const member = fakeMember('user-10', units.map((unit) => `role-${unit}`));
@@ -82,11 +92,16 @@ function fakeMember(id: string, roleIds: string[]) {
 }
 
 function fakeGuild(members: Array<ReturnType<typeof fakeMember>>) {
+  const cache = fakeMemberCollection(members);
+  return { members: { cache } };
+}
+
+function fakeMemberCollection(members: Array<ReturnType<typeof fakeMember>>) {
   const cache = new Map(members.map((member) => [member.id, member])) as Map<string, ReturnType<typeof fakeMember>> & {
     filter: (predicate: (member: ReturnType<typeof fakeMember>) => boolean) => Map<string, ReturnType<typeof fakeMember>>;
   };
   cache.filter = (predicate) => new Map([...cache].filter(([, member]) => predicate(member)));
-  return { members: { cache } };
+  return cache;
 }
 
 function fakePanel(id: string, unitId: string, roleId: string) {

@@ -322,8 +322,3 @@ async function resolveMember(member: GuildMember | PartialGuildMember) {
 
   return member.fetch().catch(() => null);
 }
-
-function rolesChangedBetween(oldMember: GuildMember, newMember: GuildMember) {
-  if (oldMember.roles.cache.size !== newMember.roles.cache.size) return true;
-  return oldMember.roles.cache.some((role) => !newMember.roles.cache.has(role.id));
-}
