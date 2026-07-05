@@ -10,6 +10,7 @@ import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRend
 const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
 const SUMMONS_TEAM_NAME = "Equipe AB";
+const DISCORD_ROLE_SELECT_LIMIT = 25;
 const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
 const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
 
@@ -86,8 +87,8 @@ export async function showSummonsConfigPanel(interaction: ChatInputCommandIntera
     ),
     new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:category`).setPlaceholder("Categoria dos canais").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1)),
     new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:logs`).setPlaceholder("Canal de logs").setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1)),
-    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:roles`).setPlaceholder("Cargos autorizados").setMinValues(0).setMaxValues(10)),
-    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:moderators`).setPlaceholder("Corregedoria / moderação").setMinValues(0).setMaxValues(10))
+    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:roles`).setPlaceholder("Cargos que podem criar intimações").setMinValues(0).setMaxValues(DISCORD_ROLE_SELECT_LIMIT)),
+    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:moderators`).setPlaceholder("Cargos que gerenciam intimações").setMinValues(0).setMaxValues(DISCORD_ROLE_SELECT_LIMIT))
   ]));
 }
 

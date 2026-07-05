@@ -404,11 +404,15 @@ async function joinRole(interaction: StringSelectMenuInteraction, context: BotCo
   }
 
   if (config.status === "closed") {
-    await editDeferred(interaction, "Esta escalacao ja foi encerrada.");
-    return;
-  }
-
-  if (!config.openedAt) {
+    config.status = "open";
+    config.openedBy = interaction.user.id;
+    config.openedAt = new Date().toISOString();
+    config.closedBy = null;
+    config.closedAt = null;
+    config.pilotIds = [];
+    config.shooterIds = [];
+    config.scaleId += 1;
+  } else if (!config.openedAt) {
     config.status = "open";
     config.openedBy = interaction.user.id;
     config.openedAt = new Date().toISOString();
@@ -437,6 +441,7 @@ async function joinRole(interaction: StringSelectMenuInteraction, context: BotCo
   config[key] = [...currentIds, interaction.user.id].slice(0, maxSlots);
 
   const saved = await context.api.updatePoliceFlightState(interaction.guildId!, {
+    scaleId: config.scaleId,
     status: config.status,
     openedBy: config.openedBy,
     openedAt: config.openedAt,
@@ -506,8 +511,8 @@ async function refreshPanel(guild: Guild, context: BotContext, config: FlightCon
 async function panelPayload(config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
   const closed = config.status === "closed";
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:join`).setLabel(config.enterButtonText).setStyle(ButtonStyle.Primary).setDisabled(closed), config.enterButtonEmoji),
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger).setDisabled(closed), config.closeButtonEmoji)
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:join`).setLabel(config.enterButtonText).setStyle(ButtonStyle.Primary), config.enterButtonEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger), config.closeButtonEmoji)
   );
   return {
     ...renderComponentsV2Panel({
