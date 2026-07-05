@@ -2094,6 +2094,21 @@ export async function publishPoliceRhPanel(botId: string, guildId: string) {
   await api.post(`/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-rh/publish`);
 }
 
+export async function uploadPoliceRhPanelImage(botId: string, guildId: string, file: File) {
+  const uploadFile = await optimizeImageForUpload(file);
+  const { data } = await api.put<{ imageUrl: string; module: AdvancedModuleConfig }>(
+    `/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-rh/image`,
+    uploadFile,
+    {
+      headers: {
+        "Content-Type": uploadFile.type || "application/octet-stream"
+      },
+      timeout: 90000
+    }
+  );
+  return data;
+}
+
 export async function runTagVerificationNow(botId: string, guildId: string) {
   const { data } = await api.post<{ result: import("../types").TagVerificationRunResult }>(
     `/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/tag-verification/run`,

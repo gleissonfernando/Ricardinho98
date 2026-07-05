@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { devBotRealtimeRoom, emitRealtimeToRoom, emitRealtimeToRoomWithAck } from "../realtime/events";
@@ -11,11 +11,16 @@ import {
 } from "../services/devBotService";
 import { validateGuildAssignableRole } from "../services/discordOptionsService";
 import { createLog } from "../services/logService";
+import { removePersistentImageByUrl, savePersistentImage } from "../services/persistentImageStorageService";
 import type { AuthSessionUser } from "../types/session";
 
 const guildIdSchema = z.string().regex(/^\d{5,32}$/);
 const botIdSchema = z.string().min(1).max(120);
 const snowflakeSchema = z.string().regex(/^\d{5,32}$/);
+const policeRhImageUpload = raw({
+  limit: "10mb",
+  type: ["image/gif", "image/jpeg", "image/png", "image/webp"]
+});
 const moduleIdSchema = z.enum([
   "anti-abuse",
   "anti-ban",
@@ -481,6 +486,79 @@ advancedModulesRouter.post("/:botId/:guildId/police-rh/publish", async (req, res
     if (!panelChannelId) return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
     emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "publish", botId, guildId });
     return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+advancedModulesRouter.put("/:botId/:guildId/police-rh/image", policeRhImageUpload, async (req, res, next) => {
+  try {
+    const botId = botIdSchema.parse(req.params.botId);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const user = res.locals.dashboardAuth.user as AuthSessionUser;
+
+    if (!(await canUseDevBotModule(user, botId, guildId, "police-rh"))) {
+      return res.status(403).json({
+        message: "Este modulo nao foi liberado para este bot ou voce nao tem permissao para configurar a imagem do RH."
+      });
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ message: "Envie uma imagem PNG, JPG, WEBP ou GIF para o painel RH." });
+    }
+
+    const mimeType = req.header("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+    const previous = await getBotGuildModuleConfig(botId, guildId, "police-rh");
+    const currentConfig = normalizeModuleConfig("police-rh", previous.config) as Record<string, unknown>;
+    const previousUrl = typeof currentConfig.panelImageUrl === "string" ? currentConfig.panelImageUrl : null;
+    const stored = await savePersistentImage({
+      actorId: user.discordId,
+      botId,
+      buffer: req.body,
+      guildId,
+      imageType: "panel",
+      metadata: { moduleId: "police-rh", source: "advanced-module-rh" },
+      mimeType,
+      moduleId: "police-rh",
+      previousUrl
+    });
+
+    const normalizedConfig = normalizeModuleConfig("police-rh", {
+      ...currentConfig,
+      panelBannerUrl: stored.publicUrl,
+      panelImagePosition: currentConfig.panelImagePosition === "none" ? "top" : currentConfig.panelImagePosition || "top",
+      panelImageUrl: stored.publicUrl
+    });
+
+    const savedModule = await updateBotGuildModuleConfig({
+      botId,
+      guildId,
+      guildName: `Servidor ${guildId}`,
+      moduleId: "police-rh",
+      config: {
+        ...normalizedConfig,
+        panelMessageId: previous.config.panelMessageId ?? null,
+        updatedBy: user.id
+      }
+    });
+
+    if (previousUrl && previousUrl !== stored.publicUrl) {
+      void removePersistentImageByUrl({
+        actorId: user.discordId,
+        botId,
+        guildId,
+        imageType: "panel",
+        moduleId: "police-rh",
+        url: previousUrl
+      }).catch(() => null);
+    }
+
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "update", botId, guildId });
+
+    return res.json({
+      imageUrl: stored.publicUrl,
+      module: savedModule
+    });
   } catch (error) {
     return next(error);
   }

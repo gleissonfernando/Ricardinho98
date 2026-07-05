@@ -143,7 +143,7 @@ import {
   previewServerBackupRestore,
   restoreServerBackup,
   runTagVerificationNow,
-  uploadPanelImage,
+  uploadPoliceRhPanelImage,
   validateEmojiCloneBotToken
 } from "../lib/api";
 import type {
@@ -8956,19 +8956,8 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
     setImageUploading(true);
     setMessage(null);
     try {
-      const image = await uploadPanelImage(guild.id, "police-rh", file, botId);
-      const nextImagePosition = config.panelImagePosition === "none" ? "top" : config.panelImagePosition;
-      const nextConfig = {
-        ...config,
-        panelImagePosition: nextImagePosition,
-        panelImageUrl: image.imageUrl,
-        panelBannerUrl: image.imagePosition === "banner" ? image.imageUrl : config.panelBannerUrl
-      };
-      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
-        config: nextConfig,
-        guildName: guild.name
-      });
-      setConfig(normalizePoliceRhConfig(saved.config));
+      const uploaded = await uploadPoliceRhPanelImage(botId, guild.id, file);
+      setConfig(normalizePoliceRhConfig(uploaded.module.config));
       setMessage("🖼️ Imagem enviada e salva no painel RH.");
     } catch (error) {
       setMessage(readResponseMessage(error) ?? "Não foi possível enviar a imagem do RH.");
