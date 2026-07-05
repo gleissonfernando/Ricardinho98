@@ -97,7 +97,7 @@ function filterOptions(options: FivemResourceOption[], query: string, selectedId
   return options.filter((option) => selectedIds.includes(option.id) || option.id.includes(normalized) || option.name.toLocaleLowerCase("pt-BR").includes(normalized));
 }
 
-function manualOption(options: FivemResourceOption[], query: string, selectedIds: string[]) {
+function manualOption(options: FivemResourceOption[], query: string, selectedIds: string[]): FivemResourceOption | null {
   const id = query.trim();
   if (!/^\d{5,32}$/.test(id)) return null;
   if (selectedIds.includes(id) || options.some((option) => option.id === id)) return null;
