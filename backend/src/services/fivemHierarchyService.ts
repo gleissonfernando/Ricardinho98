@@ -176,7 +176,7 @@ export async function recordFivemHierarchySync(
   input: { actorId?: string | null; memberCount: number; missingRoleIds: string[]; processedRoleIds: string[] }
 ) {
   await writeFivemHierarchyLog({
-    action: "panel.synced",
+    action: "Hierarquia atualizada",
     botId,
     details: {
       memberCount: input.memberCount,

@@ -3441,6 +3441,11 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     });
   }
 
+  const configuredRoleIds = new Set(roles.map((role) => role.id));
+  const missingHierarchyRoles = draft?.hierarchies
+    .filter((item) => item.roleId && !configuredRoleIds.has(item.roleId))
+    .map((item) => `${item.name} (${item.roleId})`) ?? [];
+
   return (
     <Card className="border-emerald-500/10 bg-zinc-950/75">
       <CardHeader>
@@ -3460,6 +3465,12 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       <CardContent className="space-y-4">
         {error ? <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
         {message ? <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
+        {missingHierarchyRoles.length ? (
+          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            <p className="font-semibold">Cargos cadastrados nao encontrados no servidor.</p>
+            <p className="mt-1 text-xs">{missingHierarchyRoles.slice(0, 12).join(", ")}{missingHierarchyRoles.length > 12 ? "..." : ""}</p>
+          </div>
+        ) : null}
         {loading || !draft ? <div className="h-40 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/60" /> : (
           <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="space-y-2">
