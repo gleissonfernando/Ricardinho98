@@ -70,31 +70,35 @@ const advancedPositions = new Set<PanelImagePosition>(["top", "below_title", "mi
 
 export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLabel, panelSlots }: PanelImageSettingsProps) {
   const multiSlotMode = Boolean(panelSlots?.length);
-  const fixedPanels = panelSlots?.length ? panelSlots.slice(0, 3) : panelId ? [{ id: panelId, label: panelLabel ?? panelLabelForId(panelId) }] : null;
+  const fixedPanels = panelSlots?.length ? panelSlots : panelId ? [{ id: panelId, label: panelLabel ?? panelLabelForId(panelId) }] : null;
   const panelChoices = fixedPanels ?? PANELS;
   const requestedPanelId = fixedPanels?.[0]?.id ?? panelId ?? PANELS[0]?.id ?? "welcome";
   const panelSlotsKey = fixedPanels?.map((panel) => panel.id).join("|") ?? "";
+  const initialVisibleSlotCount = multiSlotMode ? Math.min(3, panelChoices.length) : panelChoices.length;
   const [settingsByPanel, setSettingsByPanel] = useState<Record<string, PanelImageSettingsDto>>({});
   const [selectedPanelId, setSelectedPanelId] = useState(requestedPanelId);
+  const [visibleSlotCount, setVisibleSlotCount] = useState(initialVisibleSlotCount);
   const [draft, setDraft] = useState<PanelImageSettingsDto>(() => defaultSettings("", "", requestedPanelId));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fixedPanel = fixedPanels?.length === 1 ? fixedPanels[0] : null;
+  const visiblePanelChoices = multiSlotMode ? panelChoices.slice(0, visibleSlotCount) : panelChoices;
+  const fixedPanel = !multiSlotMode && fixedPanels?.length === 1 ? fixedPanels[0] : null;
   const selectedPanel = panelChoices.find((panel) => panel.id === selectedPanelId) ?? panelChoices[0]!;
   const disabled = !canManage || !guildId || !botId || loading || saving || uploading;
   const effectiveLayoutMode = advancedPositions.has(draft.imagePosition) ? "components_v2" : draft.layoutMode;
   const previewStyle = previewImageStyle(draft.imageSize, draft.customWidth, draft.customHeight);
 
   useEffect(() => {
+    setVisibleSlotCount(initialVisibleSlotCount);
     if (fixedPanels?.length && !fixedPanels.some((panel) => panel.id === selectedPanelId)) {
       setSelectedPanelId(fixedPanels[0]!.id);
     } else if (panelId && panelId !== selectedPanelId && !fixedPanels?.length) {
       setSelectedPanelId(panelId);
     }
-  }, [panelId, panelSlotsKey, selectedPanelId]);
+  }, [initialVisibleSlotCount, panelId, panelSlotsKey, selectedPanelId]);
 
   useEffect(() => {
     if (!guildId || !botId) {
@@ -153,8 +157,13 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
   );
 
   function selectNewBannerSlot() {
-    const target = panelChoices.find((panel) => !settingsByPanel[panel.id]?.imageEnabled && !settingsByPanel[panel.id]?.imageUrl) ?? panelChoices[panelChoices.length - 1];
+    const emptyVisible = visiblePanelChoices.find((panel) => !settingsByPanel[panel.id]?.imageEnabled && !settingsByPanel[panel.id]?.imageUrl);
+    const nextHidden = visibleSlotCount < panelChoices.length ? panelChoices[visibleSlotCount] : null;
+    const target = emptyVisible ?? nextHidden ?? panelChoices[panelChoices.length - 1];
     if (target) {
+      if (nextHidden && target.id === nextHidden.id) {
+        setVisibleSlotCount((current) => Math.min(panelChoices.length, current + 1));
+      }
       setSelectedPanelId(target.id);
       setStatus("Novo banner selecionado. Configure imagem, posicao e clique em salvar.");
       setError(null);
@@ -295,7 +304,7 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
         <div className={fixedPanel ? "grid gap-4" : "grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]"}>
           {!fixedPanel ? (
             <aside className="max-h-[420px] space-y-2 overflow-y-auto rounded-lg border border-zinc-900 bg-zinc-950/70 p-2">
-              {panelChoices.map((panel) => {
+              {visiblePanelChoices.map((panel) => {
                 const selected = panel.id === selectedPanelId;
                 const configured = settingsByPanel[panel.id]?.imageEnabled;
 
@@ -318,6 +327,16 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
                   </button>
                 );
               })}
+              {multiSlotMode ? (
+                <button
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-purple-500/40 bg-purple-500/10 px-3 text-sm font-medium text-purple-100 transition hover:border-purple-400 hover:bg-purple-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={disabled || visibleSlotCount >= panelChoices.length}
+                  onClick={selectNewBannerSlot}
+                  type="button"
+                >
+                  Novo banner
+                </button>
+              ) : null}
             </aside>
           ) : null}
 
@@ -334,7 +353,7 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
                   onChange={(event) => setSelectedPanelId(event.target.value)}
                   value={selectedPanelId}
                 >
-                  {panelChoices.map((panel) => (
+                  {visiblePanelChoices.map((panel) => (
                     <option key={panel.id} value={panel.id}>{panel.label}</option>
                   ))}
                 </select>
