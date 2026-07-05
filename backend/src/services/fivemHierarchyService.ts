@@ -169,6 +169,26 @@ export async function updateFivemHierarchyPanelState(guildId: string, botId: str
   return row ? toPanelDto(row) : null;
 }
 
+export async function recordFivemHierarchySync(
+  guildId: string,
+  botId: string,
+  panelId: string,
+  input: { actorId?: string | null; memberCount: number; missingRoleIds: string[]; processedRoleIds: string[] }
+) {
+  await writeFivemHierarchyLog({
+    action: "panel.synced",
+    botId,
+    details: {
+      memberCount: input.memberCount,
+      missingRoleIds: input.missingRoleIds,
+      processedRoleIds: input.processedRoleIds
+    },
+    guildId,
+    panelId,
+    userId: input.actorId ?? null
+  });
+}
+
 export async function listFivemHierarchyLogs(guildId: string, botId?: string | null, panelId?: string | null) {
   const { fivemHierarchyLogs } = await getMongoCollections();
   const rows = await fivemHierarchyLogs.find({ ...scopeQuery(guildId, normalizeBotId(botId)), ...(panelId ? { panelId } : {}) }).sort({ createdAt: -1 }).limit(200).toArray();

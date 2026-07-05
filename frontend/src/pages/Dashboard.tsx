@@ -9088,22 +9088,14 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 
               {tab === "adornos" ? (
                 <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adornos" description="Solicitação com modal: tipo, descrição, motivo e imagem opcional. Aprovação em canal temporário com Component V2.">
+                  <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adornos" description="Publicação direta da solicitação no canal configurado, sem canal temporário ou aprovação.">
                     <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de adorno ativo</span><Switch checked={config.adornoEnabled} disabled={disabled} onCheckedChange={(adornoEnabled) => patch({ adornoEnabled })} /></label>
                     <FivemResourceSelect disabled={disabled} label="Canal do painel de adorno" onChange={(adornoPanelChannelId) => patch({ adornoPanelChannelId })} options={channelOptions} prefix="#" value={config.adornoPanelChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(adornoCategoryId) => patch({ adornoCategoryId })} options={categoryOptions} value={config.adornoCategoryId} />
-                    <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Responsáveis marcados" onChange={(adornoResponsibleRoleIds) => patch({ adornoResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.adornoResponsibleRoleIds} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Cargos aprovadores" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
-                    <PoliceRhField disabled={disabled} label="Título" onChange={(adornoTitle) => patch({ adornoTitle })} value={config.adornoTitle} />
-                    <PoliceRhTextarea disabled={disabled} label="Descrição" onChange={(adornoDescription) => patch({ adornoDescription })} value={config.adornoDescription} />
-                    <PoliceRhField disabled={disabled} label="Cor" onChange={(adornoColor) => patch({ adornoColor })} type="color" value={config.adornoColor} />
-                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(adornoImagePosition) => patch({ adornoImagePosition })} value={config.adornoImagePosition} />
+                    <PoliceRhField disabled={disabled} label="Nome do cabeçalho" onChange={(adornoTitle) => patch({ adornoTitle })} value={config.adornoTitle} />
+                    <PoliceRhField disabled={disabled} label="Logo / thumbnail" onChange={(adornoImageUrl) => patch({ adornoImageUrl })} value={config.adornoImageUrl} />
+                    <PoliceRhField disabled={disabled} label="Texto do rodapé" onChange={(adornoFooterText) => patch({ adornoFooterText })} value={config.adornoFooterText} />
                   </PoliceRhConfigSection>
-                  <PoliceRhConfigSection icon={ShieldCheck} title="Mensagens automáticas" description="DMs Component V2 para resposta da análise de adorno.">
-                    <PoliceRhTextarea disabled={disabled} label="DM ao aprovar" onChange={(adornoDmApprovedMessage) => patch({ adornoDmApprovedMessage })} value={config.adornoDmApprovedMessage} />
-                    <PoliceRhTextarea disabled={disabled} label="DM ao reprovar" onChange={(adornoDmRejectedMessage) => patch({ adornoDmRejectedMessage })} value={config.adornoDmRejectedMessage} />
-                  </PoliceRhConfigSection>
+                  <PoliceRhAdornmentPreview config={config} />
                 </section>
               ) : null}
 
@@ -9248,7 +9240,7 @@ type PoliceRhConfig = {
 
 const defaultPoliceRhConfig: PoliceRhConfig = {
   adornoColor: "#22c55e",
-  adornoDescription: "🎖️ Solicite análise de adorno com tipo, descrição, motivo e imagem.",
+  adornoDescription: "",
   adornoDmApprovedMessage: "✅ Sua solicitação de adorno foi aprovada.",
   adornoApproverRoleIds: [],
   adornoBannerUrl: "",
@@ -9257,13 +9249,13 @@ const defaultPoliceRhConfig: PoliceRhConfig = {
   adornoDmRejectedMessage: "❌ Sua solicitação de adorno foi recusada.",
   adornoEnabled: true,
   adornoFooterImageUrl: "",
-  adornoFooterText: "🎖️ Solicitação de adorno",
+  adornoFooterText: "Solicitação enviada ao HCMD",
   adornoImagePosition: "side",
   adornoImageUrl: "",
   adornoLogChannelId: null,
   adornoPanelChannelId: null,
   adornoResponsibleRoleIds: [],
-  adornoTitle: "🎖️ Sistema de Adornos",
+  adornoTitle: "North Police Department",
   absenceApproverRoleIds: [],
   absenceBannerUrl: "",
   absenceCategoryId: null,
@@ -9436,6 +9428,29 @@ function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
           </div>
         ) : null}
         {showBottom ? <img alt="Preview final" className="max-h-36 w-full border-t border-zinc-800 object-cover" src={imageUrl} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function PoliceRhAdornmentPreview({ config }: { config: PoliceRhConfig }) {
+  return (
+    <div className="rounded-lg border border-emerald-500/20 bg-[#0b0b0f] p-4">
+      <p className="mb-3 text-sm font-semibold text-white">Prévia da solicitação</p>
+      <div className="overflow-hidden rounded-md border border-zinc-800 bg-[#313338] p-4 text-sm text-zinc-200">
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="font-semibold">{config.adornoTitle}</p><h3 className="mt-2 text-base font-bold">🏅 Solicitação de Adorno</h3></div>
+          {config.adornoImageUrl ? <img alt="Logo do sistema de adorno" className="h-20 w-20 rounded object-cover" src={config.adornoImageUrl} /> : null}
+        </div>
+        <div className="mt-4 space-y-3">
+          <p><b>Nome</b><br />Ofc. Yuri Mandella | 6293</p>
+          <p><b>ID</b><br />972921360382828614</p>
+          <p><b>Número do Adorno</b><br />61</p>
+          <p><b>Solicitante</b><br /><span className="rounded bg-indigo-500/20 px-1 text-indigo-200">@Ofc. Yuri Mandella | 6293</span></p>
+          <p><b>Link da foto do adorno</b><br /><span className="text-sky-300">Clique aqui para visualizar a imagem</span></p>
+          <div className="flex aspect-video items-center justify-center rounded border border-zinc-700 bg-zinc-900 text-xs text-zinc-500">Imagem grande do adorno</div>
+        </div>
+        <p className="mt-4 border-t border-zinc-700 pt-3 text-xs text-zinc-400">🏅 {config.adornoFooterText} • {new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
       </div>
     </div>
   );

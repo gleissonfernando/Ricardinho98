@@ -18,6 +18,7 @@ const publishingPanels = new Map<string, Promise<void>>();
 
 type HierarchyRefreshOptions = {
   allowCreate?: boolean;
+  actorId?: string | null;
 };
 
 export const hierarchyCommand: BotCommand = {
@@ -41,7 +42,16 @@ export const hierarchyCommand: BotCommand = {
         await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
         return;
       }
-      await interaction.reply({ content: "Configure as hierarquias, cargos/patentes, ordem, imagens, texto, rodape e canal na aba **Hierarquia** da Dashboard.", ephemeral: true });
+      const [panels, roles] = await Promise.all([loadActiveHierarchyPanels(context), interaction.guild.roles.fetch()]);
+      const missing = panels
+        .filter((panel) => panel.guildId === interaction.guild!.id)
+        .flatMap((panel) => panel.hierarchies
+          .filter((item) => item.roleId && !roles.has(item.roleId))
+          .map((item) => `${panel.name}: ${item.name} (${item.roleId})`));
+      await interaction.reply({
+        content: `Configure as hierarquias, cargos/patentes, ordem, imagens, texto, rodape e canal na aba **Hierarquia** da Dashboard.${missing.length ? `\n\n⚠️ **Cargos não encontrados:**\n${missing.slice(0, 20).join("\n")}` : "\n\n✅ Todos os cargos cadastrados foram encontrados."}`,
+        ephemeral: true
+      });
       return;
     }
     await interaction.deferReply({ ephemeral: true });
@@ -67,7 +77,8 @@ export const hierarchyCommand: BotCommand = {
       return;
     }
     await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, {
-      allowCreate: subcommand === "postar"
+      actorId: interaction.user.id,
+      allowCreate: true
     });
     await interaction.editReply(syncAll ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
   }
@@ -83,11 +94,11 @@ export function startFivemHierarchyService(client: Client<true>, context: BotCon
       return;
     }
 
-    scheduleHierarchyRefresh(guild, context, payload.panelId, { allowCreate: false });
+    scheduleHierarchyRefresh(guild, context, payload.panelId, { allowCreate: true });
   });
 
   for (const guild of client.guilds.cache.values()) {
-    scheduleHierarchyRefresh(guild, context, null, { allowCreate: false });
+    scheduleHierarchyRefresh(guild, context, null, { allowCreate: true });
   }
 }
 
@@ -136,28 +147,29 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
   const lookup = panelId?.trim().toLowerCase() ?? null;
   const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
   if (!scoped.length) return;
-  const [members] = await Promise.all([
+  const [members, roles] = await Promise.all([
     fetchHierarchyMembers(guild),
     guild.roles.fetch(),
     guild.channels.fetch()
   ]);
   for (const panel of scoped) {
-    await atualizarHierarquia(guild.id, panel.id, guild, context, options, panel, members);
+    await syncHierarchyPanel(guild.id, panel.id, guild, context, options, panel, members, new Set(roles.keys()));
   }
 }
 
 export async function atualizarTodasHierarquias(guild: Guild, context: BotContext) {
-  await refreshHierarchyPanelsForGuild(guild, context, null, { allowCreate: false });
+  await refreshHierarchyPanelsForGuild(guild, context, null, { allowCreate: true });
 }
 
-export async function atualizarHierarquia(
+export async function syncHierarchyPanel(
   guildId: string,
   hierarchyId: string,
   guild: Guild,
   context: BotContext,
   options: HierarchyRefreshOptions = {},
   knownPanel?: FivemHierarchyPanel,
-  knownMembers?: HierarchyMemberCache
+  knownMembers?: HierarchyMemberCache,
+  knownRoleIds?: Set<string>
 ) {
   if (guild.id !== guildId) return;
   const panel = knownPanel ?? (await context.api.getActiveFivemHierarchyPanels().catch(() => []))
@@ -165,7 +177,19 @@ export async function atualizarHierarquia(
   if (!panel?.enabled) return;
   const members = knownMembers ?? await fetchHierarchyMembers(guild);
   await publishHierarchyPanelOnce(guild, context, panel, members, options);
+  const processedRoleIds = [...new Set(panel.hierarchies.filter((item) => item.active && item.roleId).map((item) => item.roleId))];
+  const roleIds = knownRoleIds ?? new Set((await guild.roles.fetch()).keys());
+  await context.api.recordFivemHierarchySync({
+    actorId: options.actorId ?? null,
+    guildId,
+    hierarchyId,
+    memberCount: new Set(collectHierarchyMembersForPanel(members, panel).map((item) => item.userId)).size,
+    missingRoleIds: processedRoleIds.filter((roleId) => !roleIds.has(roleId)),
+    processedRoleIds
+  }).catch(() => undefined);
 }
+
+export const atualizarHierarquia = syncHierarchyPanel;
 
 async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
   const key = `${guild.id}:${panel.id}`;
@@ -184,7 +208,7 @@ async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, pane
 
 async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
   if (!panel.enabled || !panel.panelChannelId) return;
-  const allowCreate = options.allowCreate === true;
+  const allowCreate = options.allowCreate !== false;
   const channel = await guild.channels.fetch(panel.panelChannelId).catch(() => null);
   if (!channel || !("send" in channel) || !("messages" in channel)) return;
   const visuals = await getPanelVisualSlots(context, guild.id, panel.id);

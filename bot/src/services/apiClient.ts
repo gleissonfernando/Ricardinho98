@@ -1712,6 +1712,10 @@ export class ApiClient {
     return data.panel;
   }
 
+  async recordFivemHierarchySync(input: { actorId?: string | null; guildId: string; hierarchyId: string; memberCount: number; missingRoleIds: string[]; processedRoleIds: string[] }) {
+    await this.http.post("/fivem/bot/hierarchy/sync-log", input);
+  }
+
   async syncSelfBotRole(input: { guildId: string; roleId: string; roleName?: string | null }) {
     const { data } = await this.http.post<{ settings: GuildSettings }>(
       `/settings/bot/${input.guildId}/self-bot-role`,

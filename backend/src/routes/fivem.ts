@@ -31,6 +31,7 @@ import {
   getFivemHierarchyDashboard,
   listActiveFivemHierarchyPanels,
   requestFivemHierarchyPanelPublish,
+  recordFivemHierarchySync,
   saveFivemHierarchyPanel,
   updateFivemHierarchyPanelState
 } from "../services/fivemHierarchyService";
@@ -515,6 +516,24 @@ fivemRouter.post("/bot/hierarchy/panel-state", requireBot, async (req, res, next
     await assertBotFivemHierarchyLicense(botId);
     const panel = await updateFivemHierarchyPanelState(input.guildId, botId, input.panelId, input.messageId ?? null);
     return res.json({ panel });
+  } catch (error) {
+    return next(error);
+  }
+});
+fivemRouter.post("/bot/hierarchy/sync-log", requireBot, async (req, res, next) => {
+  try {
+    const input = z.object({
+      actorId: optionalSnowflakeSchema,
+      guildId: guildIdSchema,
+      hierarchyId: z.string().min(1).max(80),
+      memberCount: z.number().int().min(0),
+      missingRoleIds: z.array(snowflakeSchema).max(100),
+      processedRoleIds: z.array(snowflakeSchema).max(100)
+    }).parse(req.body);
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    await recordFivemHierarchySync(input.guildId, botId, input.hierarchyId, input);
+    return res.status(204).send();
   } catch (error) {
     return next(error);
   }
