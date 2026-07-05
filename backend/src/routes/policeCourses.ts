@@ -7,7 +7,7 @@ import { canReadDevBotModule, canUseDevBotModule, getBotApiPermissions } from ".
 import {
   closePoliceCourse, createPoliceCourse, deletePoliceCourse, getPoliceCourse, getPoliceCourseConfig,
   getPoliceCourseDashboard, joinPoliceCourse, leavePoliceCourse, listPoliceCourses, POLICE_COURSES_MODULE_ID,
-  requestPoliceCoursePublish, savePoliceCourseConfig, setPoliceCourseBanner, setPoliceCoursePanel, updatePoliceCourse
+  requestPoliceCoursePublish, savePoliceCourseConfig, setPoliceCourseBanner, setPoliceCoursePanel, startPoliceCourse, updatePoliceCourse
 } from "../services/policeCourseService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
 
@@ -25,7 +25,11 @@ const courseSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   notes: z.string().trim().max(1000).optional(),
   maxSlots: z.number().int().min(1).max(500).nullable().optional(),
-  bannerUrl: z.string().trim().max(2048).nullable().optional()
+  bannerUrl: z.string().trim().max(2048).nullable().optional(),
+  imagePosition: z.enum(["top", "thumbnail", "bottom", "none"]).optional(),
+  authorizedRoleIds: z.array(snowflake).max(100).optional(),
+  authorizedUserIds: z.array(snowflake).max(100).optional(),
+  panelChannelId: snowflake.nullable().optional()
 });
 const configSchema = z.object({
   enabled: z.boolean().optional(),
@@ -147,6 +151,20 @@ policeCoursesRouter.post("/bot/:guildId/courses/:courseId/close", requireBot, as
     const scope = await botScope(req);
     const input = z.object({ actorId: snowflake, status: z.enum(["finished", "canceled"]) }).parse(req.body);
     res.json({ course: await closePoliceCourse(scope.botId, scope.guildId, req.params.courseId!, input.status, input.actorId) });
+  } catch (error) { next(error); }
+});
+policeCoursesRouter.post("/bot/:guildId/courses/:courseId/start", requireBot, async (req, res, next) => {
+  try {
+    const scope = await botScope(req);
+    const input = z.object({
+      instructorId: snowflake,
+      instructorName: z.string().trim().min(1).max(100),
+      time: z.string().trim().min(1).max(50),
+      maxSlots: z.number().int().min(1).max(500),
+      location: z.string().trim().min(1).max(100),
+      actorId: snowflake
+    }).parse(req.body);
+    res.json({ course: await startPoliceCourse(scope.botId, scope.guildId, req.params.courseId!, input, input.actorId) });
   } catch (error) { next(error); }
 });
 policeCoursesRouter.patch("/bot/:guildId/courses/:courseId/panel", requireBot, async (req, res, next) => {

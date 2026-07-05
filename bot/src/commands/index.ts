@@ -22,7 +22,7 @@ import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./poli
 import { policeReportsCommand } from "../services/policeReportsService";
 import { notifyOpenPointCommand, notifyOpenPointConfigCommand, notifyOpenPointCounterCommand, notifyOpenPointResetCommand } from "../services/openPointNotificationService";
 import { removeCommand } from "../services/absenceRemovalService";
-import { policeCourseCommand } from "./course";
+import { editPoliceCourseCommand, policeCourseCommand } from "./course";
 import type { BotCommand } from "../types";
 
 export function createCommandCollection() {
@@ -52,6 +52,7 @@ export function createCommandCollection() {
     viewPolicePatrolReportCommand,
     policeReportsCommand,
     policeCourseCommand,
+    editPoliceCourseCommand,
     notifyOpenPointCommand,
     notifyOpenPointCounterCommand,
     notifyOpenPointResetCommand,

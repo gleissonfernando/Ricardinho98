@@ -812,7 +812,10 @@ export type MongoPoliceCourse = {
   notes: string;
   maxSlots: number | null;
   bannerUrl: string | null;
-  status: "open" | "in_progress" | "finished" | "canceled";
+  imagePosition: "top" | "thumbnail" | "bottom" | "none";
+  authorizedRoleIds: string[];
+  authorizedUserIds: string[];
+  status: "draft" | "open" | "in_progress" | "finished" | "canceled";
   panelChannelId: string | null;
   panelMessageId: string | null;
   participants: MongoPoliceCourseParticipant[];

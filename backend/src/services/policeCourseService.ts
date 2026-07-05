@@ -88,8 +88,8 @@ export async function createPoliceCourse(botId: string, guildId: string, input: 
   const { policeCourses } = await getMongoCollections();
   const now = new Date();
   const course: MongoPoliceCourse = {
-    _id: randomUUID(), botId, guildId, ...normalizeCourseInput(input), status: "open",
-    panelChannelId: null, panelMessageId: null, participants: [], createdBy: actorId,
+    _id: randomUUID(), botId, guildId, ...normalizeCourseInput(input), status: "draft",
+    panelChannelId: input.panelChannelId?.trim() || null, panelMessageId: null, participants: [], createdBy: actorId,
     createdAt: now, updatedAt: now, updatedBy: actorId
   };
   try {
@@ -105,6 +105,8 @@ export async function createPoliceCourse(botId: string, guildId: string, input: 
 
 export async function updatePoliceCourse(botId: string, guildId: string, courseId: string, input: Partial<CourseInput>, actorId: string | null) {
   const { policeCourses } = await getMongoCollections();
+  const current = await policeCourses.findOne({ _id: courseId, botId, guildId });
+  if (!current) throw serviceError("Curso nao encontrado.", 404);
   const patch = normalizeCoursePatch(input);
   const result = await policeCourses.findOneAndUpdate(
     { _id: courseId, botId, guildId },
@@ -113,6 +115,18 @@ export async function updatePoliceCourse(botId: string, guildId: string, courseI
   );
   if (!result) throw serviceError("Curso nao encontrado.", 404);
   await audit(botId, guildId, courseId, "course_updated", actorId, { fields: Object.keys(patch) });
+  if (input.authorizedRoleIds) {
+    const before = new Set(current.authorizedRoleIds ?? []);
+    const after = new Set(input.authorizedRoleIds);
+    for (const roleId of after) if (!before.has(roleId)) await audit(botId, guildId, courseId, "instructor_role_added", actorId, { roleId });
+    for (const roleId of before) if (!after.has(roleId)) await audit(botId, guildId, courseId, "instructor_role_removed", actorId, { roleId });
+  }
+  if (input.authorizedUserIds) {
+    const before = new Set(current.authorizedUserIds ?? []);
+    const after = new Set(input.authorizedUserIds);
+    for (const userId of after) if (!before.has(userId)) await audit(botId, guildId, courseId, "instructor_user_added", actorId, { userId });
+    for (const userId of before) if (!after.has(userId)) await audit(botId, guildId, courseId, "instructor_user_removed", actorId, { userId });
+  }
   emitChanged(botId, guildId, courseId, "course_updated");
   return courseDto(result);
 }
@@ -192,6 +206,40 @@ export async function closePoliceCourse(botId: string, guildId: string, courseId
   return courseDto(result);
 }
 
+export async function startPoliceCourse(
+  botId: string,
+  guildId: string,
+  courseId: string,
+  input: { instructorId: string; instructorName: string; time: string; maxSlots: number; location: string },
+  actorId: string
+) {
+  const { policeCourses } = await getMongoCollections();
+  const result = await policeCourses.findOneAndUpdate(
+    { _id: courseId, botId, guildId, status: { $in: ["draft", "finished", "canceled"] } },
+    {
+      $set: {
+        instructorId: input.instructorId,
+        instructorName: input.instructorName.trim(),
+        time: input.time.trim(),
+        maxSlots: Math.max(1, Math.min(500, Math.floor(input.maxSlots))),
+        location: input.location.trim(),
+        status: "open",
+        participants: [],
+        updatedAt: new Date(),
+        updatedBy: actorId
+      }
+    },
+    { returnDocument: "after" }
+  );
+  if (!result) throw serviceError("Este curso ja possui uma turma ativa.", 409);
+  await audit(botId, guildId, courseId, "course_started", actorId, {
+    instructorId: input.instructorId,
+    panelChannelId: result.panelChannelId
+  });
+  emitChanged(botId, guildId, courseId, "course_started");
+  return courseDto(result);
+}
+
 export function requestPoliceCoursePublish(botId: string, guildId: string, courseId: string, channelId?: string | null) {
   emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-courses:panel_update", {
     action: "publish", botId, guildId, courseId, channelId: channelId ?? null
@@ -227,6 +275,10 @@ type CourseInput = {
   notes?: string;
   maxSlots?: number | null;
   bannerUrl?: string | null;
+  imagePosition?: "top" | "thumbnail" | "bottom" | "none";
+  authorizedRoleIds?: string[];
+  authorizedUserIds?: string[];
+  panelChannelId?: string | null;
 };
 
 function normalizeCourseInput(input: CourseInput) {
@@ -241,7 +293,10 @@ function normalizeCourseInput(input: CourseInput) {
     description: input.description?.trim() || "",
     notes: input.notes?.trim() || "",
     maxSlots: input.maxSlots && input.maxSlots > 0 ? Math.floor(input.maxSlots) : null,
-    bannerUrl: input.bannerUrl?.trim() || null
+    bannerUrl: input.bannerUrl?.trim() || null,
+    imagePosition: input.imagePosition ?? "top",
+    authorizedRoleIds: [...new Set(input.authorizedRoleIds ?? [])],
+    authorizedUserIds: [...new Set(input.authorizedUserIds ?? [])]
   };
 }
 
@@ -250,7 +305,8 @@ function normalizeCoursePatch(input: Partial<CourseInput>) {
   for (const [key, raw] of Object.entries(input)) {
     if (raw === undefined) continue;
     if (key === "maxSlots") value[key] = typeof raw === "number" && raw > 0 ? Math.floor(raw) : null;
-    else if (key === "instructorId" || key === "bannerUrl") value[key] = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+    else if (key === "authorizedRoleIds" || key === "authorizedUserIds") value[key] = Array.isArray(raw) ? [...new Set(raw.filter((item): item is string => typeof item === "string"))] : [];
+    else if (key === "instructorId" || key === "bannerUrl" || key === "panelChannelId") value[key] = typeof raw === "string" && raw.trim() ? raw.trim() : null;
     else value[key] = typeof raw === "string" ? raw.trim() : raw;
   }
   return value;
@@ -263,6 +319,9 @@ function configDto(value: MongoPoliceCourseConfig) {
 function courseDto(value: MongoPoliceCourse) {
   return {
     ...value,
+    authorizedRoleIds: value.authorizedRoleIds ?? [],
+    authorizedUserIds: value.authorizedUserIds ?? [],
+    imagePosition: value.imagePosition ?? "top",
     id: value._id,
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString(),

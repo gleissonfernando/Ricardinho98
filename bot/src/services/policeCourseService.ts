@@ -11,6 +11,7 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
+  UserSelectMenuBuilder,
   type ChatInputCommandInteraction,
   type GuildMember,
   type Interaction,
@@ -57,25 +58,61 @@ export async function runPoliceCourseCommand(interaction: ChatInputCommandIntera
       await interaction.reply({ content: "Voce nao tem permissao para configurar cursos.", ephemeral: true });
       return;
     }
-    await interaction.reply({ ...configPanel(config), flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+    const courses = await context.api.listPoliceCourses(interaction.guildId);
+    await interaction.reply({ ...configPanel(config, courses), flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
     return;
   }
-  const courses = (await context.api.listPoliceCourses(interaction.guildId)).filter((course) => course.status === "open");
+  const member = interaction.member as GuildMember;
+  const courses = (await context.api.listPoliceCourses(interaction.guildId))
+    .filter((course) => course.status !== "open" && course.status !== "in_progress")
+    .filter((course) => canTeach(member, interaction.guild!.ownerId, config, course));
   if (!courses.length) {
-    await interaction.reply({ content: "Nenhum curso aberto foi cadastrado.", ephemeral: true });
+    await interaction.reply({ content: "Você não possui nenhum curso autorizado para iniciar.", ephemeral: true });
     return;
   }
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`${PREFIX}:select`)
-    .setPlaceholder("Selecione pelo numero ou nome")
+    .setCustomId(`${PREFIX}:start_select`)
+    .setPlaceholder("Selecione o curso")
     .addOptions(courses.slice(0, 25).map((course) => ({
       label: `${course.courseNumber} - ${course.title}`.slice(0, 100),
-      description: `${course.date} ${course.time} • ${course.participants.length}${course.maxSlots ? `/${course.maxSlots}` : ""} inscritos`.slice(0, 100),
+      description: "Abrir uma nova turma deste curso",
       value: course.id
     })));
   await interaction.reply({
     components: [{ type: 17, accent_color: 0x2563eb, components: [
-      { type: 10, content: "# Cursos / Treinamentos\nSelecione o curso que deseja publicar." },
+      { type: 10, content: "# Iniciar curso\nSelecione um dos cursos em que você está cadastrado como instrutor." },
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select).toJSON()
+    ] }],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  });
+}
+
+export async function runPoliceCourseEditCommand(interaction: ChatInputCommandInteraction, context: BotContext) {
+  if (!interaction.guildId || !interaction.guild) return;
+  const [config, allCourses] = await Promise.all([
+    context.api.getPoliceCourseConfig(interaction.guildId),
+    context.api.listPoliceCourses(interaction.guildId)
+  ]);
+  const member = interaction.member as GuildMember;
+  const courses = allCourses.filter((course) =>
+    (course.status === "open" || course.status === "in_progress")
+    && canTeach(member, interaction.guild!.ownerId, config, course)
+  );
+  if (!courses.length) {
+    await interaction.reply({ content: "Você não possui nenhum curso autorizado para editar.", ephemeral: true });
+    return;
+  }
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`${PREFIX}:edit_select`)
+    .setPlaceholder("Selecione o curso ativo")
+    .addOptions(courses.slice(0, 25).map((course) => ({
+      label: course.title.slice(0, 100),
+      description: `${course.time} • ${course.location}`.slice(0, 100),
+      value: course.id
+    })));
+  await interaction.reply({
+    components: [{ type: 17, accent_color: color(config.accentColor), components: [
+      { type: 10, content: "# Editar curso\nSelecione uma turma ativa para alterar horário, vagas e local." },
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select).toJSON()
     ] }],
     flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
@@ -91,27 +128,47 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
   const [, action, courseId] = interaction.customId.split(":");
   const config = await context.api.getPoliceCourseConfig(interaction.guildId);
 
-  if (action === "select" && interaction.isStringSelectMenu()) {
+  if (action === "start_select" && interaction.isStringSelectMenu()) {
     const selectedId = interaction.values[0];
-    const channelSelect = new ChannelSelectMenuBuilder()
-      .setCustomId(`${PREFIX}:channel:${selectedId}`)
-      .setPlaceholder("Escolha o canal do painel")
-      .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement);
-    await interaction.update({
-      components: [{ type: 17, accent_color: color(config.accentColor), components: [
-        { type: 10, content: "# Publicar curso\nAgora selecione o canal onde o painel sera enviado." },
-        new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelSelect).toJSON()
-      ] }]
-    });
+    if (!selectedId) return true;
+    const course = await context.api.getPoliceCourse(interaction.guildId, selectedId);
+    if (!canTeach(interaction.member as GuildMember, interaction.guild.ownerId, config, course)) {
+      await interaction.reply({ content: "Você não possui permissão para iniciar este curso.", ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(courseSessionModal("start_submit", selectedId, course));
     return true;
   }
 
-  if (action === "channel" && interaction.isChannelSelectMenu() && courseId) {
-    await interaction.deferUpdate();
-    const channelId = interaction.values[0];
-    if (!channelId) throw new Error("Canal nao selecionado.");
+  if (action === "start_submit" && interaction.isModalSubmit() && courseId) {
+    await interaction.deferReply({ ephemeral: true });
+    const course = await context.api.getPoliceCourse(interaction.guildId, courseId);
+    const member = interaction.member as GuildMember;
+    if (!canTeach(member, interaction.guild.ownerId, config, course)) {
+      await interaction.editReply("Você não possui permissão para iniciar este curso.");
+      return true;
+    }
+    const channelId = course.panelChannelId || config.defaultPanelChannelId;
+    if (!channelId) {
+      await interaction.editReply("Configure o canal do painel deste curso antes de iniciá-lo.");
+      return true;
+    }
+    const maxSlots = Number.parseInt(interaction.fields.getTextInputValue("maxSlots"), 10);
+    if (!Number.isFinite(maxSlots) || maxSlots < 1 || maxSlots > 500) {
+      await interaction.editReply("A quantidade máxima deve estar entre 1 e 500.");
+      return true;
+    }
+    const started = await context.api.startPoliceCourse(interaction.guildId, courseId, {
+      actorId: interaction.user.id,
+      instructorId: interaction.user.id,
+      instructorName: member.displayName,
+      location: interaction.fields.getTextInputValue("location"),
+      maxSlots,
+      time: interaction.fields.getTextInputValue("time")
+    });
     await publishCourse(context, interaction.guild, courseId, channelId, interaction.user.id);
-    await interaction.editReply({ components: [{ type: 17, accent_color: color(config.accentColor), components: [{ type: 10, content: "## Painel publicado\nO curso foi enviado e continuara sincronizado com a dashboard." }] }] });
+    await interaction.editReply("Curso iniciado e painel publicado.");
+    await sendCourseLog(interaction.guild, config, started, "Curso iniciado", interaction.user.id);
     return true;
   }
 
@@ -139,14 +196,15 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
   }
 
   if ((action === "finish" || action === "cancel") && interaction.isButton() && courseId) {
-    if (!canManage(interaction.member as GuildMember, interaction.guild.ownerId, config.allowedFinishRoles)) {
+    const current = await context.api.getPoliceCourse(interaction.guildId, courseId);
+    if (!canControlCourse(interaction.member as GuildMember, interaction.guild.ownerId, config, current)) {
       await interaction.reply({ content: "Voce nao tem permissao para encerrar cursos.", ephemeral: true });
       return true;
     }
     await interaction.deferReply({ ephemeral: true });
     const status = action === "finish" ? "finished" : "canceled";
     const course = await context.api.closePoliceCourse(interaction.guildId, courseId, status, interaction.user.id);
-    await finalizeCourse(context, interaction.guild, course, config);
+    await finalizeCourse(context, interaction.guild, course, config, interaction.user.id);
     await interaction.editReply({ content: status === "finished" ? "Curso finalizado com sucesso." : "Curso cancelado com sucesso." });
     return true;
   }
@@ -158,34 +216,85 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
     }
     const modal = new ModalBuilder().setCustomId(`${PREFIX}:create_submit`).setTitle("Cadastrar curso");
     modal.addComponents(
-      inputRow("number", "Numero do curso", TextInputStyle.Short, true),
-      inputRow("title", "Nome do curso", TextInputStyle.Short, true),
-      inputRow("instructor", "Instrutor responsavel", TextInputStyle.Short, true),
-      inputRow("schedule", "Data e horario (ex: 04/06/2026 | 17:00)", TextInputStyle.Short, true),
-      inputRow("details", "Local | vagas | descricao", TextInputStyle.Paragraph, true)
+      inputRow("title", "Nome do curso", TextInputStyle.Short, true)
     );
     await interaction.showModal(modal);
     return true;
   }
 
+  if (action === "config_select" && interaction.isStringSelectMenu()) {
+    const selectedId = interaction.values[0];
+    if (!selectedId || !canManage(interaction.member as GuildMember, interaction.guild.ownerId, config.allowedManagerRoles)) {
+      await interaction.reply({ content: "Sem permissão.", ephemeral: true });
+      return true;
+    }
+    const selected = await context.api.getPoliceCourse(interaction.guildId, selectedId);
+    await interaction.update(configureCoursePanel(selected));
+    return true;
+  }
+
   if (action === "create_submit" && interaction.isModalSubmit()) {
     await interaction.deferReply({ ephemeral: true });
-    const schedule = interaction.fields.getTextInputValue("schedule").split("|").map((value) => value.trim());
-    const details = interaction.fields.getTextInputValue("details").split("|").map((value) => value.trim());
-    const maxSlots = Number.parseInt(details[1] ?? "", 10);
     const course = await context.api.createPoliceCourse(interaction.guildId, {
       actorId: interaction.user.id,
-      courseNumber: interaction.fields.getTextInputValue("number"),
+      courseNumber: `CURSO-${Date.now().toString(36).toUpperCase()}`,
       title: interaction.fields.getTextInputValue("title"),
-      instructorName: interaction.fields.getTextInputValue("instructor"),
-      date: schedule[0] || "A definir",
-      time: schedule[1] || "A definir",
-      location: details[0] || "A definir",
-      maxSlots: Number.isFinite(maxSlots) && maxSlots > 0 ? maxSlots : null,
-      description: details.slice(2).join(" | ")
+      panelChannelId: config.defaultPanelChannelId
     });
-    await interaction.editReply({ content: `Curso ${course.courseNumber} - ${course.title} criado. O banner e os demais textos podem ser ajustados na dashboard.` });
+    await interaction.editReply(configureCoursePanel(course));
     await sendCourseLog(interaction.guild, config, course, "Curso criado", interaction.user.id);
+    return true;
+  }
+
+  if ((action === "course_roles" || action === "course_users" || action === "course_channel") && courseId && interaction.isAnySelectMenu()) {
+    if (!canManage(interaction.member as GuildMember, interaction.guild.ownerId, config.allowedManagerRoles)) {
+      await interaction.reply({ content: "Sem permissão.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferUpdate();
+    const patch = action === "course_roles"
+      ? { authorizedRoleIds: interaction.values }
+      : action === "course_users"
+        ? { authorizedUserIds: interaction.values }
+        : { panelChannelId: interaction.values[0] ?? null };
+    const saved = await context.api.updatePoliceCourse(interaction.guildId, courseId, { ...patch, actorId: interaction.user.id });
+    await interaction.editReply(configureCoursePanel(saved));
+    return true;
+  }
+
+  if (action === "edit_select" && interaction.isStringSelectMenu()) {
+    const selectedId = interaction.values[0];
+    if (!selectedId) return true;
+    const selected = await context.api.getPoliceCourse(interaction.guildId, selectedId);
+    if (!canTeach(interaction.member as GuildMember, interaction.guild.ownerId, config, selected)) {
+      await interaction.reply({ content: "Você não pode editar este curso.", ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(courseSessionModal("edit_submit", selected.id, selected));
+    return true;
+  }
+
+  if (action === "edit_submit" && interaction.isModalSubmit() && courseId) {
+    await interaction.deferReply({ ephemeral: true });
+    const current = await context.api.getPoliceCourse(interaction.guildId, courseId);
+    if (!canTeach(interaction.member as GuildMember, interaction.guild.ownerId, config, current)) {
+      await interaction.editReply("Você não pode editar este curso.");
+      return true;
+    }
+    const maxSlots = Number.parseInt(interaction.fields.getTextInputValue("maxSlots"), 10);
+    if (!Number.isFinite(maxSlots) || maxSlots < current.participants.length || maxSlots > 500) {
+      await interaction.editReply(`A quantidade deve ser entre ${Math.max(1, current.participants.length)} e 500.`);
+      return true;
+    }
+    const saved = await context.api.updatePoliceCourse(interaction.guildId, courseId, {
+      actorId: interaction.user.id,
+      location: interaction.fields.getTextInputValue("location"),
+      maxSlots,
+      time: interaction.fields.getTextInputValue("time")
+    });
+    await updatePublishedPanel(context, interaction.guild, saved, config);
+    await sendCourseLog(interaction.guild, config, saved, "Curso editado", interaction.user.id);
+    await interaction.editReply("Curso atualizado.");
     return true;
   }
 
@@ -238,7 +347,7 @@ async function updatePublishedPanel(context: BotContext, guild: Interaction["gui
   if (message) await message.edit(coursePanel(course, config) as any);
 }
 
-async function finalizeCourse(context: BotContext, guild: Interaction["guild"] & {}, course: PoliceCourse, config: PoliceCourseConfig) {
+async function finalizeCourse(context: BotContext, guild: Interaction["guild"] & {}, course: PoliceCourse, config: PoliceCourseConfig, actorId: string) {
   if (course.status === "canceled" && config.deletePanelOnCancel && course.panelChannelId && course.panelMessageId) {
     const channel = await guild.channels.fetch(course.panelChannelId).catch(() => null);
     if (channel?.isTextBased() && !channel.isDMBased()) await channel.messages.delete(course.panelMessageId).catch(() => undefined);
@@ -259,13 +368,13 @@ async function finalizeCourse(context: BotContext, guild: Interaction["guild"] &
       await user.send(course.status === "finished" ? `O curso ${course.title} foi finalizado.` : `O curso ${course.title} foi cancelado.`);
     }));
   }
-  await sendCourseLog(guild, config, course, course.status === "finished" ? "Curso finalizado" : "Curso cancelado", course.createdBy);
+  await sendCourseLog(guild, config, course, course.status === "finished" ? "Curso finalizado" : "Curso cancelado", actorId);
 }
 
 function coursePanel(course: PoliceCourse, config: PoliceCourseConfig) {
   const closed = course.status === "finished" || course.status === "canceled";
   const confirmed = course.participants.length
-    ? course.participants.map((item, index) => `${index + 1}. ${escapeMarkdown(item.guildNickname || item.username)}${item.passportId ? ` | ${item.passportId}` : ""}`).join("\n")
+    ? course.participants.map((item, index) => `${index + 1}. <@${item.userId}>`).join("\n")
     : "Nenhum participante confirmado.";
   const statusText = course.status === "finished"
     ? "## Curso finalizado\nEste curso foi encerrado pela equipe responsavel."
@@ -286,29 +395,78 @@ function coursePanel(course: PoliceCourse, config: PoliceCourseConfig) {
     description: statusText,
     fields: [
       `**INSTRUTOR**\n${course.instructorId ? `<@${course.instructorId}>` : escapeMarkdown(course.instructorName)}`,
-      `**HORARIO**\n${escapeMarkdown(course.date)} as ${escapeMarkdown(course.time)}`,
+      `**HORARIO**\n${escapeMarkdown(course.time)}`,
       `**LOCAL**\n${escapeMarkdown(course.location)}`,
       `**CONFIRMADOS (${course.participants.length}${course.maxSlots ? `/${course.maxSlots}` : ""})**\n${confirmed}`,
       `**ID DO CURSO**\n${escapeMarkdown(course.courseNumber)}`,
       course.description ? `**DESCRICAO**\n${escapeMarkdown(course.description)}` : ""
     ].filter(Boolean),
-    image: course.bannerUrl ? { imageEnabled: true, imagePosition: "bottom", imageUrl: course.bannerUrl } : null,
+    image: course.bannerUrl && course.imagePosition !== "none"
+      ? { imageEnabled: true, imagePosition: course.imagePosition === "thumbnail" ? "side" : course.imagePosition, imageUrl: course.bannerUrl }
+      : null,
     actions: [actions.toJSON()]
   });
 }
 
-function configPanel(config: PoliceCourseConfig) {
+function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[]) {
   const managerRoles = new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:manager_roles`).setPlaceholder("Cargos que gerenciam cursos").setMinValues(0).setMaxValues(10);
   const finishRoles = new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:finish_roles`).setPlaceholder("Cargos que finalizam ou cancelam").setMinValues(0).setMaxValues(10);
   const create = new ButtonBuilder().setCustomId(`${PREFIX}:create`).setLabel("Cadastrar Curso").setEmoji("➕").setStyle(ButtonStyle.Primary);
+  const courseSelect = courses.length
+    ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`${PREFIX}:config_select`)
+        .setPlaceholder("Editar curso cadastrado")
+        .addOptions(courses.slice(0, 25).map((course) => ({ label: course.title.slice(0, 100), value: course.id })))
+    ).toJSON()
+    : null;
   return {
     components: [{ type: 17, accent_color: color(config.accentColor), components: [
       { type: 10, content: "# Cursos / Treinamentos\nCadastre cursos e defina os cargos autorizados. Configuracoes avancadas e upload de banner ficam sincronizados pela dashboard." },
       new ActionRowBuilder<ButtonBuilder>().addComponents(create).toJSON(),
+      ...(courseSelect ? [courseSelect] : []),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(managerRoles).toJSON(),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(finishRoles).toJSON()
     ] }]
   };
+}
+
+function configureCoursePanel(course: PoliceCourse) {
+  const roles = new RoleSelectMenuBuilder()
+    .setCustomId(`${PREFIX}:course_roles:${course.id}`)
+    .setPlaceholder("Cargos de instrutor")
+    .setMinValues(0)
+    .setMaxValues(25);
+  const users = new UserSelectMenuBuilder()
+    .setCustomId(`${PREFIX}:course_users:${course.id}`)
+    .setPlaceholder("Instrutores específicos")
+    .setMinValues(0)
+    .setMaxValues(25);
+  const channel = new ChannelSelectMenuBuilder()
+    .setCustomId(`${PREFIX}:course_channel:${course.id}`)
+    .setPlaceholder("Canal do painel")
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+  return {
+    components: [{ type: 17, accent_color: 0x2563eb, components: [
+      { type: 10, content: `# Curso cadastrado\n**${escapeMarkdown(course.title)}**\nDefina os cargos, usuários instrutores e o canal do painel. O banner pode ser enviado pela dashboard.` },
+      new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roles).toJSON(),
+      new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(users).toJSON(),
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channel).toJSON()
+    ] }]
+  };
+}
+
+function courseSessionModal(action: "start_submit" | "edit_submit", courseId: string, course: PoliceCourse) {
+  return new ModalBuilder()
+    .setCustomId(`${PREFIX}:${action}:${courseId}`)
+    .setTitle(action === "start_submit" ? "Iniciar curso" : "Editar curso")
+    .addComponents(
+      inputValueRow("time", "Horário do curso", course.time === "A definir" ? "" : course.time, "Ex: 20:00"),
+      inputValueRow("maxSlots", "Quantidade máxima de alunos", course.maxSlots ? String(course.maxSlots) : "", "Ex: 10"),
+      inputValueRow("location", "Local do curso", course.location === "A definir" ? "" : course.location, "Ex: Base Aérea")
+    );
 }
 
 async function sendCourseLog(guild: Interaction["guild"] & {}, config: PoliceCourseConfig, course: PoliceCourse, action: string, actorId: string | null) {
@@ -317,7 +475,7 @@ async function sendCourseLog(guild: Interaction["guild"] & {}, config: PoliceCou
   if (!channel?.isTextBased() || channel.isDMBased()) return;
   await channel.send({
     components: [{ type: 17, accent_color: color(config.accentColor), components: [{ type: 10, content:
-      `# LOG DO SISTEMA DE CURSOS\n**Acao:** ${action}\n**Curso:** ${escapeMarkdown(course.title)}\n**ID do Curso:** ${escapeMarkdown(course.courseNumber)}\n**Responsavel:** ${actorId ? `<@${actorId}>` : "Sistema"}\n**Canal do Painel:** ${course.panelChannelId ? `<#${course.panelChannelId}>` : "Nao publicado"}`
+      `# LOG DO SISTEMA DE CURSOS\n**Acao:** ${action}\n**Curso:** ${escapeMarkdown(course.title)}\n**ID do Curso:** ${escapeMarkdown(course.courseNumber)}\n**Executado por:** ${actorId ? `<@${actorId}>` : "Sistema"}\n**Instrutor:** ${course.instructorId ? `<@${course.instructorId}>` : "Não definido"}\n**Canal do Painel:** ${course.panelChannelId ? `<#${course.panelChannelId}>` : "Nao publicado"}\n**Horário:** <t:${Math.floor(Date.now() / 1000)}:f>`
     }] }],
     flags: MessageFlags.IsComponentsV2
   }).catch(() => undefined);
@@ -326,8 +484,28 @@ async function sendCourseLog(guild: Interaction["guild"] & {}, config: PoliceCou
 function canManage(member: GuildMember, ownerId: string, roleIds: string[]) {
   return member.id === ownerId || member.permissions.has(PermissionFlagsBits.Administrator) || roleIds.some((roleId) => member.roles.cache.has(roleId));
 }
+function canTeach(member: GuildMember, ownerId: string, config: PoliceCourseConfig, course: PoliceCourse) {
+  return canManage(member, ownerId, config.allowedManagerRoles)
+    || course.authorizedUserIds.includes(member.id)
+    || course.authorizedRoleIds.some((roleId) => member.roles.cache.has(roleId));
+}
+function canControlCourse(member: GuildMember, ownerId: string, config: PoliceCourseConfig, course: PoliceCourse) {
+  return member.id === course.instructorId
+    || canManage(member, ownerId, [...config.allowedManagerRoles, ...config.allowedFinishRoles]);
+}
 function inputRow(id: string, label: string, style: TextInputStyle, required: boolean) {
   return new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(style === TextInputStyle.Paragraph ? 1000 : 100));
+}
+function inputValueRow(id: string, label: string, value: string, placeholder: string) {
+  const input = new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setPlaceholder(placeholder);
+  if (value) input.setValue(value);
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
 }
 function color(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x2563eb; }
 function escapeMarkdown(value: string) { return value.replace(/([\\`*_{}[\]()<>#+\-.!|])/g, "\\$1"); }
