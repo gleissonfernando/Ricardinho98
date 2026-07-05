@@ -8968,7 +8968,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 
   async function removeRhImage() {
     if (!botId || !guild) return;
-    const nextConfig = { ...config, panelBannerUrl: "", panelFooterImageUrl: "", panelImageUrl: "", panelImagePosition: "none" as const };
+    const nextConfig = { ...config, panelBannerUrl: "", panelFooterImageUrl: "", panelImageRemoved: true, panelImageUrl: "", panelImagePosition: "none" as const };
     setImageUploading(true);
     setMessage(null);
     try {
@@ -9095,7 +9095,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
                           />
                         </span>
                       </label>
-                      <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
+                      <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageRemoved: false, panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
                       <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
                       <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={() => void removeRhImage()} type="button" variant="outline">
                         <Trash2 className="h-4 w-4" />
@@ -9156,6 +9156,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 
 type PoliceRhTab = "general" | "absence" | "adornos" | "panel" | "logs" | "permissions";
 type PoliceRhImagePosition = "top" | "middle" | "side" | "footer" | "none";
+const DEFAULT_POLICE_RH_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
 
 type PoliceRhConfig = {
   adornoColor: string;
@@ -9200,6 +9201,7 @@ type PoliceRhConfig = {
   panelDescription: string;
   panelFooterImageUrl: string;
   panelFooterText: string;
+  panelImageRemoved: boolean;
   panelImagePosition: PoliceRhImagePosition;
   panelImageUrl: string;
   panelMessageId: string | null;
@@ -9253,8 +9255,9 @@ const defaultPoliceRhConfig: PoliceRhConfig = {
   panelDescription: "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
   panelFooterImageUrl: "",
   panelFooterText: "📌 RH - Sistema interno",
-  panelImagePosition: "side",
-  panelImageUrl: "",
+  panelImageRemoved: false,
+  panelImagePosition: "top",
+  panelImageUrl: DEFAULT_POLICE_RH_PANEL_IMAGE_URL,
   panelMessageId: null,
   panelTitle: "🏢 RH - Ausências e Adornos",
   rhAllowedRoleIds: [],
@@ -9396,12 +9399,13 @@ function normalizePoliceRhConfig(raw: Record<string, unknown>): PoliceRhConfig {
     panelMessageId: readNullableString(raw.panelMessageId),
     panelTitle: readStringValue(raw.panelTitle) || defaultPoliceRhConfig.panelTitle,
     panelDescription: readStringValue(raw.panelDescription) || defaultPoliceRhConfig.panelDescription,
-    panelImageUrl: readStringValue(raw.panelImageUrl),
+    panelImageRemoved: raw.panelImageRemoved === true,
+    panelImageUrl: raw.panelImageRemoved === true ? "" : readStringValue(raw.panelImageUrl) || defaultPoliceRhConfig.panelImageUrl,
     panelBannerUrl: readStringValue(raw.panelBannerUrl),
     panelFooterText: readStringValue(raw.panelFooterText) || defaultPoliceRhConfig.panelFooterText,
     panelFooterImageUrl: readStringValue(raw.panelFooterImageUrl),
     panelColor: readColorValue(raw.panelColor, defaultPoliceRhConfig.panelColor),
-    panelImagePosition: readPoliceRhImagePosition(raw.panelImagePosition, defaultPoliceRhConfig.panelImagePosition),
+    panelImagePosition: raw.panelImageRemoved === true ? "none" : readPoliceRhImagePosition(raw.panelImagePosition, defaultPoliceRhConfig.panelImagePosition),
     rhAllowedRoleIds: readStringList(raw.rhAllowedRoleIds),
     rhResponsibleRoleIds: readStringList(raw.rhResponsibleRoleIds),
     rhLogChannelId: readNullableString(raw.rhLogChannelId),

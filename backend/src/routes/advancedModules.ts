@@ -17,6 +17,7 @@ import type { AuthSessionUser } from "../types/session";
 const guildIdSchema = z.string().regex(/^\d{5,32}$/);
 const botIdSchema = z.string().min(1).max(120);
 const snowflakeSchema = z.string().regex(/^\d{5,32}$/);
+const DEFAULT_POLICE_RH_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
 const policeRhImageUpload = raw({
   limit: "10mb",
   type: ["image/gif", "image/jpeg", "image/png", "image/webp"]
@@ -171,12 +172,13 @@ const policeRhConfigSchema = z.object({
   panelMessageId: snowflakeSchema.nullable().default(null),
   panelTitle: z.string().trim().min(1).max(120).default("🏢 RH - Ausências e Adornos"),
   panelDescription: z.string().trim().max(1200).default("📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado."),
-  panelImageUrl: z.string().trim().max(2048).default(""),
+  panelImageRemoved: z.boolean().default(false),
+  panelImageUrl: z.string().trim().max(2048).default(DEFAULT_POLICE_RH_PANEL_IMAGE_URL),
   panelBannerUrl: z.string().trim().max(2048).default(""),
   panelFooterText: z.string().trim().max(200).default("📌 RH - Sistema interno"),
   panelFooterImageUrl: z.string().trim().max(2048).default(""),
   panelColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
-  panelImagePosition: policeRhImagePositionSchema.default("side"),
+  panelImagePosition: policeRhImagePositionSchema.default("top"),
   rhAllowedRoleIds: z.array(snowflakeSchema).max(100).default([]),
   rhResponsibleRoleIds: z.array(snowflakeSchema).max(100).default([]),
   rhLogChannelId: snowflakeSchema.nullable().default(null),
@@ -526,6 +528,7 @@ advancedModulesRouter.put("/:botId/:guildId/police-rh/image", policeRhImageUploa
     const normalizedConfig = normalizeModuleConfig("police-rh", {
       ...currentConfig,
       panelBannerUrl: stored.publicUrl,
+      panelImageRemoved: false,
       panelImagePosition: currentConfig.panelImagePosition === "none" ? "top" : currentConfig.panelImagePosition || "top",
       panelImageUrl: stored.publicUrl
     });
@@ -760,10 +763,12 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
   }
 
   if (moduleId === "police-rh") {
+    const panelImageRemoved = config.panelImageRemoved === true;
     return policeRhConfigSchema.parse({
       ...config,
       panelChannelId: config.panelChannelId || config.rhPanelChannelId || config.absencePanelChannelId || config.adornoPanelChannelId || null,
-      panelImageUrl: config.panelImageUrl || "",
+      panelImageRemoved,
+      panelImageUrl: panelImageRemoved ? "" : config.panelImageUrl || DEFAULT_POLICE_RH_PANEL_IMAGE_URL,
       panelBannerUrl: config.panelBannerUrl || "",
       panelFooterImageUrl: config.panelFooterImageUrl || "",
       absenceImageUrl: config.absenceImageUrl || "",

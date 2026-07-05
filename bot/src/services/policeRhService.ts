@@ -20,6 +20,7 @@ import { renderComponentsV2Panel, type PanelVisualConfig, type PanelVisualPositi
 
 const MODULE_ID = "police-rh";
 const PREFIX = "police_rh";
+const DEFAULT_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
 
 type PoliceRhConfig = {
   enabled: boolean;
@@ -29,6 +30,7 @@ type PoliceRhConfig = {
   panelDescription: string;
   panelColor: string;
   panelBannerUrl: string;
+  panelImageRemoved: boolean;
   panelImageUrl: string;
   panelImagePosition: PanelVisualPosition;
   panelFooterText: string;
@@ -276,6 +278,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
   if (!botId) return null;
   const runtime = await context.api.getBotGuildConfig(botId, guildId);
   const raw = runtime.modules[MODULE_ID] ?? {};
+  const panelImageRemoved = raw.panelImageRemoved === true;
   const [panelVisual, absenceVisual, adornoVisual] = await Promise.all([
     loadPanelVisual(context, guildId, "police-rh"),
     loadPanelVisual(context, guildId, "police-rh-absence"),
@@ -288,9 +291,10 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelTitle: readString(raw.panelTitle) ?? "🏢 RH - Ausências e Adornos",
     panelDescription: readString(raw.panelDescription) ?? "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
     panelColor: readString(raw.panelColor) ?? "#7c3aed",
-    panelBannerUrl: readString(raw.panelBannerUrl) ?? "",
-    panelImageUrl: readString(raw.panelImageUrl) ?? panelVisual.imageUrl,
-    panelImagePosition: readImagePosition(raw.panelImagePosition, panelVisual.imagePosition),
+    panelBannerUrl: panelImageRemoved ? "" : readString(raw.panelBannerUrl) ?? "",
+    panelImageRemoved,
+    panelImageUrl: panelImageRemoved ? "" : (readString(raw.panelImageUrl) ?? panelVisual.imageUrl) || DEFAULT_PANEL_IMAGE_URL,
+    panelImagePosition: panelImageRemoved ? "none" : readImagePosition(raw.panelImagePosition, panelVisual.imagePosition === "none" ? "top" : panelVisual.imagePosition),
     panelFooterText: readString(raw.panelFooterText) ?? "📌 RH - Sistema interno",
     panelFooterImageUrl: readString(raw.panelFooterImageUrl) ?? "",
     absenceEnabled: raw.absenceEnabled !== false,
