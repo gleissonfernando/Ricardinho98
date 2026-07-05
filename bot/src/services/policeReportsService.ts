@@ -28,6 +28,7 @@ type ComplaintType = { id: string; name: string; description: string | null; emo
 type PoliceReportsConfig = {
   enabled: boolean;
   panelChannelId: string | null;
+  panelChannelIds: string[];
   panelMessageId: string | null;
   panelTitle: string;
   panelDescription: string;
@@ -35,8 +36,11 @@ type PoliceReportsConfig = {
   color: string;
   thumbnailUrl: string;
   categoryId: string | null;
+  categoryIds: string[];
   archiveCategoryId: string | null;
+  archiveCategoryIds: string[];
   logChannelId: string | null;
+  logChannelIds: string[];
   responsibleRoleIds: string[];
   responsibleRoleId: string | null;
   maxChannelMinutes: number;
@@ -164,10 +168,11 @@ async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allo
   const config = await loadConfig(guild.id, context);
   if (!config?.enabled) throw new Error("Ative o Sistema de Denuncias IAB antes de publicar.");
   if (!config.complaintTypes.length) throw new Error("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
-  if (!config.panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
-  if (!config.categoryId) throw new Error("Configure a categoria dos canais temporarios antes de publicar.");
-  if (!config.archiveCategoryId) throw new Error("Configure a categoria para onde o canal sera enviado depois de finalizado.");
-  const channel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
+  const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
+  if (!panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
+  if (!firstId(config.categoryIds, config.categoryId)) throw new Error("Configure a categoria dos canais temporarios antes de publicar.");
+  if (!firstId(config.archiveCategoryIds, config.archiveCategoryId)) throw new Error("Configure a categoria para onde o canal sera enviado depois de finalizado.");
+  const channel = await guild.channels.fetch(panelChannelId).catch(() => null);
   if (!channel || !("messages" in channel) || !("send" in channel)) throw new Error("O canal configurado nao aceita mensagens.");
   let message = config.panelMessageId ? await channel.messages.fetch(config.panelMessageId).catch(() => null) : null;
   if (message) {
@@ -194,6 +199,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
   return {
     enabled: raw.enabled === true,
     panelChannelId: readString(raw.panelChannelId),
+    panelChannelIds: idList(raw.panelChannelIds, readString(raw.panelChannelId)),
     panelMessageId: readString(raw.panelMessageId),
     panelTitle: readString(raw.panelTitle) ?? "Sistema de Denuncias IAB",
     panelDescription: readString(raw.panelDescription) ?? "Registre uma denuncia de forma segura e sigilosa.",
@@ -201,8 +207,11 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     color: readString(raw.color) ?? "#7c3aed",
     thumbnailUrl: readString(raw.thumbnailUrl) ?? "",
     categoryId: readString(raw.categoryId),
+    categoryIds: idList(raw.categoryIds, readString(raw.categoryId)),
     archiveCategoryId: readString(raw.archiveCategoryId),
+    archiveCategoryIds: idList(raw.archiveCategoryIds, readString(raw.archiveCategoryId)),
     logChannelId: readString(raw.logChannelId),
+    logChannelIds: idList(raw.logChannelIds, readString(raw.logChannelId)),
     responsibleRoleId: readString(raw.responsibleRoleId),
     responsibleRoleIds: readStringArray(raw.responsibleRoleIds),
     maxChannelMinutes: Math.max(1, Number(raw.maxChannelMinutes) || 1440),
@@ -262,17 +271,18 @@ async function createTemporaryProcedureChannel(
     await interaction.reply({ content: "O Sistema de Denuncias IAB esta desativado.", ephemeral: true });
     return;
   }
-  if (!config.categoryId) {
+  const categoryId = firstId(config.categoryIds, config.categoryId);
+  if (!categoryId) {
     await interaction.reply({ content: "O sistema precisa ser configurado na dashboard: selecione a categoria dos canais temporarios.", ephemeral: true });
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Categoria temporaria nao configurada.", { selectedType: selected.id });
     return;
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const category = await interaction.guild.channels.fetch(config.categoryId).catch(() => null);
+  const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
     await interaction.editReply("A categoria configurada para denuncias nao foi encontrada.");
-    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.channel_create_failed", "Categoria configurada invalida.", { categoryId: config.categoryId });
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.channel_create_failed", "Categoria configurada invalida.", { categoryId });
     return;
   }
 
@@ -400,15 +410,16 @@ async function handleProcedureAction(
     return;
   }
   if (action === "finish") {
-    if (!config.archiveCategoryId) {
+    const archiveCategoryId = firstId(config.archiveCategoryIds, config.archiveCategoryId);
+    if (!archiveCategoryId) {
       await interaction.reply({ content: "Configure a categoria de denuncias finalizadas na dashboard antes de finalizar.", ephemeral: true });
       await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao nao configurada.", { channelId: interaction.channel.id });
       return;
     }
-    const archiveCategory = await interaction.guild.channels.fetch(config.archiveCategoryId).catch(() => null);
+    const archiveCategory = await interaction.guild.channels.fetch(archiveCategoryId).catch(() => null);
     if (!archiveCategory || archiveCategory.type !== ChannelType.GuildCategory || !("setParent" in interaction.channel)) {
       await interaction.reply({ content: "A categoria de finalizacao configurada nao foi encontrada ou o canal nao pode ser movido.", ephemeral: true });
-      await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao invalida.", { archiveCategoryId: config.archiveCategoryId, channelId: interaction.channel.id });
+      await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao invalida.", { archiveCategoryId, channelId: interaction.channel.id });
       return;
     }
     if (requesterId && /^\d{5,32}$/.test(requesterId) && "permissionOverwrites" in interaction.channel) {
@@ -436,8 +447,9 @@ async function handleProcedureAction(
     return;
   }
   if (action === "archive") {
-    const target = config.logChannelId
-      ? await interaction.guild.channels.fetch(config.logChannelId).catch(() => null)
+    const logChannelId = firstId(config.logChannelIds, config.logChannelId);
+    const target = logChannelId
+      ? await interaction.guild.channels.fetch(logChannelId).catch(() => null)
       : interaction.channel;
     const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel);
     if (target && "send" in target && !target.isDMBased()) {
@@ -586,6 +598,8 @@ function readString(value: unknown) { return typeof value === "string" && value.
 function readEnabledImageUrl(value: { imageEnabled?: boolean; imageUrl?: string | null } | null) { return value?.imageEnabled && value.imageUrl ? value.imageUrl : null; }
 function enabledVisual(value: PanelVisualConfig | null) { return value?.imageEnabled && value.imageUrl ? value : null; }
 function readStringArray(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
+function idList(value: unknown, fallback: string | null) { return uniqueIds([...readStringArray(value), ...(fallback ? [fallback] : [])]); }
+function firstId(values: string[] | undefined, fallback: string | null | undefined) { return values?.[0] ?? fallback ?? null; }
 function readImagePosition(value: unknown): PanelVisualPosition {
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : "banner";
 }

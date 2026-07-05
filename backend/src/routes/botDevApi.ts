@@ -35,8 +35,11 @@ const policeReportsPanelStateSchema = z.object({
 const policeFlightStateSchema = z.object({
   panelMessageId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
   panelChannelId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  panelChannelIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),
   logChannelId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  logChannelIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),
   categoryId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
+  categoryIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),
   allowedRoleIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),
   dafRoleIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),
   pilotRoleIds: z.array(z.string().regex(/^\d{5,32}$/)).max(100).optional(),

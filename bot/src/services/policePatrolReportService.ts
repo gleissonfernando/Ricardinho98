@@ -31,7 +31,8 @@ export async function createPolicePatrolFromCommand(interaction: ChatInputComman
   const author = await interaction.guild.members.fetch(interaction.user.id);
   if (!settings.enabled) { await interaction.reply({ content: "Relatórios policiais estão desativados.", ephemeral: true }); return; }
   if (!hasRoleOrAdmin(author, settings.creatorRoleIds)) { await interaction.reply({ content: "Você não possui o cargo autorizado para criar relatórios.", ephemeral: true }); return; }
-  if (settings.commandChannelId && interaction.channelId !== settings.commandChannelId) { await interaction.reply({ content: `Use o comando /relatorio em <#${settings.commandChannelId}>.`, ephemeral: true }); return; }
+  const commandChannelIds = ids(settings.commandChannelIds, settings.commandChannelId);
+  if (commandChannelIds.length && !commandChannelIds.includes(interaction.channelId)) { await interaction.reply({ content: `Use o comando /relatorio em ${commandChannelIds.map((id) => `<#${id}>`).join(", ")}.`, ephemeral: true }); return; }
   const officer = interaction.options.getUser("usuario", true);
   await interaction.guild.members.fetch(officer.id);
   const patrolType = interaction.options.getString("tipo"); const initialNotes = interaction.options.getString("observacoes");
@@ -44,7 +45,7 @@ export async function createPolicePatrolFromCommand(interaction: ChatInputComman
     { id: officer.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
     ...settings.supervisorRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
   ];
-  const channel = await interaction.guild.channels.create({ name: `relatorio-${slug(officer.username)}-${report.id.slice(0, 4)}`, type: ChannelType.GuildText, parent: settings.temporaryCategoryId ?? undefined, permissionOverwrites: overwrites, reason: `Relatório policial ${report.id}` });
+  const channel = await interaction.guild.channels.create({ name: `relatorio-${slug(officer.username)}-${report.id.slice(0, 4)}`, type: ChannelType.GuildText, parent: ids(settings.temporaryCategoryIds, settings.temporaryCategoryId)[0] ?? undefined, permissionOverwrites: overwrites, reason: `Relatório policial ${report.id}` });
   const visuals = await getPanelVisualSlots(context, interaction.guild.id, "police-patrol-reports");
   const panel = await channel.send(initialPanel(report, visuals));
   await context.api.setPolicePatrolChannel(report.id, channel.id, panel.id);
@@ -123,8 +124,8 @@ async function handlePolicePatrolConfigInteraction(interaction: Interaction, con
   }
 
   if (interaction.isChannelSelectMenu() && action === "channel") {
-    const channelId = interaction.values[0] ?? null;
-    const patch = target === "command" ? { commandChannelId: channelId } : target === "log" ? { logChannelId: channelId } : target === "temporary" ? { temporaryCategoryId: channelId } : { archiveCategoryId: channelId };
+    const channelIds = interaction.values;
+    const patch = target === "command" ? { commandChannelIds: channelIds } : target === "log" ? { logChannelIds: channelIds } : target === "temporary" ? { temporaryCategoryIds: channelIds } : { archiveCategoryIds: channelIds };
     await context.api.savePolicePatrolSettings(interaction.guildId, { actorId: interaction.user.id, ...patch });
     await interaction.update(configSavedPayload("Canal salvo. Abra /config relatorio novamente para ver o resumo atualizado."));
     return;
@@ -202,7 +203,8 @@ async function finishReport(interaction: ButtonInteraction | ModalSubmitInteract
     await overwriteManager.edit(data.report.officerId, { ViewChannel: false, ReadMessageHistory: false, SendMessages: false }).catch(() => null);
     for (const roleId of settings.archiveViewRoleIds) { await overwriteManager.edit(roleId, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(() => null); }
     await overwriteManager.edit(interaction.client.user.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(() => null);
-    if (settings.archiveCategoryId) { await channel.setParent(settings.archiveCategoryId, { lockPermissions: false }).catch(() => null); }
+    const archiveCategoryId = ids(settings.archiveCategoryIds, settings.archiveCategoryId)[0] ?? null;
+    if (archiveCategoryId) { await channel.setParent(archiveCategoryId, { lockPermissions: false }).catch(() => null); }
   }
   await updatePanel(interaction, finishedPanel(data.report));
   await sendLog(interaction, context, settings, data.report, data.messages);
@@ -241,8 +243,9 @@ async function evaluateReport(interaction: ButtonInteraction, context: BotContex
 }
 
 async function sendLog(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext, settings: PolicePatrolSettings, report: PolicePatrolReport, messages: PolicePatrolMessage[]) {
-  if (!settings.logChannelId || !interaction.guild) return;
-  const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null);
+  const logChannelId = ids(settings.logChannelIds, settings.logChannelId)[0] ?? null;
+  if (!logChannelId || !interaction.guild) return;
+  const channel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
   await channel.send(pendingLogPayload(report, messages));
 }
@@ -309,7 +312,7 @@ function configPanelPayload(settings: PolicePatrolSettings) {
       type: 17,
       accent_color: 0x2563eb,
       components: [
-        { type: 10, content: `# Sistema de Relatorios\nStatus: **${settings.enabled ? "Ativo" : "Inativo"}**\nCanal do comando: ${settings.commandChannelId ? `<#${settings.commandChannelId}>` : "Nao definido"}\nLogs: ${settings.logChannelId ? `<#${settings.logChannelId}>` : "Nao definido"}\nCategoria temporaria: ${settings.temporaryCategoryId ?? "Nao definida"}\nExportacao padrao: **${settings.defaultExportFormat.toUpperCase()}**` },
+        { type: 10, content: `# Sistema de Relatorios\nStatus: **${settings.enabled ? "Ativo" : "Inativo"}**\nCanais do comando: ${formatMentions(ids(settings.commandChannelIds, settings.commandChannelId), "Nao definido")}\nLogs: ${formatMentions(ids(settings.logChannelIds, settings.logChannelId), "Nao definido")}\nCategorias temporarias: ${ids(settings.temporaryCategoryIds, settings.temporaryCategoryId).join(", ") || "Nao definida"}\nExportacao padrao: **${settings.defaultExportFormat.toUpperCase()}**` },
         new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
         new ActionRowBuilder<ButtonBuilder>().addComponents(toggle)
       ]
@@ -329,8 +332,8 @@ function configEditorPayload(section: string, settings: PolicePatrolSettings) {
         accent_color: 0x2563eb,
         components: [
           { type: 10, content: "# Categorias\nConfigure onde os canais temporarios serao criados e para onde serao arquivados." },
-          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:temporary`).setPlaceholder("Categoria temporaria").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1)),
-          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:archive`).setPlaceholder("Categoria de arquivo").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1))
+          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:temporary`).setPlaceholder("Categorias temporarias").setChannelTypes(ChannelType.GuildCategory).setMinValues(0).setMaxValues(25)),
+          new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:archive`).setPlaceholder("Categorias de arquivo").setChannelTypes(ChannelType.GuildCategory).setMinValues(0).setMaxValues(25))
         ]
       }],
       ephemeral: true,
@@ -373,7 +376,7 @@ function configEditorPayload(section: string, settings: PolicePatrolSettings) {
 
 function channelEditor(title: string, target: string, type: ChannelType.GuildText | ChannelType.GuildCategory) {
   return {
-    components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: `# ${title}` }, new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:${target}`).setPlaceholder(title).setChannelTypes(type).setMinValues(1).setMaxValues(1))] }],
+    components: [{ type: 17, accent_color: 0x2563eb, components: [{ type: 10, content: `# ${title}` }, new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:channel:${target}`).setPlaceholder(title).setChannelTypes(type).setMinValues(0).setMaxValues(25))] }],
     ephemeral: true,
     flags: MessageFlags.IsComponentsV2 as const
   };
@@ -423,6 +426,8 @@ function reportHtml(report: PolicePatrolReport, messages: PolicePatrolMessage[])
 function makePdf(text: string) { const lines = text.replace(/[^\x20-\x7e\n]/g, "?").split("\n").flatMap((line) => line.length ? line.match(/.{1,90}/g) ?? [line] : [""]); const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 55)) }, (_, index) => lines.slice(index * 55, index * 55 + 55)); const fontId = 3 + pages.length * 2; const objects: string[] = ["1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj", ""]; const kids: number[] = []; pages.forEach((pageLines, index) => { const pageId = 3 + index * 2; const contentId = pageId + 1; kids.push(pageId); const stream = `BT /F1 10 Tf 50 790 Td ${pageLines.map((line, lineIndex) => `${lineIndex ? "0 -13 Td " : ""}(${line.replace(/[\\()]/g, "\\$&")}) Tj`).join(" ")} ET`; objects.push(`${pageId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >> endobj`, `${contentId} 0 obj << /Length ${Buffer.byteLength(stream)} >> stream\n${stream}\nendstream endobj`); }); objects[1] = `2 0 obj << /Type /Pages /Kids [${kids.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >> endobj`; objects.push(`${fontId} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`); let pdf = "%PDF-1.4\n"; const offsets = [0]; for (const object of objects) { offsets.push(Buffer.byteLength(pdf)); pdf += `${object}\n`; } const xref = Buffer.byteLength(pdf); pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`; return Buffer.from(pdf); }
 async function canViewReport(interaction: ButtonInteraction | StringSelectMenuInteraction, context: BotContext, report: PolicePatrolReport) { if (interaction.user.id === report.authorId || interaction.user.id === report.officerId) return true; const settings = await context.api.getPolicePatrolSettings(interaction.guildId!); return hasRoleOrAdmin(interaction.member as GuildMember, settings.viewerRoleIds); }
 function hasRoleOrAdmin(member: GuildMember, roleIds: string[]) { return member.permissions.has(PermissionFlagsBits.Administrator) || member.permissions.has(PermissionFlagsBits.ManageGuild) || member.roles.cache.some((role) => roleIds.includes(role.id)); }
+function ids(values: string[] | undefined, fallback: string | null | undefined) { return [...new Set([...(values ?? []), fallback].filter((value): value is string => typeof value === "string" && value.length > 0))]; }
+function formatMentions(values: string[], fallback: string) { return values.length ? values.map((id) => `<#${id}>`).join(", ") : fallback; }
 function duration(minutes: number | null) { if (minutes === null) return "-"; return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`; }
 function slug(value: string) { return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 35) || "policial"; }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!)); }

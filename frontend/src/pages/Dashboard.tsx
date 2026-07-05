@@ -2806,9 +2806,13 @@ function FivemView({
 type PoliceReportsConfig = {
   enabled: boolean;
   panelChannelId: string | null;
+  panelChannelIds: string[];
   categoryId: string | null;
+  categoryIds: string[];
   archiveCategoryId: string | null;
+  archiveCategoryIds: string[];
   logChannelId: string | null;
+  logChannelIds: string[];
   responsibleRoleId: string | null;
   responsibleRoleIds: string[];
   maxChannelMinutes: number;
@@ -2852,9 +2856,13 @@ function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintType
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
   panelChannelId: null,
+  panelChannelIds: [],
   categoryId: null,
+  categoryIds: [],
   archiveCategoryId: null,
+  archiveCategoryIds: [],
   logChannelId: null,
+  logChannelIds: [],
   responsibleRoleId: null,
   responsibleRoleIds: [],
   maxChannelMinutes: 1440,
@@ -2876,7 +2884,11 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
 type PoliceFlightConfig = {
   enabled: boolean;
   panelChannelId: string | null;
+  panelChannelIds: string[];
   logChannelId: string | null;
+  logChannelIds: string[];
+  categoryId: string | null;
+  categoryIds: string[];
   allowedRoleIds: string[];
   pilotRoleIds: string[];
   shooterRoleIds: string[];
@@ -2899,7 +2911,11 @@ type PoliceFlightConfig = {
 const defaultPoliceFlightConfig: PoliceFlightConfig = {
   enabled: false,
   panelChannelId: null,
+  panelChannelIds: [],
   logChannelId: null,
+  logChannelIds: [],
+  categoryId: null,
+  categoryIds: [],
   allowedRoleIds: [],
   pilotRoleIds: [],
   shooterRoleIds: [],

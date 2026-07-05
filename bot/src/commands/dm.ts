@@ -5,19 +5,23 @@ import type { BotCommand } from "../types";
 export const dmCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("dm")
-    .setDescription("Envia e configura mensagens privadas.")
-    .addSubcommand((sub) => sub.setName("enviar").setDescription("Envia uma DM personalizada."))
-    .addSubcommand((sub) => sub.setName("config").setDescription("Abre o painel de configuracao.")),
+    .setDescription("Envia uma mensagem privada oculta."),
   moduleId: "dm-system",
   async execute(interaction, context) {
-    if (interaction.options.getSubcommand() === "config") {
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-        await interaction.reply({ content: "Você precisa de Gerenciar Servidor.", ephemeral: true });
-        return;
-      }
-      await showDmConfigPanel(interaction, context);
+    await showDmModal(interaction, context);
+  }
+};
+
+export const dmConfigCommand: BotCommand = {
+  data: new SlashCommandBuilder()
+    .setName("dmconfig")
+    .setDescription("Abre o painel de configuracao do sistema de DM."),
+  moduleId: "dm-system",
+  async execute(interaction, context) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      await interaction.reply({ content: "Você precisa de Gerenciar Servidor.", ephemeral: true });
       return;
     }
-    await showDmModal(interaction, context);
+    await showDmConfigPanel(interaction, context);
   }
 };

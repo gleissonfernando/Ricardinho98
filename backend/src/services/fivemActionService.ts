@@ -12,6 +12,7 @@ export const POLICE_ACTIONS_MODULE_ID = "police-actions";
 
 export type ActionSettingsInput = Partial<Pick<MongoFivemActionSettings,
   "enabled" | "categoryId" | "panelChannelId" | "actionChannelId" | "reportChannelId" |
+  "categoryIds" | "panelChannelIds" | "actionChannelIds" | "reportChannelIds" |
   "panelTitle" | "panelDescription" | "color" | "imageUrl" | "imagePosition"
 >>;
 
@@ -37,7 +38,9 @@ export async function getFivemActionSettings(botId: string, guildId: string, arc
   const now = new Date();
   const settings: MongoFivemActionSettings = {
     _id: randomUUID(), botId, guildId, architecture, enabled: false, categoryId: null,
+    categoryIds: [],
     panelChannelId: null, actionChannelId: null, reportChannelId: null, panelMessageId: null,
+    panelChannelIds: [], actionChannelIds: [], reportChannelIds: [],
     panelTitle: architecture === "fac" ? "Ações da FAC" : "Operações da Polícia",
     panelDescription: "Escolha uma ação no menu abaixo para iniciar.", color: "#7c3aed",
     imageUrl: null, imagePosition: "none", lastPanelRequestedAt: null,
@@ -50,7 +53,8 @@ export async function getFivemActionSettings(botId: string, guildId: string, arc
 export async function saveFivemActionSettings(botId: string, guildId: string, architecture: MongoFivemActionArchitecture, input: ActionSettingsInput, actorId: string | null) {
   await getFivemActionSettings(botId, guildId, architecture);
   const { fivemActionSettings } = await getMongoCollections();
-  await fivemActionSettings.updateOne({ botId, guildId, architecture }, { $set: { ...input, updatedAt: new Date(), updatedBy: actorId } });
+  const normalized = normalizeSettingsInput(input);
+  await fivemActionSettings.updateOne({ botId, guildId, architecture }, { $set: { ...normalized, updatedAt: new Date(), updatedBy: actorId } });
   return settingsDto((await fivemActionSettings.findOne({ botId, guildId, architecture }))!);
 }
 
@@ -140,7 +144,39 @@ export async function getFivemActionSession(botId: string, sessionId: string) {
   return session ? sessionDto(session) : null;
 }
 
-function settingsDto(value: MongoFivemActionSettings) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString(), lastPanelRequestedAt: value.lastPanelRequestedAt?.toISOString() ?? null }; }
+function settingsDto(value: MongoFivemActionSettings) {
+  const panelChannelIds = idList(value.panelChannelIds, value.panelChannelId);
+  const actionChannelIds = idList(value.actionChannelIds, value.actionChannelId);
+  const reportChannelIds = idList(value.reportChannelIds, value.reportChannelId);
+  const categoryIds = idList(value.categoryIds, value.categoryId);
+  return {
+    ...value,
+    id: value._id,
+    panelChannelId: panelChannelIds[0] ?? null,
+    panelChannelIds,
+    actionChannelId: actionChannelIds[0] ?? null,
+    actionChannelIds,
+    reportChannelId: reportChannelIds[0] ?? null,
+    reportChannelIds,
+    categoryId: categoryIds[0] ?? null,
+    categoryIds,
+    createdAt: value.createdAt.toISOString(),
+    updatedAt: value.updatedAt.toISOString(),
+    lastPanelRequestedAt: value.lastPanelRequestedAt?.toISOString() ?? null
+  };
+}
 function actionDto(value: MongoFivemActionDefinition) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
 function sessionDto(value: any) { return { ...value, id: value._id, startedAt: value.startedAt.toISOString(), finishedAt: value.finishedAt?.toISOString() ?? null, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString(), participants: value.participants.map((item: MongoFivemActionParticipant) => ({ ...item, joinedAt: item.joinedAt.toISOString(), leftAt: item.leftAt?.toISOString() ?? null })) }; }
+function normalizeSettingsInput(input: ActionSettingsInput) {
+  return {
+    ...input,
+    ...(input.panelChannelIds ? { panelChannelId: input.panelChannelIds[0] ?? null } : {}),
+    ...(input.actionChannelIds ? { actionChannelId: input.actionChannelIds[0] ?? null } : {}),
+    ...(input.reportChannelIds ? { reportChannelId: input.reportChannelIds[0] ?? null } : {}),
+    ...(input.categoryIds ? { categoryId: input.categoryIds[0] ?? null } : {})
+  };
+}
+function idList(values: unknown, fallback: string | null | undefined) {
+  return [...new Set([...(Array.isArray(values) ? values : []), fallback].filter((value): value is string => typeof value === "string" && /^\d{5,32}$/.test(value)))];
+}
 function serviceError(message: string, statusCode: number) { return Object.assign(new Error(message), { statusCode }); }

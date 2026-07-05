@@ -25,8 +25,8 @@ export async function getDmSettings(botId: string, guildId: string) {
   const now = new Date();
   const value: MongoDmSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, authorizedRoleIds: [], logChannelId: null,
-    bannerUrl: null, color: "#5865f2", defaultTitle: "Mensagem da equipe",
-    defaultText: "Você recebeu uma nova mensagem.", footerText: null, buttons: [],
+    bannerUrl: null, imageUrl: null, color: "#5865f2", defaultTitle: "Mensagem da equipe",
+    defaultText: "Você recebeu uma nova mensagem.", footerText: null, buttons: [], blockBots: true,
     createdAt: now, updatedAt: now, updatedBy: null
   };
   await dmSettings.updateOne({ botId, guildId }, { $setOnInsert: value }, { upsert: true });
@@ -36,7 +36,7 @@ export async function getDmSettings(botId: string, guildId: string) {
 export async function saveDmSettings(botId: string, guildId: string, input: Partial<Omit<MongoDmSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>, actorId: string | null) {
   await getDmSettings(botId, guildId);
   const { dmSettings } = await getMongoCollections();
-  await dmSettings.updateOne({ botId, guildId }, { $set: { ...input, updatedAt: new Date(), updatedBy: actorId } });
+  await dmSettings.updateOne({ botId, guildId }, { $set: { ...normalizeDmSettingsInput(input), updatedAt: new Date(), updatedBy: actorId } });
   return dmSettingsDto((await dmSettings.findOne({ botId, guildId }))!);
 }
 
@@ -108,7 +108,7 @@ export async function getSummons(botId: string, id: string) {
 }
 
 function dmSettingsDto(value: MongoDmSettings) {
-  return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
+  return { ...value, imageUrl: value.imageUrl ?? null, blockBots: value.blockBots ?? true, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
 }
 function summonsSettingsDto(value: MongoSummonsSettings) {
   return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
@@ -119,4 +119,23 @@ function summonsDto(value: any) {
     closedAt: value.closedAt?.toISOString() ?? null, deleteAt: value.deleteAt?.toISOString() ?? null,
     updatedAt: value.updatedAt.toISOString()
   };
+}
+
+function normalizeDmSettingsInput(input: Partial<Omit<MongoDmSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>) {
+  const next: typeof input = { ...input };
+  if ("bannerUrl" in next) next.bannerUrl = normalizeHttpsUrl(next.bannerUrl);
+  if ("imageUrl" in next) next.imageUrl = normalizeHttpsUrl(next.imageUrl);
+  if (next.buttons) {
+    next.buttons = next.buttons
+      .map((button) => ({ ...button, url: normalizeHttpsUrl(button.url) }))
+      .filter((button) => button.style !== "link" || Boolean(button.url));
+  }
+  return next;
+}
+
+function normalizeHttpsUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("https://")) throw Object.assign(new Error("Use uma URL HTTPS válida para imagens e botões."), { statusCode: 400 });
+  return trimmed;
 }

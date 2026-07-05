@@ -13,6 +13,7 @@ const buttonSchema = z.object({ id: z.string().min(1).max(40), label: z.string()
 const dmSettingsSchema = z.object({
   enabled: z.boolean().optional(), authorizedRoleIds: z.array(snowflake).max(50).optional(),
   logChannelId: snowflake.nullable().optional(), bannerUrl: z.string().max(2048).nullable().optional(),
+  imageUrl: z.string().max(2048).nullable().optional(), blockBots: z.boolean().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), defaultTitle: z.string().min(1).max(256).optional(),
   defaultText: z.string().max(4000).optional(), footerText: z.string().max(2048).nullable().optional(),
   buttons: z.array(buttonSchema).max(5).optional()

@@ -60,7 +60,7 @@ export const hierarchyCommand: BotCommand = {
 export function startFivemHierarchyService(client: Client<true>, context: BotContext) {
   context.socket.onFivemHierarchyPanelUpdate((payload) => {
     const guild = client.guilds.cache.get(payload.guildId);
-    if (guild) scheduleHierarchyRefresh(guild, context, payload.panelId);
+    if (guild) scheduleHierarchyRefresh(guild, context);
   });
 
   for (const guild of client.guilds.cache.values()) {
@@ -90,7 +90,7 @@ export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, pane
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null) {
   const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
   const lookup = panelId?.trim().toLowerCase() ?? null;
-  const scoped = dedupeHierarchyPanels(panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup)));
+  const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
   if (!scoped.length) return;
   await Promise.all([
     guild.members.fetch(),
@@ -102,19 +102,8 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
   }
 }
 
-function dedupeHierarchyPanels(panels: FivemHierarchyPanel[]) {
-  const byUnitAndChannel = new Map<string, FivemHierarchyPanel>();
-
-  panels.forEach((panel) => {
-    const key = `${panel.panelChannelId ?? "no-channel"}:${panel.unitId?.toLowerCase() || panel.id}`;
-    const current = byUnitAndChannel.get(key);
-
-    if (!current || (!current.panelMessageId && panel.panelMessageId)) {
-      byUnitAndChannel.set(key, panel);
-    }
-  });
-
-  return [...byUnitAndChannel.values()];
+export async function atualizarTodasHierarquias(guild: Guild, context: BotContext) {
+  await refreshHierarchyPanelsForGuild(guild, context, null);
 }
 
 async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel) {
@@ -203,13 +192,19 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
 }
 
 function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
+  const membersByBlock = collectHierarchyMembersForPanel(guild, panel).reduce((acc, item) => {
+    const current = acc.get(item.blockId) ?? [];
+    current.push(item.member);
+    acc.set(item.blockId, current);
+    return acc;
+  }, new Map<string, GuildMember[]>());
+
   const blocks = panel.hierarchies
     .filter((item) => item.active)
     .sort((a, b) => a.order - b.order)
     .map((item) => {
-      const candidates = item.roleId ? Array.from(guild.members.cache.values())
-        .filter((member) => member.roles.cache.has(item.roleId))
-        .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR")) : [];
+      const candidates = (membersByBlock.get(item.id) ?? [])
+        .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR"));
       const displayedCandidates = candidates.slice(0, item.limit ?? 50);
       const members = displayedCandidates.map((member) => formatHierarchyMember(member, panel.displayMode));
       if (!members.length && item.showWhenEmpty === false) return null;
@@ -220,6 +215,31 @@ function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
 
   if (!blocks.length) return ["*Nenhuma hierarquia configurada.*"];
   return chunkHierarchyBlocks(blocks);
+}
+
+export function collectHierarchyMembersForPanel(guild: Pick<Guild, "members">, panel: FivemHierarchyPanel) {
+  const entries: Array<{ blockId: string; member: GuildMember; panelId: string; roleId: string; userId: string }> = [];
+  const seenInBlock = new Set<string>();
+
+  for (const block of panel.hierarchies.filter((item) => item.active)) {
+    if (!block.roleId) continue;
+
+    const membersWithRole = guild.members.cache.filter((member) => member.roles.cache.has(block.roleId));
+    for (const member of membersWithRole.values()) {
+      const key = `${panel.id}:${block.id}:${member.id}`;
+      if (seenInBlock.has(key)) continue;
+      seenInBlock.add(key);
+      entries.push({
+        blockId: block.id,
+        member,
+        panelId: panel.id,
+        roleId: block.roleId,
+        userId: member.id
+      });
+    }
+  }
+
+  return entries;
 }
 
 async function findHierarchyPanel(guildId: string, context: BotContext, unitId: string | null) {

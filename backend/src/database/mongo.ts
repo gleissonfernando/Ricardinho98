@@ -1214,9 +1214,13 @@ export type MongoFivemActionSettings = {
   architecture: MongoFivemActionArchitecture;
   enabled: boolean;
   categoryId: string | null;
+  categoryIds?: string[];
   panelChannelId: string | null;
+  panelChannelIds?: string[];
   actionChannelId: string | null;
+  actionChannelIds?: string[];
   reportChannelId: string | null;
+  reportChannelIds?: string[];
   panelMessageId: string | null;
   panelTitle: string;
   panelDescription: string;
@@ -1265,11 +1269,13 @@ export type MongoDmSettings = {
   authorizedRoleIds: string[];
   logChannelId: string | null;
   bannerUrl: string | null;
+  imageUrl: string | null;
   color: string;
   defaultTitle: string;
   defaultText: string;
   footerText: string | null;
   buttons: MongoDmButton[];
+  blockBots: boolean;
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string | null;
@@ -1364,6 +1370,7 @@ export type MongoPolicePatrolSettings = {
   _id: string; botId: string; guildId: string; enabled: boolean;
   creatorRoleIds: string[]; viewerRoleIds: string[]; deleteRoleIds: string[]; supervisorRoleIds: string[];
   commandChannelId: string | null; logChannelId: string | null; temporaryCategoryId: string | null; archiveCategoryId: string | null; archiveViewRoleIds: string[];
+  commandChannelIds?: string[]; logChannelIds?: string[]; temporaryCategoryIds?: string[]; archiveCategoryIds?: string[];
   deleteDelayMinutes: number; defaultExportFormat: "html" | "pdf" | "json"; createdAt: Date; updatedAt: Date; updatedBy: string | null;
 };
 

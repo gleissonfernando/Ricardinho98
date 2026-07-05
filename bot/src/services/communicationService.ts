@@ -11,19 +11,27 @@ const SUMMONS_PREFIX = "summons";
 
 export async function showDmModal(interaction: ChatInputCommandInteraction, context: BotContext) {
   const settings = await context.api.getDmSettings(interaction.guildId!);
-  if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de DM está desativado.", ephemeral: true });
-  if (!hasRole(interaction.member as GuildMember, settings.authorizedRoleIds) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-    return void await interaction.reply({ content: "Você não possui um cargo autorizado.", ephemeral: true });
+  if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de DM está desativado.", flags: MessageFlags.Ephemeral });
+  if (!canUseDm(interaction.member as GuildMember, settings)) {
+    return void await interaction.reply({ content: "Você não tem permissão para usar este sistema.", flags: MessageFlags.Ephemeral });
   }
-  const modal = new ModalBuilder().setCustomId(`${DM_PREFIX}:send`).setTitle("Enviar mensagem privada");
-  modal.addComponents(
-    input("target", "ID ou menção do usuário", "123456789012345678", true),
-    input("title", "Título", settings.defaultTitle, true),
-    input("description", "Descrição", settings.defaultText, true, true),
-    input("button_label", "Texto do botão (opcional)", "Abrir painel", false),
-    input("button_url", "URL do botão (opcional)", "https://...", false)
-  );
-  await interaction.showModal(modal);
+  await interaction.reply({
+    components: [{
+      type: 17,
+      accent_color: color(settings.color),
+      components: [
+        { type: 10, content: "## Enviar DM\nSelecione o usuário que receberá a mensagem privada.\n\n**Segurança:** não envie senhas, tokens ou informações confidenciais por este sistema." },
+        new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+          new UserSelectMenuBuilder()
+            .setCustomId(`${DM_PREFIX}:select_target`)
+            .setPlaceholder("Pesquisar usuário do servidor")
+            .setMinValues(1)
+            .setMaxValues(1)
+        )
+      ]
+    }],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  });
 }
 
 export async function showDmConfigPanel(interaction: ChatInputCommandInteraction, context: BotContext) {
@@ -93,23 +101,52 @@ export async function handleCommunicationInteraction(interaction: Interaction, c
 }
 
 async function handleDm(interaction: any, context: BotContext) {
-  const action = interaction.customId.split(":")[1];
+  const [, action, id] = interaction.customId.split(":");
   const settings = await context.api.getDmSettings(interaction.guildId);
+  if (action === "select_target" && interaction.isUserSelectMenu()) {
+    if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de DM está desativado.", flags: MessageFlags.Ephemeral });
+    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.reply({ content: "Você não tem permissão para usar este sistema.", flags: MessageFlags.Ephemeral });
+    const targetId = interaction.values[0];
+    const target = await interaction.guild.members.fetch(targetId).catch(() => null);
+    if (!target) return void await interaction.reply({ content: "Usuário não encontrado no servidor.", flags: MessageFlags.Ephemeral });
+    if (settings.blockBots !== false && target.user.bot) return void await interaction.reply({ content: "Não é permitido enviar DM para bots neste sistema.", flags: MessageFlags.Ephemeral });
+    const selected = settings.buttons[0] ?? null;
+    const modal = new ModalBuilder().setCustomId(`${DM_PREFIX}:send:${targetId}`).setTitle("Enviar mensagem privada");
+    modal.addComponents(
+      inputValue("title", "Título da mensagem", settings.defaultTitle, true),
+      inputValue("description", "Descrição da mensagem", settings.defaultText, true, true),
+      inputValue("button_label", "Texto do botão opcional", selected?.label ?? "", false),
+      inputValue("button_url", "URL do botão opcional", selected?.url ?? "", false),
+      inputValue("image_url", "Imagem opcional", settings.imageUrl ?? "", false)
+    );
+    await interaction.showModal(modal);
+    return;
+  }
   if (action === "send" && interaction.isModalSubmit()) {
-    await interaction.deferReply({ ephemeral: true });
-    const targetId = snowflakeFrom(interaction.fields.getTextInputValue("target"));
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!settings.enabled) return void await interaction.editReply("O Sistema de DM está desativado.");
+    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.editReply("Você não tem permissão para usar este sistema.");
+    const targetId = snowflakeFrom(id ?? "");
     const title = interaction.fields.getTextInputValue("title").trim();
     const description = interaction.fields.getTextInputValue("description").trim();
     const label = interaction.fields.getTextInputValue("button_label").trim();
     const url = interaction.fields.getTextInputValue("button_url").trim();
-    const button: DmButtonConfig | null = label && /^https?:\/\//i.test(url) ? { id: "custom", label, style: "link", url } : null;
+    const imageUrl = nullable(interaction.fields.getTextInputValue("image_url"));
+    if (!title) return void await interaction.editReply("O título não pode ficar vazio.");
+    if (!description) return void await interaction.editReply("A descrição não pode ficar vazia.");
+    if ((label || url) && (!label || !validHttpsUrl(url))) return void await interaction.editReply("Informe texto e uma URL HTTPS válida para o botão.");
+    if (imageUrl && !validHttpsUrl(imageUrl)) return void await interaction.editReply("Informe uma URL HTTPS válida para a imagem.");
+    const button: DmButtonConfig | null = label && url ? { id: "custom", label, style: "link", url } : null;
     let status: "sent" | "failed" = "sent"; let error: string | null = null;
     try {
+      const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+      if (!member) throw new Error("Usuário não encontrado.");
+      if (settings.blockBots !== false && member.user.bot) throw new Error("Envio para bot bloqueado.");
       const user = await context.client.users.fetch(targetId);
-      await user.send(dmPayload(settings, title, description, button));
-    } catch (caught) { status = "failed"; error = messageOf(caught); }
+      await user.send(dmPayload(settings, title, description, button, { staffName: interaction.member?.displayName ?? interaction.user.username, guildName: interaction.guild.name, imageUrl }));
+    } catch (caught) { status = "failed"; error = dmErrorMessage(caught); }
     await context.api.recordDm({ guildId: interaction.guildId, senderId: interaction.user.id, targetId, title, description, button, status, error });
-    await sendDmLog(interaction, settings, targetId, title, status, error);
+    await sendDmLog(interaction, settings, targetId, title, description, button, imageUrl ?? settings.imageUrl ?? null, status, error);
     await interaction.editReply(status === "sent" ? `DM enviada para <@${targetId}>.` : `Não foi possível enviar a DM: ${error}`);
     return;
   }
@@ -120,13 +157,13 @@ async function handleDm(interaction: any, context: BotContext) {
   if (action === "roles" && interaction.isRoleSelectMenu()) { await interaction.deferUpdate(); await context.api.saveDmSettings(interaction.guildId, { authorizedRoleIds: interaction.values }); await interaction.editReply({ content: "Cargos atualizados.", components: [] }); return; }
   if (action === "logs" && interaction.isChannelSelectMenu()) { await interaction.deferUpdate(); await context.api.saveDmSettings(interaction.guildId, { logChannelId: interaction.values[0] }); await interaction.editReply({ content: "Canal de logs atualizado.", components: [] }); return; }
   if (action === "visual" && interaction.isButton()) {
-    const modal = new ModalBuilder().setCustomId(`${DM_PREFIX}:save_visual`).setTitle("Visual da DM").addComponents(input("color", "Cor hexadecimal", settings.color, true), input("title", "Título padrão", settings.defaultTitle, true), input("text", "Texto padrão", settings.defaultText, true, true), input("footer", "Rodapé", settings.footerText ?? "", false), input("banner", "URL do banner", settings.bannerUrl ?? "", false));
+    const modal = new ModalBuilder().setCustomId(`${DM_PREFIX}:save_visual`).setTitle("Visual da DM").addComponents(inputValue("color", "Cor hexadecimal", settings.color, true), inputValue("title", "Título padrão", settings.defaultTitle, true), inputValue("text", "Texto padrão", settings.defaultText, true, true), inputValue("footer", "Rodapé", settings.footerText ?? "", false), inputValue("banner", "URL do banner", settings.bannerUrl ?? "", false));
     await interaction.showModal(modal); return;
   }
   if (action === "save_visual" && interaction.isModalSubmit()) {
-    await interaction.deferReply({ ephemeral: true }); await context.api.saveDmSettings(interaction.guildId, { color: normalizedColor(interaction.fields.getTextInputValue("color")), defaultTitle: interaction.fields.getTextInputValue("title"), defaultText: interaction.fields.getTextInputValue("text"), footerText: nullable(interaction.fields.getTextInputValue("footer")), bannerUrl: nullable(interaction.fields.getTextInputValue("banner")) }); await interaction.editReply("Visual atualizado."); return;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }); await context.api.saveDmSettings(interaction.guildId, { color: normalizedColor(interaction.fields.getTextInputValue("color")), defaultTitle: interaction.fields.getTextInputValue("title"), defaultText: interaction.fields.getTextInputValue("text"), footerText: nullable(interaction.fields.getTextInputValue("footer")), bannerUrl: nullable(interaction.fields.getTextInputValue("banner")) }); await interaction.editReply("Visual atualizado."); return;
   }
-  if (action === "test" && interaction.isButton()) { await interaction.reply({ ...dmPayload(settings, settings.defaultTitle, settings.defaultText, settings.buttons[0] ?? null), flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }); }
+  if (action === "test" && interaction.isButton()) { await interaction.reply({ ...dmPayload(settings, settings.defaultTitle, settings.defaultText, settings.buttons[0] ?? null, { staffName: interaction.member?.displayName ?? interaction.user.username, guildName: interaction.guild.name, imageUrl: settings.imageUrl }), flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }); }
 }
 
 async function handleSummons(interaction: any, context: BotContext) {
@@ -201,11 +238,17 @@ async function closeSummons(interaction: any, context: BotContext, settings: Sum
   setTimeout(() => void channel?.delete(`Intimação ${id} finalizada`).then(() => context.api.updateSummons(id, { status: "closed" })).catch(() => undefined), settings.deleteDelaySeconds * 1000).unref();
 }
 
-function dmPayload(settings: DmSettings, title: string, description: string, button: DmButtonConfig | null) {
-  const components: any[] = [{ type: 10, content: `# ${title}\n${description}${settings.footerText ? `\n\n-# ${settings.footerText}` : ""}` }];
-  if (settings.bannerUrl) components.unshift({ type: 12, items: [{ media: { url: settings.bannerUrl }, description: title }] });
+function dmPayload(settings: DmSettings, title: string, description: string, button: DmButtonConfig | null, meta?: { staffName?: string; guildName?: string; imageUrl?: string | null }) {
+  const now = Math.floor(Date.now() / 1000);
+  const imageUrl = validHttpsUrl(meta?.imageUrl ?? "") ? meta?.imageUrl : validHttpsUrl(settings.imageUrl ?? "") ? settings.imageUrl : null;
+  const components: any[] = [
+    { type: 10, content: `# 📩 Nova mensagem da equipe\n## ${title}\n${description}` }
+  ];
+  if (validHttpsUrl(settings.bannerUrl ?? "")) components.unshift({ type: 12, items: [{ media: { url: settings.bannerUrl! }, description: title }] });
+  if (imageUrl) components.push({ type: 12, items: [{ media: { url: imageUrl }, description: title }] });
+  components.push({ type: 10, content: `**Enviado por:** ${meta?.staffName ?? "Equipe"}\n**Servidor:** ${meta?.guildName ?? "Servidor"}\n**Data/Horário:** <t:${now}:f>${settings.footerText ? `\n\n-# ${settings.footerText}` : ""}` });
   const selected = button ?? settings.buttons[0] ?? null;
-  if (selected?.url) components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(selected.label).setURL(selected.url).setStyle(ButtonStyle.Link)));
+  if (selected?.url && validHttpsUrl(selected.url)) components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(selected.label).setURL(selected.url).setStyle(ButtonStyle.Link)));
   return { components: [{ type: 17, accent_color: color(settings.color), components }], flags: MessageFlags.IsComponentsV2 as const };
 }
 function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
@@ -214,14 +257,40 @@ function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
   components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Danger)));
   return { components: [{ type: 17, accent_color: color(settings.color), components }], flags: MessageFlags.IsComponentsV2 as const };
 }
-async function sendDmLog(interaction: any, settings: DmSettings, targetId: string, title: string, status: string, error: string | null) { if (!settings.logChannelId) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (channel?.isTextBased() && !channel.isDMBased()) await channel.send({ components: [{ type: 17, accent_color: status === "sent" ? 0x22c55e : 0xef4444, components: [{ type: 10, content: `## Log de DM\n**Autor:** <@${interaction.user.id}>\n**Destino:** <@${targetId}>\n**Título:** ${title}\n**Status:** ${status}${error ? `\n**Erro:** ${error}` : ""}` }] }], flags: MessageFlags.IsComponentsV2 }); }
+async function sendDmLog(interaction: any, settings: DmSettings, targetId: string, title: string, description: string, button: DmButtonConfig | null, imageUrl: string | null, status: string, error: string | null) {
+  if (!settings.logChannelId) return;
+  const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null);
+  if (channel?.isTextBased() && !channel.isDMBased()) await channel.send({
+    components: [{
+      type: 17,
+      accent_color: status === "sent" ? 0x22c55e : 0xef4444,
+      components: [{ type: 10, content: `## Log de DM\n**Staff:** <@${interaction.user.id}>\n**Usuário:** <@${targetId}>\n**Título:** ${title}\n**Descrição:** ${description.slice(0, 900)}\n**Botão:** ${button?.url ? `[${button.label}](${button.url})` : "Não usado"}\n**Imagem:** ${imageUrl ? "Usada" : "Não usada"}\n**Status:** ${status === "sent" ? "enviado" : "erro"}\n**Data/Horário:** <t:${Math.floor(Date.now() / 1000)}:f>${error ? `\n**Motivo:** ${error}` : ""}` }]
+    }],
+    flags: MessageFlags.IsComponentsV2
+  });
+}
 async function sendSummonsLog(interaction: any, settings: SummonsSettings, record: SummonsRecord, action: string, transcript?: string | null) { if (!settings.logChannelId) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (channel?.isTextBased() && !channel.isDMBased()) await channel.send({ components: [{ type: 17, accent_color: color(settings.color), components: [{ type: 10, content: `## Intimação ${action}\n**ID:** ${record.id}\n**Intimado:** <@${record.targetId}>\n**Responsável:** <@${record.requesterId}>\n**Motivo:** ${record.reason}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }] }], flags: MessageFlags.IsComponentsV2 }); }
 async function makeTranscript(channel: any) { const messages = await channel.messages.fetch({ limit: 100 }); return [...messages.values()].reverse().map((message: any) => `[${message.createdAt.toISOString()}] ${message.author.tag}: ${message.cleanContent || "(anexo/componente)"}`).join("\n").slice(0, 490000); }
 function configPayload(title: string, lines: string[], rows: any[]) { return { components: [{ type: 17, accent_color: 0x5865f2, components: [{ type: 10, content: `# ${title}\n${lines.join("\n")}` }, ...rows] }], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }; }
 function input(id: string, label: string, placeholder: string, required: boolean, paragraph = false) { return new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(placeholder.slice(0, 100)).setRequired(required).setStyle(paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short)); }
+function inputValue(id: string, label: string, value: string, required: boolean, paragraph = false) {
+  const field = new TextInputBuilder().setCustomId(id).setLabel(label).setRequired(required).setStyle(paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short);
+  if (value) field.setValue(value.slice(0, paragraph ? 4000 : 1000));
+  else field.setPlaceholder(label.slice(0, 100));
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(field);
+}
 function hasRole(member: GuildMember, roles: string[]) { return roles.some((id) => member.roles.cache.has(id)); }
+function canUseDm(member: GuildMember, settings: DmSettings) { return settings.authorizedRoleIds.length > 0 && hasRole(member, settings.authorizedRoleIds); }
 function snowflakeFrom(value: string) { const match = value.match(/\d{5,32}/); if (!match) throw new Error("Informe um ID ou menção válida."); return match[0]; }
 function normalizedColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : "#5865f2"; }
 function nullable(value: string) { return value.trim() || null; }
 function color(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x5865f2; }
 function messageOf(error: unknown) { return error instanceof Error ? error.message : String(error); }
+function validHttpsUrl(value: string) { try { return new URL(value).protocol === "https:"; } catch { return false; } }
+function dmErrorMessage(error: unknown) {
+  const message = messageOf(error);
+  if (/cannot send messages|50007|dm/i.test(message)) return "DM fechada";
+  if (/not found|unknown user|usuário não encontrado/i.test(message)) return "Usuário não encontrado";
+  if (/permission|missing access|bloqueado/i.test(message)) return "Permissão insuficiente";
+  return message || "Erro interno";
+}

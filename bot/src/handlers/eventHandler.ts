@@ -80,6 +80,9 @@ export function registerEvents(client: Client, context: BotContext) {
         const resolved = await resolveMember(member);
         if (resolved) {
           await handleGuildMemberAdd(resolved, context);
+          if (isBotModuleEnabled("fivem-hierarchy")) {
+            scheduleHierarchyRefresh(resolved.guild, context);
+          }
         }
       });
     });
@@ -87,6 +90,9 @@ export function registerEvents(client: Client, context: BotContext) {
       if (isMaintenanceModeActive()) return;
       runEvent("guildMemberRemove", async () => {
         await handleGuildMemberRemove(member, context);
+        if (isBotModuleEnabled("fivem-hierarchy")) {
+          scheduleHierarchyRefresh(member.guild, context);
+        }
         if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {
           await handleAntiBanDetection(context, { actionType: "kick", auditType: AuditLogEvent.MemberKick, guild: member.guild, targetId: member.id });
         }
@@ -98,6 +104,9 @@ export function registerEvents(client: Client, context: BotContext) {
         const [oldResolved, newResolved] = await Promise.all([resolveMember(oldMember), resolveMember(newMember)]);
         if (oldResolved && newResolved) {
           await handleGuildMemberUpdate(oldResolved, newResolved, context);
+          if (isBotModuleEnabled("fivem-hierarchy") && rolesChangedBetween(oldResolved, newResolved)) {
+            scheduleHierarchyRefresh(newResolved.guild, context);
+          }
           if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {
             const removedRoleIds = oldResolved.roles.cache.filter((role) => !newResolved.roles.cache.has(role.id)).map((role) => role.id);
             const addedRoleIds = newResolved.roles.cache.filter((role) => !oldResolved.roles.cache.has(role.id)).map((role) => role.id);
@@ -315,4 +324,9 @@ async function resolveMember(member: GuildMember | PartialGuildMember) {
   }
 
   return member.fetch().catch(() => null);
+}
+
+function rolesChangedBetween(oldMember: GuildMember, newMember: GuildMember) {
+  if (oldMember.roles.cache.size !== newMember.roles.cache.size) return true;
+  return oldMember.roles.cache.some((role) => !newMember.roles.cache.has(role.id));
 }

@@ -16,6 +16,8 @@ const snowflake = z.string().regex(/^\d{5,32}$/);
 const settingsSchema = z.object({
   enabled: z.boolean().optional(), categoryId: snowflake.nullable().optional(), panelChannelId: snowflake.nullable().optional(),
   actionChannelId: snowflake.nullable().optional(), reportChannelId: snowflake.nullable().optional(),
+  categoryIds: z.array(snowflake).max(100).optional(), panelChannelIds: z.array(snowflake).max(100).optional(),
+  actionChannelIds: z.array(snowflake).max(100).optional(), reportChannelIds: z.array(snowflake).max(100).optional(),
   panelTitle: z.string().min(1).max(120).optional(), panelDescription: z.string().max(1500).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), imageUrl: z.string().max(2048).nullable().optional(),
   imagePosition: z.enum(["top", "center", "bottom", "none"]).optional()

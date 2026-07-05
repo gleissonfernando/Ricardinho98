@@ -4,7 +4,7 @@ import { advertirCommand } from "./advertir";
 import { clearCommand } from "./clear";
 import { configCommand } from "./config";
 import { deleteServeCommand } from "./deleteServe";
-import { dmCommand } from "./dm";
+import { dmCommand, dmConfigCommand } from "./dm";
 import { emojiClonerCommand } from "./emojiCloner";
 import { gravarCommand } from "./gravar";
 import { fivemOrdersCommand } from "./fivemOrders";
@@ -33,6 +33,7 @@ export function createCommandCollection() {
     configCommand,
     deleteServeCommand,
     dmCommand,
+    dmConfigCommand,
     emojiClonerCommand,
     gravarCommand,
     fivemFinanceCommand,

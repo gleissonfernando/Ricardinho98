@@ -31,9 +31,12 @@ type FlightRole = "pilot" | "shooter";
 type FlightConfig = {
   enabled: boolean;
   panelChannelId: string | null;
+  panelChannelIds: string[];
   panelMessageId: string | null;
   logChannelId: string | null;
+  logChannelIds: string[];
   categoryId: string | null;
+  categoryIds: string[];
   allowedRoleIds: string[];
   dafRoleIds: string[];
   pilotRoleIds: string[];
@@ -194,15 +197,15 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
     return;
   }
   if (interaction.isChannelSelectMenu() && action === "panel_channel") {
-    await updateConfigFromSelect(interaction, context, { panelChannelId: interaction.values[0] ?? null });
+    await updateConfigFromSelect(interaction, context, { panelChannelIds: interaction.values, panelChannelId: interaction.values[0] ?? null });
     return;
   }
   if (interaction.isChannelSelectMenu() && action === "log_channel") {
-    await updateConfigFromSelect(interaction, context, { logChannelId: interaction.values[0] ?? null });
+    await updateConfigFromSelect(interaction, context, { logChannelIds: interaction.values, logChannelId: interaction.values[0] ?? null });
     return;
   }
   if (interaction.isChannelSelectMenu() && action === "category") {
-    await updateConfigFromSelect(interaction, context, { categoryId: interaction.values[0] ?? null });
+    await updateConfigFromSelect(interaction, context, { categoryIds: interaction.values, categoryId: interaction.values[0] ?? null });
     return;
   }
 
@@ -218,8 +221,9 @@ async function updateConfigFromSelect(interaction: RoleSelectMenuInteraction | C
 async function publishPoliceFlightPanel(guild: Guild, context: BotContext, openedByUserId: string | null = null) {
   let config = await loadConfig(guild.id, context);
   if (!config.enabled) throw new Error("Escalacao DAF desativada.");
-  if (!config.panelChannelId) throw new Error("Escalacao DAF sem canal do painel configurado.");
-  const channel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
+  const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
+  if (!panelChannelId) throw new Error("Escalacao DAF sem canal do painel configurado.");
+  const channel = await guild.channels.fetch(panelChannelId).catch(() => null);
   if (!channel?.isTextBased()) throw new Error("Canal do painel DAF invalido.");
 
   if (!config.openedAt || config.status === "closed") {
@@ -254,7 +258,7 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
     await editDeferred(interaction, "Voce nao possui permissao para participar da escalacao da DAF.");
     return;
   }
-  if (!config.panelChannelId || !config.panelMessageId) {
+  if (!firstId(config.panelChannelIds, config.panelChannelId) || !config.panelMessageId) {
     console.warn("[police-flight] painel ausente ou nao configurado", { guildId: interaction.guildId });
     await editDeferred(interaction, "Configure e publique o painel da DAF antes de usar a escala.");
     return;
@@ -343,11 +347,12 @@ async function closeScale(interaction: ButtonInteraction, context: BotContext, c
 }
 
 async function refreshPanel(guild: Guild, context: BotContext, config: FlightConfig) {
-  if (!config.panelChannelId || !config.panelMessageId) {
+  const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
+  if (!panelChannelId || !config.panelMessageId) {
     console.warn("[police-flight] nao foi possivel atualizar painel: canal ou mensagem ausente", { guildId: guild.id });
     return;
   }
-  const channel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
+  const channel = await guild.channels.fetch(panelChannelId).catch(() => null);
   if (!channel?.isTextBased()) return;
   const message = await channel.messages.fetch(config.panelMessageId).catch(() => null);
   if (message) await message.edit(panelPayload(config)).catch((error) => {
@@ -396,7 +401,7 @@ function configPanelPayload(config: FlightConfig) {
     new RoleSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:${id}`).setPlaceholder(placeholder).setMinValues(0).setMaxValues(25)
   );
   const channelSelect = (id: string, placeholder: string, types: ChannelType[]) => new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
-    new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:${id}`).setPlaceholder(placeholder).setChannelTypes(types).setMinValues(0).setMaxValues(1)
+    new ChannelSelectMenuBuilder().setCustomId(`${CONFIG_PREFIX}:${id}`).setPlaceholder(placeholder).setChannelTypes(types).setMinValues(0).setMaxValues(25)
   );
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:publish`).setLabel("Publicar painel").setStyle(ButtonStyle.Success),
@@ -445,9 +450,12 @@ function normalizeConfig(raw: Record<string, unknown>): FlightConfig {
     ...fallback,
     enabled: raw.enabled === true,
     panelChannelId: str(raw.panelChannelId),
+    panelChannelIds: idList(raw.panelChannelIds, str(raw.panelChannelId)),
     panelMessageId: str(raw.panelMessageId),
     logChannelId: str(raw.logChannelId),
+    logChannelIds: idList(raw.logChannelIds, str(raw.logChannelId)),
     categoryId: str(raw.categoryId),
+    categoryIds: idList(raw.categoryIds, str(raw.categoryId)),
     allowedRoleIds: ids(raw.allowedRoleIds),
     dafRoleIds,
     pilotRoleIds: ids(raw.pilotRoleIds),
@@ -479,9 +487,12 @@ function defaultConfig(): FlightConfig {
   return {
     enabled: false,
     panelChannelId: null,
+    panelChannelIds: [],
     panelMessageId: null,
     logChannelId: null,
+    logChannelIds: [],
     categoryId: null,
+    categoryIds: [],
     allowedRoleIds: [],
     dafRoleIds: [],
     pilotRoleIds: [],
@@ -510,11 +521,12 @@ function defaultConfig(): FlightConfig {
 }
 
 async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: FlightConfig, isTest: boolean) {
-  if (!config.logChannelId) {
+  const logChannelId = firstId(config.logChannelIds, config.logChannelId);
+  if (!logChannelId) {
     console.warn("[police-flight] canal de logs nao configurado", { guildId: guild.id });
     return;
   }
-  const channel = await guild.channels.fetch(config.logChannelId).catch(() => null);
+  const channel = await guild.channels.fetch(logChannelId).catch(() => null);
   if (!channel?.isTextBased()) {
     console.warn("[police-flight] canal de logs invalido", { guildId: guild.id, logChannelId: config.logChannelId });
     return;
@@ -612,4 +624,6 @@ function formatFooterDate(date: Date) {
 
 function str(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function ids(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
+function idList(value: unknown, fallback: string | null) { return [...new Set([...ids(value), fallback].filter((item): item is string => Boolean(item)))]; }
+function firstId(values: string[] | undefined, fallback: string | null | undefined) { return values?.[0] ?? fallback ?? null; }
 function color(value: string) { const hex = value.replace("#", ""); return /^[0-9a-f]{6}$/i.test(hex) ? Number.parseInt(hex, 16) : 0x3b82f6; }

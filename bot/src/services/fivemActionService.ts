@@ -52,7 +52,7 @@ async function processPanelRequests(client: Client, context: BotContext) {
 async function publishMainPanel(client: Client, context: BotContext, config: FivemActionSettings) {
   if (!config.panelChannelId) throw new Error(`Canal principal não configurado para ${config.guildId}/${config.architecture}.`);
   const guild = await client.guilds.fetch(config.guildId);
-  const channel = await guild.channels.fetch(config.panelChannelId);
+  const channel = await guild.channels.fetch(firstId(config.panelChannelIds, config.panelChannelId)!);
   if (!channel?.isTextBased() || channel.isDMBased()) throw new Error("Canal do painel inválido.");
   const dashboard = await context.api.getFivemActionDashboard(config.guildId, config.architecture);
   const enabled = dashboard.actions.filter((item) => item.enabled).sort((a, b) => a.order - b.order);
@@ -85,7 +85,7 @@ async function openAction(interaction: StringSelectMenuInteraction, context: Bot
   if (action.authorizedRoleIds?.length && !action.authorizedRoleIds.some((roleId) => member.roles.cache.has(roleId))) {
     return void await interaction.editReply("Você não possui o cargo autorizado para esta ação.");
   }
-  const channelId = dashboard.settings.actionChannelId;
+  const channelId = firstId(dashboard.settings.actionChannelIds, dashboard.settings.actionChannelId);
   if (!channelId) return void await interaction.editReply("Canal de ações não configurado.");
   const channel = await interaction.guild!.channels.fetch(channelId);
   if (!channel?.isTextBased() || channel.isDMBased()) return void await interaction.editReply("Canal de ações inválido.");
@@ -150,8 +150,10 @@ async function refreshSessionMessage(interaction: any, session: FivemActionSessi
 
 async function sendReport(interaction: StringSelectMenuInteraction, context: BotContext, session: FivemActionSession) {
   const dashboard = await context.api.getFivemActionDashboard(session.guildId, session.architecture);
-  let channel = dashboard.settings.reportChannelId ? await interaction.guild!.channels.fetch(dashboard.settings.reportChannelId).catch(() => null) : null;
-  if (!channel) channel = await interaction.guild!.channels.create({ name: "relatorio-de-acoes", type: ChannelType.GuildText, parent: dashboard.settings.categoryId ?? undefined, reason: "Relatórios do Sistema de Ações" });
+  const reportChannelId = firstId(dashboard.settings.reportChannelIds, dashboard.settings.reportChannelId);
+  const categoryId = firstId(dashboard.settings.categoryIds, dashboard.settings.categoryId);
+  let channel = reportChannelId ? await interaction.guild!.channels.fetch(reportChannelId).catch(() => null) : null;
+  if (!channel) channel = await interaction.guild!.channels.create({ name: "relatorio-de-acoes", type: ChannelType.GuildText, parent: categoryId ?? undefined, reason: "Relatorios do Sistema de Acoes" });
   if (!channel.isTextBased() || channel.isDMBased()) return;
   const active = session.participants.filter((item) => !item.leftAt);
   const duration = Math.max(0, Math.round(((session.finishedAt ? Date.parse(session.finishedAt) : Date.now()) - Date.parse(session.startedAt)) / 60000));
@@ -199,3 +201,4 @@ function isFivemActionRuntimeEnabled(architecture?: FivemActionArchitecture) {
 function parseColor(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x7c3aed; }
 function displayName(member: any) { return member?.displayName ?? member?.user?.globalName ?? member?.user?.username ?? "Usuário"; }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
+function firstId(values: string[] | undefined, fallback: string | null | undefined) { return values?.[0] ?? fallback ?? null; }

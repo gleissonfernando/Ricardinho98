@@ -117,7 +117,7 @@ type NavSectionId = "user" | "security" | "police" | "fivem" | "server";
 const navSectionLabels: Record<NavSectionId, string> = {
   user: "Usuario",
   security: "Seguranca",
-  police: "Policia",
+  police: "Sistema Policial",
   fivem: "FiveM",
   server: "Servidor"
 };

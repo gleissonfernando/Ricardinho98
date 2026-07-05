@@ -4,19 +4,21 @@ import { getMongoCollections, type MongoPolicePatrolMessage, type MongoPolicePat
 
 export const POLICE_PATROL_MODULE_ID = "police-patrol-reports";
 type SettingsInput = Partial<Pick<MongoPolicePatrolSettings, "enabled" | "creatorRoleIds" | "viewerRoleIds" | "deleteRoleIds" | "supervisorRoleIds" | "commandChannelId" | "logChannelId" | "temporaryCategoryId" | "archiveCategoryId" | "archiveViewRoleIds" | "deleteDelayMinutes" | "defaultExportFormat">>;
+type MultiSettingsInput = SettingsInput & Partial<Pick<MongoPolicePatrolSettings, "commandChannelIds" | "logChannelIds" | "temporaryCategoryIds" | "archiveCategoryIds">>;
 
 export async function getPolicePatrolSettings(botId: string, guildId: string) {
   const { policePatrolSettings } = await getMongoCollections();
   const found = await policePatrolSettings.findOne({ botId, guildId }); if (found) return settingsDto(found);
   const now = new Date();
-  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], commandChannelId: null, logChannelId: null, temporaryCategoryId: null, archiveCategoryId: null, archiveViewRoleIds: [], deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
+  const settings: MongoPolicePatrolSettings = { _id: randomUUID(), botId, guildId, enabled: false, creatorRoleIds: [], viewerRoleIds: [], deleteRoleIds: [], supervisorRoleIds: [], commandChannelId: null, commandChannelIds: [], logChannelId: null, logChannelIds: [], temporaryCategoryId: null, temporaryCategoryIds: [], archiveCategoryId: null, archiveCategoryIds: [], archiveViewRoleIds: [], deleteDelayMinutes: 5, defaultExportFormat: "html", createdAt: now, updatedAt: now, updatedBy: null };
   await policePatrolSettings.updateOne({ botId, guildId }, { $setOnInsert: settings }, { upsert: true });
   return settingsDto((await policePatrolSettings.findOne({ botId, guildId })) ?? settings);
 }
 
-export async function savePolicePatrolSettings(botId: string, guildId: string, input: SettingsInput, actorId: string | null) {
+export async function savePolicePatrolSettings(botId: string, guildId: string, input: MultiSettingsInput, actorId: string | null) {
   await getPolicePatrolSettings(botId, guildId); const { policePatrolSettings } = await getMongoCollections();
-  await policePatrolSettings.updateOne({ botId, guildId }, { $set: { ...input, updatedAt: new Date(), updatedBy: actorId } });
+  const normalized = normalizeSettingsInput(input);
+  await policePatrolSettings.updateOne({ botId, guildId }, { $set: { ...normalized, updatedAt: new Date(), updatedBy: actorId } });
   return settingsDto((await policePatrolSettings.findOne({ botId, guildId }))!);
 }
 
@@ -55,7 +57,7 @@ export async function finishPolicePatrolReport(botId: string, reportId: string, 
   const settings = await policePatrolSettings.findOne({ botId, guildId: report.guildId });
   const normalizedReason = archiveReason?.trim() ? archiveReason.trim() : null;
   const now = new Date();
-  const archiveTarget = settings?.archiveCategoryId ?? null;
+  const archiveTarget = idList(settings?.archiveCategoryIds, settings?.archiveCategoryId)[0] ?? null;
   const shouldArchive = Boolean(normalizedReason || archiveTarget);
   const result = await policePatrolReports.updateOne({ _id: reportId, botId, status: "active" }, { $set: { status: "finished", finishedAt: now, archivedAt: shouldArchive ? now : null, archivedBy: shouldArchive ? actorId : null, archiveCategoryId: archiveTarget, archiveReason: normalizedReason, deleteAt: null, updatedAt: now }, $unset: { openKey: "" } }); if (!result.matchedCount) throw serviceError("Este relatório não está em andamento.", 409); await audit(reportId, botId, report.guildId, actorId, "finished", { archiveReason: normalizedReason, archiveCategoryId: archiveTarget }); return getPolicePatrolReport(botId, reportId);
 }
@@ -91,7 +93,38 @@ export async function getPolicePatrolFile(fileId: string) { const { policePatrol
 async function requireReport(botId: string, reportId: string) { const { policePatrolReports } = await getMongoCollections(); const value = await policePatrolReports.findOne({ _id: reportId, botId }); if (!value) throw serviceError("Relatório não encontrado.", 404); return reportDto(value); }
 async function audit(reportId: string, botId: string, guildId: string, actorId: string | null, action: string, metadata: Record<string, unknown>) { const { policePatrolAudits } = await getMongoCollections(); await policePatrolAudits.insertOne({ _id: randomUUID(), reportId, botId, guildId, actorId, action, metadata, createdAt: new Date() }); }
 function timeMinutes(start: string, end: string) { const parse = (value: string) => { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw serviceError("Horário inválido. Use HH:mm.", 400); const [h, m] = value.split(":").map(Number); return h! * 60 + m!; }; const a = parse(start); let b = parse(end); if (b < a) b += 1440; return b - a; }
-function settingsDto(value: any) { return { ...value, id: value._id, commandChannelId: value.commandChannelId ?? null, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
+function settingsDto(value: any) {
+  const commandChannelIds = idList(value.commandChannelIds, value.commandChannelId);
+  const logChannelIds = idList(value.logChannelIds, value.logChannelId);
+  const temporaryCategoryIds = idList(value.temporaryCategoryIds, value.temporaryCategoryId);
+  const archiveCategoryIds = idList(value.archiveCategoryIds, value.archiveCategoryId);
+  return {
+    ...value,
+    id: value._id,
+    commandChannelId: commandChannelIds[0] ?? null,
+    commandChannelIds,
+    logChannelId: logChannelIds[0] ?? null,
+    logChannelIds,
+    temporaryCategoryId: temporaryCategoryIds[0] ?? null,
+    temporaryCategoryIds,
+    archiveCategoryId: archiveCategoryIds[0] ?? null,
+    archiveCategoryIds,
+    createdAt: value.createdAt.toISOString(),
+    updatedAt: value.updatedAt.toISOString()
+  };
+}
+function normalizeSettingsInput(input: MultiSettingsInput) {
+  return {
+    ...input,
+    ...(input.commandChannelIds ? { commandChannelId: input.commandChannelIds[0] ?? null } : {}),
+    ...(input.logChannelIds ? { logChannelId: input.logChannelIds[0] ?? null } : {}),
+    ...(input.temporaryCategoryIds ? { temporaryCategoryId: input.temporaryCategoryIds[0] ?? null } : {}),
+    ...(input.archiveCategoryIds ? { archiveCategoryId: input.archiveCategoryIds[0] ?? null } : {})
+  };
+}
+function idList(values: unknown, fallback: string | null | undefined) {
+  return [...new Set([...(Array.isArray(values) ? values : []), fallback].filter((value): value is string => typeof value === "string" && /^\d{5,32}$/.test(value)))];
+}
 function reportDto(value: any) { return { ...value, id: value._id, evaluationStatus: value.evaluationStatus ?? "pending", evaluatedBy: value.evaluatedBy ?? null, evaluatedAt: value.evaluatedAt?.toISOString() ?? null, evaluationMessage: value.evaluationMessage ?? null, logMessageId: value.logMessageId ?? null, createdAt: value.createdAt.toISOString(), startedAt: value.startedAt?.toISOString() ?? null, finishedAt: value.finishedAt?.toISOString() ?? null, cancelledAt: value.cancelledAt?.toISOString() ?? null, archivedAt: value.archivedAt?.toISOString() ?? null, archivedBy: value.archivedBy ?? null, archiveCategoryId: value.archiveCategoryId ?? null, archiveReason: value.archiveReason ?? null, deleteAt: value.deleteAt?.toISOString() ?? null, updatedAt: value.updatedAt.toISOString() }; }
 function messageDto(value: any) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString() }; }
 function fileDto(value: any) { const path = `/api/police-patrol-reports/files/${value._id}`; return { id: value._id, name: value.name, mimeType: value.mimeType, size: value.size, url: new URL(path, env.FRONTEND_URL).toString() }; }
