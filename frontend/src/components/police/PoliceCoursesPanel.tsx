@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import {
   createPoliceCourse, deletePoliceCourse, getGuildLiveOptions, getPoliceCoursesDashboard,
   getGuildMemberOptions, publishPoliceCourse, savePoliceCourseConfig, updatePoliceCourse, uploadPoliceCourseBanner
@@ -178,4 +178,56 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
 function Field({ label, value, onChange, required, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string }) { return <label className="space-y-2 text-sm"><span>{label}</span><input className="h-10 w-full rounded-md border bg-background px-3" type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} /></label>; }
 function Toggle({ label, value, change }: { label: string; value: boolean; change: (value: boolean) => void }) { return <label className="flex items-center justify-between border p-3 text-sm"><span>{label}</span><Switch checked={value} onCheckedChange={change} /></label>; }
 function Channel({ label, channels, value, change }: { label: string; channels: GuildChannelOption[]; value: string; change: (value: string) => void }) { return <label className="space-y-2 text-sm"><span>{label}</span><select className="h-10 w-full rounded-md border bg-background px-3" value={value} onChange={(event) => change(event.target.value)}><option value="">Nao configurado</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}</select></label>; }
-function MultiSelect({ label, options, values, change }: { label: string; options: Array<{ id: string; name: string }>; values: string[]; change: (value: string[]) => void }) { return <label className="space-y-2 text-sm"><span>{label}</span><select multiple className="min-h-32 w-full rounded-md border bg-background p-2" value={values} onChange={(event) => change(Array.from(event.currentTarget.selectedOptions, (option) => option.value))}>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>; }
+function MultiSelect({ label, options, values, change }: { label: string; options: Array<{ id: string; name: string }>; values: string[]; change: (value: string[]) => void }) {
+  const [query, setQuery] = useState("");
+  const selected = options.filter((option) => values.includes(option.id));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? options.filter((option) => option.name.toLowerCase().includes(normalizedQuery) || option.id.includes(normalizedQuery))
+    : options;
+
+  function toggle(id: string) {
+    change(values.includes(id) ? values.filter((value) => value !== id) : [...values, id]);
+  }
+
+  return <div className="space-y-2 text-sm">
+    <div className="flex items-center justify-between gap-2">
+      <span>{label}</span>
+      <span className="text-xs text-muted-foreground">{values.length} selecionado(s)</span>
+    </div>
+    <div className="overflow-hidden rounded-md border bg-background">
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <input
+          className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          placeholder="Buscar por nome ou ID"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {values.length ? <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => change([])}>Limpar</button> : null}
+      </div>
+      {selected.length ? <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto border-b px-3 py-2">
+        {selected.map((option) => <button
+          type="button"
+          key={option.id}
+          className="inline-flex max-w-full items-center gap-1 rounded border bg-muted px-2 py-1 text-xs"
+          onClick={() => toggle(option.id)}
+          title={option.name}
+        >
+          <span className="max-w-40 truncate">@{option.name}</span>
+          <X className="h-3 w-3 shrink-0" />
+        </button>)}
+      </div> : null}
+      <div className="max-h-48 overflow-y-auto p-2">
+        {filtered.length ? filtered.map((option) => {
+          const checked = values.includes(option.id);
+          return <label key={option.id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/60">
+            <input type="checkbox" className="h-4 w-4" checked={checked} onChange={() => toggle(option.id)} />
+            <span className="min-w-0 flex-1 truncate">@{option.name}</span>
+            {checked ? <span className="text-xs text-muted-foreground">selecionado</span> : null}
+          </label>;
+        }) : <p className="px-2 py-3 text-sm text-muted-foreground">Nenhum item encontrado.</p>}
+      </div>
+    </div>
+  </div>;
+}
