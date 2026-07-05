@@ -64,12 +64,23 @@ type FlightConfig = {
 };
 
 export function startPoliceFlightService(client: Client<true>, context: BotContext) {
-  context.socket.onPoliceFlightPanelUpdate((payload) => {
-    if (payload.botId && currentRuntimeBotId() && payload.botId !== currentRuntimeBotId()) return;
+  context.socket.onPoliceFlightPanelUpdate((payload, acknowledge) => {
+    if (payload.botId && currentRuntimeBotId() && payload.botId !== currentRuntimeBotId()) {
+      acknowledge?.({ error: "Evento destinado a outro bot." });
+      return;
+    }
     const guild = client.guilds.cache.get(payload.guildId);
-    if (guild) void publishPoliceFlightPanel(guild, context).catch((error) => {
-      console.warn("[police-flight] falha ao publicar painel:", error instanceof Error ? error.message : error);
-    });
+    if (!guild) {
+      acknowledge?.({ error: "Servidor nao encontrado neste runtime." });
+      return;
+    }
+    void publishPoliceFlightPanel(guild, context)
+      .then(() => acknowledge?.({ ok: true }))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn("[police-flight] falha ao publicar painel:", message);
+        acknowledge?.({ error: message });
+      });
   });
 }
 

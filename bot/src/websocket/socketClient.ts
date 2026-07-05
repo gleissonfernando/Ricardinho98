@@ -137,6 +137,7 @@ export type GiveawayPanelUpdateEvent = {
 export type PoliceReportsPanelUpdateEvent = { action: "publish" | "update"; botId: string; guildId: string };
 export type PoliceRhPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
 export type PoliceFlightPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
+export type PoliceFlightPanelUpdateResult = { ok: true } | { error: string };
 
 export type ImageAntiSpamSettingsEvent = {
   botId?: string | null;
@@ -242,7 +243,7 @@ export class BotSocketClient {
   private fivemHierarchyPanelUpdateHandler: ((payload: FivemHierarchyPanelUpdateEvent) => void) | null = null;
   private policeReportsPanelUpdateHandler: ((payload: PoliceReportsPanelUpdateEvent) => void) | null = null;
   private policeRhPanelUpdateHandler: ((payload: PoliceRhPanelUpdateEvent) => void) | null = null;
-  private policeFlightPanelUpdateHandler: ((payload: PoliceFlightPanelUpdateEvent) => void) | null = null;
+  private policeFlightPanelUpdateHandler: ((payload: PoliceFlightPanelUpdateEvent, acknowledge?: (result: PoliceFlightPanelUpdateResult) => void) => void) | null = null;
   private fivemFacAbsenceUpdateHandler: ((payload: FivemFacAbsenceUpdateEvent) => void) | null = null;
   private missionToolsSettingsHandler: ((payload: MissionToolsSettingsEvent) => void) | null = null;
   private missionToolsPanelPublishHandler: ((payload: MissionToolsPanelPublishEvent) => void) | null = null;
@@ -571,7 +572,7 @@ export class BotSocketClient {
     this.socket?.on("police-rh:panel_update", handler);
   }
 
-  onPoliceFlightPanelUpdate(handler: (payload: PoliceFlightPanelUpdateEvent) => void) {
+  onPoliceFlightPanelUpdate(handler: (payload: PoliceFlightPanelUpdateEvent, acknowledge?: (result: PoliceFlightPanelUpdateResult) => void) => void) {
     this.policeFlightPanelUpdateHandler = handler;
     this.socket?.off("police-flight:panel_update");
     this.socket?.on("police-flight:panel_update", handler);

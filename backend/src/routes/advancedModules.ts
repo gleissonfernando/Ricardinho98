@@ -517,7 +517,16 @@ advancedModulesRouter.post("/:botId/:guildId/police-flight/publish", async (req,
     const module = await getBotGuildModuleConfig(botId, guildId, "police-flight");
     const config = policeFlightConfigSchema.parse(module.config);
     if (!config.panelChannelId) return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
-    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "publish", botId, guildId });
+    const responses = await emitRealtimeToRoomWithAck<
+      { action: "publish"; botId: string; guildId: string },
+      { ok: true } | { error: string }
+    >(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "publish", botId, guildId });
+    if (!responses.some((response) => "ok" in response && response.ok)) {
+      const detail = responses.find((response) => "error" in response)?.error;
+      return res.status(409).json({
+        message: detail || "O bot DAF nao esta online ou nao confirmou a publicacao do painel."
+      });
+    }
     return res.json({ ok: true });
   } catch (error) {
     return next(error);
