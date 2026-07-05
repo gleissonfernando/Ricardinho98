@@ -113,8 +113,14 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
     return true;
   }
 
-  const config = await loadConfig(interaction.guild.id, context);
   const action = interaction.customId.split(":")[1] ?? "";
+  const opensModal = interaction.isButton()
+    && interaction.customId.startsWith(`${CONFIG_PREFIX}:`)
+    && action === "texts";
+  if (!opensModal) {
+    await deferEphemeral(interaction);
+  }
+  const config = await loadConfig(interaction.guild.id, context);
 
   if (interaction.customId.startsWith(`${CONFIG_PREFIX}:`)) {
     await handleConfigInteraction(interaction, context, config, action);
@@ -151,8 +157,13 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
 
   if (interaction.isButton() && action === "publish") {
     await deferEphemeral(interaction);
-    await publishPoliceFlightPanel(interaction.guild, context, interaction.user.id);
-    await editDeferred(interaction, "Painel DAF publicado ou atualizado.");
+    try {
+      await publishPoliceFlightPanel(interaction.guild, context, interaction.user.id);
+      await editDeferred(interaction, "Painel DAF publicado ou atualizado.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await editDeferred(interaction, `Nao foi possivel publicar o painel DAF: ${message}`);
+    }
     return;
   }
   if (interaction.isButton() && action === "reset") {
@@ -600,12 +611,14 @@ function hasAnyRole(member: { roles: { cache: Map<string, unknown> } }, roleIds:
   return unique.some((id) => member.roles.cache.has(id));
 }
 
-async function deferEphemeral(interaction: ButtonInteraction | RoleSelectMenuInteraction | ChannelSelectMenuInteraction | ModalSubmitInteraction) {
+async function deferEphemeral(interaction: Interaction) {
+  if (!interaction.isRepliable()) return;
   if (interaction.deferred || interaction.replied) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
 }
 
-async function editDeferred(interaction: ButtonInteraction | RoleSelectMenuInteraction | ChannelSelectMenuInteraction | ModalSubmitInteraction, content: string) {
+async function editDeferred(interaction: Interaction, content: string) {
+  if (!interaction.isRepliable()) return;
   if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [] }).catch(() => undefined);
   else await safeReply(interaction, content);
 }
