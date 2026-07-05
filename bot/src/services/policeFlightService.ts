@@ -50,12 +50,19 @@ type FlightConfig = {
   descriptionText: string;
   panelFooter: string;
   panelImage: string | null;
+  pilotText: string;
+  shooterText: string;
   enterPilotButtonText: string;
   enterShooterButtonText: string;
+  enterButtonText: string;
+  enterButtonEmoji: string;
+  closeButtonEmoji: string;
   closeButtonText: string;
   embedColor: string;
   allowSameUserBothFunctions: boolean;
   allowReplaceOccupiedRole: boolean;
+  maxPilots: number;
+  maxShooters: number;
   scaleId: number;
   status: "open" | "closed";
   openedBy: string | null;
@@ -410,11 +417,20 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
   }
 
   const key = role === "pilot" ? "pilotIds" : "shooterIds";
-  if (!config.allowReplaceOccupiedRole && config[key].length && !config[key].includes(interaction.user.id)) {
-    await editDeferred(interaction, `A vaga de ${role === "pilot" ? "Piloto" : "Atirador"} ja esta preenchida.`);
+  const maxSlots = role === "pilot" ? config.maxPilots : config.maxShooters;
+  const currentIds = uniqueIds(config[key]);
+  const alreadyInRole = currentIds.includes(interaction.user.id);
+  if (!config.allowReplaceOccupiedRole && currentIds.length >= maxSlots && !alreadyInRole) {
+    await editDeferred(interaction, `As vagas de ${role === "pilot" ? "Piloto" : "Atirador"} ja estao preenchidas.`);
     return;
   }
-  config[key] = [interaction.user.id];
+  if (alreadyInRole) {
+    config[key] = currentIds;
+  } else if (currentIds.length < maxSlots) {
+    config[key] = [...currentIds, interaction.user.id].slice(0, maxSlots);
+  } else {
+    config[key] = [...currentIds.slice(1), interaction.user.id].slice(0, maxSlots);
+  }
 
   const saved = await context.api.updatePoliceFlightState(interaction.guildId!, {
     status: config.status,
@@ -495,9 +511,9 @@ async function refreshPanel(guild: Guild, context: BotContext, config: FlightCon
 
 function panelPayload(config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:pilot`).setLabel(config.enterPilotButtonText).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`${PREFIX}:shooter`).setLabel(config.enterShooterButtonText).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger)
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:pilot`).setLabel(config.enterPilotButtonText).setStyle(ButtonStyle.Primary), config.enterButtonEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:shooter`).setLabel(config.enterShooterButtonText).setStyle(ButtonStyle.Secondary), config.enterButtonEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger), config.closeButtonEmoji)
   );
   return renderComponentsV2Panel({
     accentColor: color(config.embedColor),
@@ -507,11 +523,11 @@ function panelPayload(config: FlightConfig, image: { position: PanelVisualPositi
       [
     `## HISTORICO - ESCALACAO #${config.scaleId}`,
     "",
-    "**PILOTO**",
-    formatSlot(config.pilotIds[0]),
+    `**PILOTO**${config.pilotText ? `\n${config.pilotText}` : ""}`,
+    formatSlots(config.pilotIds, config.maxPilots),
     "",
-    "**ATIRADOR**",
-    formatSlot(config.shooterIds[0])
+    `**ATIRADOR**${config.shooterText ? `\n${config.shooterText}` : ""}`,
+    formatSlots(config.shooterIds, config.maxShooters)
       ].join("\n")
     ],
     footerText: config.panelFooter,
@@ -597,20 +613,27 @@ export function normalizeDafConfig(raw: Record<string, unknown>): FlightConfig {
     descriptionText: str(raw.panelDescription) ?? str(raw.descriptionText) ?? fallback.descriptionText,
     panelFooter: str(raw.panelFooter) ?? fallback.panelFooter,
     panelImage: str(raw.panelImage),
-    enterPilotButtonText: str(raw.enterPilotButtonText) ?? "Entrar como Piloto",
-    enterShooterButtonText: str(raw.enterShooterButtonText) ?? "Entrar como Atirador",
+    pilotText: str(raw.pilotText) ?? fallback.pilotText,
+    shooterText: str(raw.shooterText) ?? fallback.shooterText,
+    enterPilotButtonText: str(raw.enterPilotButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Piloto",
+    enterShooterButtonText: str(raw.enterShooterButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Atirador",
+    enterButtonText: str(raw.enterButtonText) ?? fallback.enterButtonText,
+    enterButtonEmoji: str(raw.enterButtonEmoji) ?? fallback.enterButtonEmoji,
+    closeButtonEmoji: str(raw.closeButtonEmoji) ?? fallback.closeButtonEmoji,
     closeButtonText: str(raw.closeButtonText) ?? fallback.closeButtonText,
     embedColor: str(raw.embedColor) ?? fallback.embedColor,
     allowSameUserBothFunctions: raw.allowSameUserBothFunctions === true,
     allowReplaceOccupiedRole: raw.allowReplaceOccupiedRole !== false,
+    maxPilots: clampInt(raw.maxPilots, 1, 5, fallback.maxPilots),
+    maxShooters: clampInt(raw.maxShooters, 1, 5, fallback.maxShooters),
     scaleId: Math.max(1, Number(raw.scaleId) || 1),
     status: raw.status === "closed" ? "closed" : "open",
     openedBy: str(raw.openedBy) ?? str(raw.openedByUserId),
     openedAt: str(raw.openedAt),
     closedBy: str(raw.closedBy) ?? str(raw.closedByUserId),
     closedAt: str(raw.closedAt),
-    pilotIds: ids(raw.pilotIds).slice(0, 1),
-    shooterIds: ids(raw.shooterIds).slice(0, 1)
+    pilotIds: ids(raw.pilotIds).slice(0, clampInt(raw.maxPilots, 1, 5, fallback.maxPilots)),
+    shooterIds: ids(raw.shooterIds).slice(0, clampInt(raw.maxShooters, 1, 5, fallback.maxShooters))
   };
 }
 
@@ -635,12 +658,19 @@ function defaultConfig(): FlightConfig {
     descriptionText: "",
     panelFooter: "",
     panelImage: null,
+    pilotText: "Responsavel pelo voo",
+    shooterText: "Responsavel pela cobertura",
     enterPilotButtonText: "Entrar como Piloto",
     enterShooterButtonText: "Entrar como Atirador",
+    enterButtonText: "Abrir Escalacao de Voo",
+    enterButtonEmoji: "🛫",
+    closeButtonEmoji: "🔒",
     closeButtonText: "Fechar escalacao",
     embedColor: "#3b82f6",
     allowSameUserBothFunctions: false,
     allowReplaceOccupiedRole: true,
+    maxPilots: 1,
+    maxShooters: 1,
     scaleId: 1,
     status: "open",
     openedBy: null,
@@ -671,10 +701,10 @@ async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: Fl
     `## HISTORICO - ESCALACAO #${closedConfig.scaleId}`,
     "",
     "**PILOTO**",
-    formatSlot(closedConfig.pilotIds[0]),
+    formatSlots(closedConfig.pilotIds, closedConfig.maxPilots),
     "",
     "**ATIRADOR**",
-    formatSlot(closedConfig.shooterIds[0]),
+    formatSlots(closedConfig.shooterIds, closedConfig.maxShooters),
     "",
     "**Aberto por**",
     formatSlot(closedConfig.openedBy),
@@ -700,7 +730,8 @@ async function canManageConfig(interaction: Interaction, config: FlightConfig) {
   if (!interaction.guild || !interaction.member) return false;
   if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
   const member = await ensureGuildMember(interaction);
-  return member ? hasAnyRole(member, [...config.allowedRoleIds, ...config.adminRoleIds]) : false;
+  const managerRoleIds = [...config.allowedRoleIds, ...config.adminRoleIds].filter(Boolean);
+  return member && managerRoleIds.length ? hasAnyRole(member, managerRoleIds) : false;
 }
 
 async function ensureGuildMember(interaction: Interaction) {
@@ -814,6 +845,21 @@ function formatSlot(userId: string | null | undefined) {
   return userId ? `<@${userId}> | ${userId}` : "❌ Não preenchido";
 }
 
+function formatSlots(userIds: string[], maxSlots: number) {
+  const slots = Array.from({ length: Math.max(1, maxSlots) }, (_, index) => userIds[index] ?? null);
+  return slots.map((userId, index) => slots.length > 1 ? `${index + 1}. ${formatSlot(userId)}` : formatSlot(userId)).join("\n");
+}
+
+function applyButtonEmoji(button: ButtonBuilder, emoji: string) {
+  const normalized = emoji.trim();
+  if (!normalized) return button;
+  try {
+    return button.setEmoji(normalized);
+  } catch {
+    return button;
+  }
+}
+
 function formatLongDate(date: Date) {
   return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(date);
 }
@@ -828,4 +874,9 @@ function formatFooterDate(date: Date) {
 
 function str(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function ids(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
+function uniqueIds(value: string[]) { return [...new Set(value.filter((item) => /^\d{5,32}$/.test(item)))]; }
+function clampInt(value: unknown, min: number, max: number, fallback: number) {
+  const number = Math.trunc(Number(value));
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
 function color(value: string) { const hex = value.replace("#", ""); return /^[0-9a-f]{6}$/i.test(hex) ? Number.parseInt(hex, 16) : 0x3b82f6; }

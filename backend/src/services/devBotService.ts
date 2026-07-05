@@ -2289,18 +2289,20 @@ function evaluateRuntimeLicenseState(...configs: Array<MongoBotGuildModuleConfig
   let expiresAt: Date | null = null;
   let plan: string | null = null;
 
-  for (const config of configs) {
+  for (const [index, config] of configs.entries()) {
     const record = asRuntimeRecord(config);
 
     if (!record) {
       continue;
     }
 
+    const looksLikeLicenseRecord = index > 0 || isRuntimeLicenseRecord(record);
     status ??= normalizeRuntimeStatus(
       readRuntimeString(record.licenseStatus)
       ?? readRuntimeString(record.licenceStatus)
-      ?? readRuntimeString(record.status)
-      ?? readRuntimeString(record.state)
+      ?? (looksLikeLicenseRecord
+        ? readRuntimeString(record.status) ?? readRuntimeString(record.state)
+        : null)
     );
     expiresAt ??= readRuntimeDate(record.licenseExpiresAt)
       ?? readRuntimeDate(record.licenceExpiresAt)
@@ -2313,8 +2315,7 @@ function evaluateRuntimeLicenseState(...configs: Array<MongoBotGuildModuleConfig
     if (
       record.licenseActive === false
       || record.licenceActive === false
-      || record.active === false
-      || record.approved === false
+      || (looksLikeLicenseRecord && (record.active === false || record.approved === false))
     ) {
       return {
         expiresAt,
@@ -2412,6 +2413,18 @@ function asRuntimeRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function isRuntimeLicenseRecord(record: Record<string, unknown>) {
+  return "licenseStatus" in record
+    || "licenceStatus" in record
+    || "licenseActive" in record
+    || "licenceActive" in record
+    || "licenseExpiresAt" in record
+    || "licenceExpiresAt" in record
+    || "licensePlan" in record
+    || "licencePlan" in record
+    || "expirationDate" in record;
 }
 
 function readRuntimeString(value: unknown) {

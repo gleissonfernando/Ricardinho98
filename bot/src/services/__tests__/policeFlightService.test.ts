@@ -22,3 +22,26 @@ test("migra o primeiro canal legado somente quando panelChannelId nao existe", (
   assert.equal(config.panelChannelId, "111111");
   assert.deepEqual(config.panelChannelIds, ["111111"]);
 });
+
+test("respeita limites de pilotos e atiradores configurados na dashboard", () => {
+  const config = normalizeDafConfig({
+    maxPilots: 2,
+    maxShooters: 3,
+    pilotIds: ["111111", "222222", "333333"],
+    shooterIds: ["444444", "555555", "666666", "777777"]
+  });
+
+  assert.equal(config.maxPilots, 2);
+  assert.equal(config.maxShooters, 3);
+  assert.deepEqual(config.pilotIds, ["111111", "222222"]);
+  assert.deepEqual(config.shooterIds, ["444444", "555555", "666666"]);
+});
+
+test("usa enterButtonText da dashboard como fallback dos botoes de entrada", () => {
+  const config = normalizeDafConfig({
+    enterButtonText: "Entrar na escala"
+  });
+
+  assert.equal(config.enterPilotButtonText, "Entrar na escala");
+  assert.equal(config.enterShooterButtonText, "Entrar na escala");
+});
