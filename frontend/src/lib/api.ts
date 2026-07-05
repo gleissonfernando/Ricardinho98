@@ -2083,7 +2083,11 @@ export async function publishPoliceReportsPanel(botId: string, guildId: string) 
 }
 
 export async function publishPoliceFlightPanel(botId: string, guildId: string) {
-  await api.post(`/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-flight/publish`);
+  const { data } = await api.post<{
+    ok: true;
+    result: { channelId: string; channelName: string; messageId: string };
+  }>(`/advanced-modules/${encodeURIComponent(botId)}/${encodeURIComponent(guildId)}/police-flight/publish`);
+  return data.result;
 }
 
 export async function publishPoliceRhPanel(botId: string, guildId: string) {

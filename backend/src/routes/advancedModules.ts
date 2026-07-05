@@ -118,6 +118,7 @@ const policeFlightConfigSchema = z.object({
   panelChannelId: snowflakeSchema.nullable().default(null),
   panelChannelIds: z.array(snowflakeSchema).max(100).default([]),
   panelMessageId: snowflakeSchema.nullable().default(null),
+  panelMessageChannelId: snowflakeSchema.nullable().default(null),
   logChannelId: snowflakeSchema.nullable().default(null),
   logChannelIds: z.array(snowflakeSchema).max(100).default([]),
   categoryId: snowflakeSchema.nullable().default(null),
@@ -376,7 +377,7 @@ advancedModulesRouter.get("/:botId/:guildId/:moduleId", async (req, res, next) =
     const module = await getBotGuildModuleConfig(botId, guildId, moduleId);
 
     return res.json({
-      module: moduleId === "police-reports" || moduleId === "police-rh"
+      module: moduleId === "police-reports" || moduleId === "police-flight" || moduleId === "police-rh"
         ? { ...module, config: normalizeModuleConfig(moduleId, module.config) }
         : module
     });
@@ -420,6 +421,14 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
       config: {
         ...normalizedConfig,
         ...(moduleId === "police-reports" || moduleId === "police-flight" || moduleId === "police-rh" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
+        ...(moduleId === "police-flight" ? {
+          panelMessageChannelId: previous.config.panelMessageChannelId
+            ?? (previous.config.panelMessageId
+              ? (Array.isArray(previous.config.panelChannelIds) ? previous.config.panelChannelIds[0] : null)
+                ?? previous.config.panelChannelId
+                ?? null
+              : null)
+        } : {}),
         ...(moduleId === "tag-verification" ? { botId, guildId } : {}),
         updatedBy: user.id
       }
@@ -515,19 +524,20 @@ advancedModulesRouter.post("/:botId/:guildId/police-flight/publish", async (req,
       return res.status(403).json({ message: "Este modulo nao foi liberado para este bot ou servidor." });
     }
     const module = await getBotGuildModuleConfig(botId, guildId, "police-flight");
-    const config = policeFlightConfigSchema.parse(module.config);
+    const config = policeFlightConfigSchema.parse(normalizeModuleConfig("police-flight", module.config));
     if (!config.panelChannelId) return res.status(409).json({ message: "Configure o canal do painel antes de publicar." });
     const responses = await emitRealtimeToRoomWithAck<
-      { action: "publish"; botId: string; guildId: string },
-      { ok: true } | { error: string }
-    >(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "publish", botId, guildId });
-    if (!responses.some((response) => "ok" in response && response.ok)) {
+      { action: "publish"; botId: string; guildId: string; source: "dashboard" },
+      { ok: true; channelId: string; channelName: string; messageId: string } | { error: string }
+    >(devBotRealtimeRoom(botId), "police-flight:panel_update", { action: "publish", botId, guildId, source: "dashboard" });
+    const success = responses.find((response) => "ok" in response && response.ok);
+    if (!success || !("channelId" in success)) {
       const detail = responses.find((response) => "error" in response)?.error;
       return res.status(409).json({
         message: detail || "O bot DAF nao esta online ou nao confirmou a publicacao do painel."
       });
     }
-    return res.json({ ok: true });
+    return res.json({ ok: true, result: success });
   } catch (error) {
     return next(error);
   }
@@ -656,7 +666,19 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
   }
 
   if (moduleId === "police-flight") {
-    return policeFlightConfigSchema.parse(config);
+    const parsed = policeFlightConfigSchema.parse(config);
+    const panelChannelId = parsed.panelChannelId ?? parsed.panelChannelIds[0] ?? null;
+    const logChannelId = parsed.logChannelId ?? parsed.logChannelIds[0] ?? null;
+    const categoryId = parsed.categoryId ?? parsed.categoryIds[0] ?? null;
+    return {
+      ...parsed,
+      panelChannelId,
+      panelChannelIds: panelChannelId ? [panelChannelId] : [],
+      logChannelId,
+      logChannelIds: logChannelId ? [logChannelId] : [],
+      categoryId,
+      categoryIds: categoryId ? [categoryId] : []
+    };
   }
 
   if (moduleId === "police-rh") {

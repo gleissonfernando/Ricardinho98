@@ -136,8 +136,18 @@ export type GiveawayPanelUpdateEvent = {
 };
 export type PoliceReportsPanelUpdateEvent = { action: "publish" | "update"; botId: string; guildId: string };
 export type PoliceRhPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
-export type PoliceFlightPanelUpdateEvent = { action: "publish" | "update"; botId?: string | null; guildId: string };
-export type PoliceFlightPanelUpdateResult = { ok: true } | { error: string };
+export type PoliceFlightPanelUpdateEvent = {
+  action: "publish" | "update";
+  botId?: string | null;
+  guildId: string;
+  source?: "dashboard" | "automatic";
+};
+export type PoliceFlightPanelUpdateResult = {
+  ok: true;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+} | { error: string };
 
 export type ImageAntiSpamSettingsEvent = {
   botId?: string | null;

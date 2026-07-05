@@ -3009,8 +3009,8 @@ function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null;
     setMessage(null);
     try {
       await saveAdvancedModuleConfig(botId, guild.id, "police-flight", { config: config as unknown as Record<string, unknown>, guildName: guild.name });
-      await publishPoliceFlightPanel(botId, guild.id);
-      setMessage("Painel DAF enviado para atualizacao no Discord.");
+      const result = await publishPoliceFlightPanel(botId, guild.id);
+      setMessage(`Painel DAF publicado com sucesso em #${result.channelName}.`);
     } catch (error) {
       setMessage(readResponseMessage(error) ?? "Nao foi possivel publicar o painel DAF.");
     } finally {

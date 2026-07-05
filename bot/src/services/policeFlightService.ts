@@ -21,10 +21,12 @@ import {
 } from "discord.js";
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
+import { renderComponentsV2Panel, resolvePanelImageUrl, type PanelVisualPosition } from "./panelVisualRenderer";
 
 const MODULE_ID = "police-flight";
 const PREFIX = "police_flight";
 const CONFIG_PREFIX = "police_flight_config";
+const dafPublishQueues = new Map<string, Promise<unknown>>();
 
 type FlightRole = "pilot" | "shooter";
 
@@ -33,6 +35,7 @@ type FlightConfig = {
   panelChannelId: string | null;
   panelChannelIds: string[];
   panelMessageId: string | null;
+  panelMessageChannelId: string | null;
   logChannelId: string | null;
   logChannelIds: string[];
   categoryId: string | null;
@@ -69,13 +72,8 @@ export function startPoliceFlightService(client: Client<true>, context: BotConte
       acknowledge?.({ error: "Evento destinado a outro bot." });
       return;
     }
-    const guild = client.guilds.cache.get(payload.guildId);
-    if (!guild) {
-      acknowledge?.({ error: "Servidor nao encontrado neste runtime." });
-      return;
-    }
-    void publishPoliceFlightPanel(guild, context)
-      .then(() => acknowledge?.({ ok: true }))
+    void publishDafPanel(client, context, payload.guildId, payload.source ?? "automatic")
+      .then((result) => acknowledge?.({ ok: true, ...result }))
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         console.warn("[police-flight] falha ao publicar painel:", message);
@@ -158,8 +156,8 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
   if (interaction.isButton() && action === "publish") {
     await deferEphemeral(interaction);
     try {
-      await publishPoliceFlightPanel(interaction.guild, context, interaction.user.id);
-      await editDeferred(interaction, "Painel DAF publicado ou atualizado.");
+      const result = await publishDafPanel(interaction.client, context, interaction.guild.id, "command", interaction.user.id);
+      await editDeferred(interaction, `Painel DAF publicado com sucesso em #${result.channelName}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await editDeferred(interaction, `Nao foi possivel publicar o painel DAF: ${message}`);
@@ -177,7 +175,7 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
       openedBy: interaction.user.id,
       openedAt: new Date().toISOString()
     });
-    await refreshPanel(interaction.guild, context, normalizeConfig(saved.config));
+    await refreshPanel(interaction.guild, context, normalizeDafConfig(saved.config));
     await editDeferred(interaction, "Escalacao atual resetada.");
     return;
   }
@@ -206,7 +204,7 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
       descriptionText: interaction.fields.getTextInputValue("descriptionText"),
       panelFooter: interaction.fields.getTextInputValue("panelFooter")
     });
-    await refreshPanel(interaction.guild, context, normalizeConfig(saved.config));
+    await refreshPanel(interaction.guild, context, normalizeDafConfig(saved.config));
     await editDeferred(interaction, "Textos do painel DAF atualizados.");
     return;
   }
@@ -240,13 +238,88 @@ async function updateConfigFromSelect(interaction: RoleSelectMenuInteraction | C
   await editDeferred(interaction, "Configuracao DAF salva.");
 }
 
-async function publishPoliceFlightPanel(guild: Guild, context: BotContext, openedByUserId: string | null = null) {
-  let config = await loadConfig(guild.id, context);
+export async function publishDafPanel(
+  client: Client,
+  context: BotContext,
+  guildId: string,
+  source: "dashboard" | "command" | "automatic",
+  openedByUserId: string | null = null
+) {
+  const queueKey = `${currentRuntimeBotId() ?? "unknown"}:${guildId}`;
+  const previous = dafPublishQueues.get(queueKey) ?? Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(() => publishDafPanelUnlocked(client, context, guildId, source, openedByUserId));
+  dafPublishQueues.set(queueKey, current);
+  return current.finally(() => {
+    if (dafPublishQueues.get(queueKey) === current) dafPublishQueues.delete(queueKey);
+  });
+}
+
+async function publishDafPanelUnlocked(
+  client: Client,
+  context: BotContext,
+  guildId: string,
+  source: "dashboard" | "command" | "automatic",
+  openedByUserId: string | null
+) {
+  const botId = currentRuntimeBotId();
+  if (!botId) throw new Error("Configuracao DAF nao encontrada: botId nao identificado.");
+  if (!client.user) throw new Error("Bot Discord ainda nao esta pronto para publicar o painel DAF.");
+  const guild = await client.guilds.fetch(guildId).catch((error) => {
+    logDafPublishError({ botId, channelId: null, error, guildId, source });
+    return null;
+  });
+  if (!guild) throw new Error("Configuracao DAF nao encontrada para este servidor e bot.");
+  let config = await loadConfig(guild.id, context, true);
   if (!config.enabled) throw new Error("Escalacao DAF desativada.");
-  const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
-  if (!panelChannelId) throw new Error("Escalacao DAF sem canal do painel configurado.");
-  const channel = await guild.channels.fetch(panelChannelId).catch(() => null);
-  if (!channel?.isTextBased()) throw new Error("Canal do painel DAF invalido.");
+  const panelChannelId = config.panelChannelId;
+  if (!panelChannelId) throw new Error("Canal nao configurado para o painel DAF.");
+  const channel = await client.channels.fetch(panelChannelId).catch((error) => {
+    logDafPublishError({ botId, channelId: panelChannelId, error, guildId, source });
+    return null;
+  });
+  if (!channel || !("guildId" in channel) || channel.guildId !== guildId) {
+    throw new Error("Canal DAF nao encontrado no servidor configurado.");
+  }
+  if (!channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
+    throw new Error("O canal selecionado nao suporta envio de mensagens.");
+  }
+
+  const permissions = channel.permissionsFor(client.user);
+  const permissionState = {
+    attachFiles: Boolean(permissions?.has(PermissionFlagsBits.AttachFiles)),
+    embedLinks: Boolean(permissions?.has(PermissionFlagsBits.EmbedLinks)),
+    sendMessages: Boolean(permissions?.has(PermissionFlagsBits.SendMessages)),
+    viewChannel: Boolean(permissions?.has(PermissionFlagsBits.ViewChannel))
+  };
+  console.info("[police-flight] publicacao DAF", {
+    botId,
+    channelId: panelChannelId,
+    channelName: "name" in channel ? channel.name : panelChannelId,
+    guildId,
+    permissions: permissionState,
+    source
+  });
+  const image = await loadDafPanelImage(guildId, context, config.panelImage);
+  const requiredPermissions = [
+    permissionState.viewChannel,
+    permissionState.sendMessages,
+    permissionState.embedLinks,
+    !image.url || permissionState.attachFiles
+  ];
+  if (requiredPermissions.some((allowed) => !allowed)) {
+    logDafPublishError({
+      botId,
+      channelId: panelChannelId,
+      channelName: channel.name,
+      error: new Error("Permissoes insuficientes para publicar o painel DAF."),
+      guildId,
+      permissions: permissionState,
+      source
+    });
+    throw new Error("O bot não tem permissão para publicar no canal selecionado. Verifique: Ver Canal, Enviar Mensagens, Usar Componentes/Embeds e Anexar Arquivos.");
+  }
 
   if (!config.openedAt || config.status === "closed") {
     const saved = await context.api.updatePoliceFlightState(guild.id, {
@@ -259,14 +332,52 @@ async function publishPoliceFlightPanel(guild: Guild, context: BotContext, opene
       shooterIds: [],
       scaleId: config.status === "closed" ? config.scaleId + 1 : config.scaleId
     });
-    config = normalizeConfig(saved.config);
+    config = normalizeDafConfig(saved.config);
   }
 
   let message = config.panelMessageId ? await channel.messages.fetch(config.panelMessageId).catch(() => null) : null;
-  const payload = panelPayload(config);
-  if (message) await message.edit(payload);
-  else message = await channel.send(payload);
-  if (message.id !== config.panelMessageId) await context.api.updatePoliceFlightState(guild.id, { panelMessageId: message.id });
+  const previousMessage = config.panelMessageId && config.panelMessageChannelId && config.panelMessageChannelId !== panelChannelId
+    ? await fetchDafPanelMessage(client, config.panelMessageChannelId, config.panelMessageId)
+    : null;
+  const sendOrEdit = async (imageUrl: string | null) => {
+    const payload = panelPayload(config, imageUrl ? { position: image.position, url: imageUrl } : null);
+    return message ? message.edit(payload) : channel.send(payload);
+  };
+  try {
+    message = await sendOrEdit(image.url);
+  } catch (error) {
+    if (!image.url || !isInvalidImageError(error)) {
+      logDafPublishError({ botId, channelId: panelChannelId, channelName: channel.name, error, guildId, permissions: permissionState, source });
+      throw new Error(`Erro ao enviar mensagem DAF: ${discordErrorMessage(error)}`);
+    }
+    console.warn("[police-flight] imagem DAF rejeitada; publicando sem imagem", {
+      botId, channelId: panelChannelId, guildId, imageUrl: image.url, source, error: discordErrorMessage(error)
+    });
+    try {
+      message = await sendOrEdit(null);
+    } catch (retryError) {
+      logDafPublishError({ botId, channelId: panelChannelId, channelName: channel.name, error: retryError, guildId, permissions: permissionState, source });
+      throw new Error(`Erro ao enviar mensagem DAF: ${discordErrorMessage(retryError)}`);
+    }
+  }
+  if (message.id !== config.panelMessageId || config.panelMessageChannelId !== panelChannelId) {
+    await context.api.updatePoliceFlightState(guild.id, {
+      panelMessageChannelId: panelChannelId,
+      panelMessageId: message.id
+    });
+  }
+  if (previousMessage && previousMessage.id !== message.id) {
+    await previousMessage.delete().catch((error) => {
+      console.warn("[police-flight] painel DAF antigo nao pôde ser removido", {
+        botId, channelId: config.panelMessageChannelId, error: discordErrorMessage(error), guildId, messageId: previousMessage.id, source
+      });
+    });
+  }
+  return {
+    channelId: panelChannelId,
+    channelName: channel.name,
+    messageId: message.id
+  };
 }
 
 async function joinRole(interaction: ButtonInteraction, context: BotContext, config: FlightConfig, role: FlightRole) {
@@ -280,7 +391,7 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
     await editDeferred(interaction, "Voce nao possui permissao para participar da escalacao da DAF.");
     return;
   }
-  if (!firstId(config.panelChannelIds, config.panelChannelId) || !config.panelMessageId) {
+  if (!config.panelChannelId || !config.panelMessageId) {
     console.warn("[police-flight] painel ausente ou nao configurado", { guildId: interaction.guildId });
     await editDeferred(interaction, "Configure e publique o painel da DAF antes de usar a escala.");
     return;
@@ -315,7 +426,7 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
     pilotIds: config.pilotIds,
     shooterIds: config.shooterIds
   });
-  const savedConfig = normalizeConfig(saved.config);
+  const savedConfig = normalizeDafConfig(saved.config);
   await refreshPanel(interaction.guild!, context, savedConfig);
   await editDeferred(interaction, `Voce entrou na escala como ${role === "pilot" ? "Piloto" : "Atirador"}.`);
 }
@@ -351,7 +462,7 @@ async function closeScale(interaction: ButtonInteraction, context: BotContext, c
     pilotIds: finalConfig.pilotIds,
     shooterIds: finalConfig.shooterIds
   });
-  await sendScaleLog(interaction.guild!, config, normalizeConfig(savedClosed.config), false);
+  await sendScaleLog(interaction.guild!, config, normalizeDafConfig(savedClosed.config), false);
 
   const nextScaleId = Math.max(1, finalConfig.scaleId + 1);
   const savedOpen = await context.api.updatePoliceFlightState(interaction.guildId!, {
@@ -364,12 +475,12 @@ async function closeScale(interaction: ButtonInteraction, context: BotContext, c
     shooterIds: [],
     scaleId: nextScaleId
   });
-  await refreshPanel(interaction.guild!, context, normalizeConfig(savedOpen.config));
+  await refreshPanel(interaction.guild!, context, normalizeDafConfig(savedOpen.config));
   await editDeferred(interaction, "Escalacao fechada e registrada.");
 }
 
 async function refreshPanel(guild: Guild, context: BotContext, config: FlightConfig) {
-  const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
+  const panelChannelId = config.panelChannelId;
   if (!panelChannelId || !config.panelMessageId) {
     console.warn("[police-flight] nao foi possivel atualizar painel: canal ou mensagem ausente", { guildId: guild.id });
     return;
@@ -377,45 +488,38 @@ async function refreshPanel(guild: Guild, context: BotContext, config: FlightCon
   const channel = await guild.channels.fetch(panelChannelId).catch(() => null);
   if (!channel?.isTextBased()) return;
   const message = await channel.messages.fetch(config.panelMessageId).catch(() => null);
-  if (message) await message.edit(panelPayload(config)).catch((error) => {
+  const image = await loadDafPanelImage(guild.id, context, config.panelImage);
+  if (message) await message.edit(panelPayload(config, image.url ? { position: image.position, url: image.url } : null)).catch((error) => {
     console.warn("[police-flight] falha ao editar painel:", error instanceof Error ? error.message : error);
   });
 }
 
-function panelPayload(config: FlightConfig) {
+function panelPayload(config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${PREFIX}:pilot`).setLabel(config.enterPilotButtonText).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`${PREFIX}:shooter`).setLabel(config.enterShooterButtonText).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger)
   );
-  const body = [
-    `# ${config.titleText}`,
-    "",
+  return renderComponentsV2Panel({
+    accentColor: color(config.embedColor),
+    actions: [buttons],
+    description: config.descriptionText,
+    fields: [
+      [
     `## HISTORICO - ESCALACAO #${config.scaleId}`,
     "",
     "**PILOTO**",
     formatSlot(config.pilotIds[0]),
     "",
     "**ATIRADOR**",
-    formatSlot(config.shooterIds[0]),
-    config.descriptionText ? `\n${config.descriptionText}` : "",
-    config.panelFooter ? `\n${config.panelFooter}` : ""
-  ].filter(Boolean).join("\n");
-
-  return {
-    allowedMentions: { parse: [] as never[] },
-    components: [{
-      type: 17,
-      accent_color: color(config.embedColor),
-      components: [
-        ...(config.panelImage ? [{ type: 12, items: [{ media: { url: config.panelImage } }] }] : []),
-        { type: 10, content: body },
-        { type: 14, divider: true, spacing: 1 },
-        buttons
-      ]
-    }],
-    flags: MessageFlags.IsComponentsV2 as const
-  };
+    formatSlot(config.shooterIds[0])
+      ].join("\n")
+    ],
+    footerText: config.panelFooter,
+    image: image ? { imageEnabled: true, imagePosition: image.position, imageUrl: image.url } : null,
+    moduleId: MODULE_ID,
+    title: config.titleText
+  });
 }
 
 function configPanelPayload(config: FlightConfig) {
@@ -458,26 +562,32 @@ function textModal(config: FlightConfig) {
     );
 }
 
-async function loadConfig(guildId: string, context: BotContext) {
+async function loadConfig(guildId: string, context: BotContext, required = false) {
   const botId = currentRuntimeBotId();
   if (!botId) return defaultConfig();
   const runtime = await context.api.getBotGuildConfig(botId, guildId);
-  return normalizeConfig(runtime.modules[MODULE_ID] ?? {});
+  const raw = runtime.modules[MODULE_ID];
+  if (required && !raw) throw new Error("Configuracao DAF nao encontrada para este servidor e bot.");
+  return normalizeDafConfig(raw ?? {});
 }
 
-function normalizeConfig(raw: Record<string, unknown>): FlightConfig {
+export function normalizeDafConfig(raw: Record<string, unknown>): FlightConfig {
   const fallback = defaultConfig();
   const dafRoleIds = ids(raw.dafRoleIds).length ? ids(raw.dafRoleIds) : [...ids(raw.pilotRoleIds), ...ids(raw.shooterRoleIds)];
+  const panelChannelId = str(raw.panelChannelId) ?? ids(raw.panelChannelIds)[0] ?? null;
+  const logChannelId = str(raw.logChannelId) ?? ids(raw.logChannelIds)[0] ?? null;
+  const categoryId = str(raw.categoryId) ?? ids(raw.categoryIds)[0] ?? null;
   return {
     ...fallback,
     enabled: raw.enabled === true,
-    panelChannelId: str(raw.panelChannelId),
-    panelChannelIds: idList(raw.panelChannelIds, str(raw.panelChannelId)),
+    panelChannelId,
+    panelChannelIds: panelChannelId ? [panelChannelId] : [],
     panelMessageId: str(raw.panelMessageId),
-    logChannelId: str(raw.logChannelId),
-    logChannelIds: idList(raw.logChannelIds, str(raw.logChannelId)),
-    categoryId: str(raw.categoryId),
-    categoryIds: idList(raw.categoryIds, str(raw.categoryId)),
+    panelMessageChannelId: str(raw.panelMessageChannelId),
+    logChannelId,
+    logChannelIds: logChannelId ? [logChannelId] : [],
+    categoryId,
+    categoryIds: categoryId ? [categoryId] : [],
     allowedRoleIds: ids(raw.allowedRoleIds),
     dafRoleIds,
     pilotRoleIds: ids(raw.pilotRoleIds),
@@ -511,6 +621,7 @@ function defaultConfig(): FlightConfig {
     panelChannelId: null,
     panelChannelIds: [],
     panelMessageId: null,
+    panelMessageChannelId: null,
     logChannelId: null,
     logChannelIds: [],
     categoryId: null,
@@ -543,7 +654,7 @@ function defaultConfig(): FlightConfig {
 }
 
 async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: FlightConfig, isTest: boolean) {
-  const logChannelId = firstId(config.logChannelIds, config.logChannelId);
+  const logChannelId = config.logChannelId ?? config.logChannelIds[0] ?? null;
   if (!logChannelId) {
     console.warn("[police-flight] canal de logs nao configurado", { guildId: guild.id });
     return;
@@ -623,6 +734,76 @@ async function editDeferred(interaction: Interaction, content: string) {
   else await safeReply(interaction, content);
 }
 
+async function loadDafPanelImage(guildId: string, context: BotContext, legacyImage: string | null) {
+  let candidate = legacyImage;
+  let position: PanelVisualPosition = "top";
+  try {
+    const settings = await context.api.getPanelVisualSettings(guildId, MODULE_ID);
+    candidate = settings.imageEnabled ? settings.imageUrl : null;
+    position = settings.imagePosition;
+  } catch (error) {
+    console.warn("[police-flight] configuracao de imagem DAF indisponivel; usando imagem legada", {
+      error: discordErrorMessage(error),
+      guildId
+    });
+  }
+  const url = resolvePanelImageUrl(candidate);
+  if (!url) return { position, url: null };
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("protocolo invalido");
+    return { position, url: parsed.toString() };
+  } catch (error) {
+    console.warn("[police-flight] imagem DAF invalida; painel sera publicado sem imagem", {
+      error: discordErrorMessage(error),
+      guildId,
+      imageUrl: candidate
+    });
+    return { position, url: null };
+  }
+}
+
+async function fetchDafPanelMessage(client: Client, channelId: string, messageId: string) {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased() || !("messages" in channel)) return null;
+  return channel.messages.fetch(messageId).catch(() => null);
+}
+
+function logDafPublishError(input: {
+  botId: string;
+  channelId: string | null;
+  channelName?: string;
+  error: unknown;
+  guildId: string;
+  permissions?: Record<string, boolean>;
+  source: "dashboard" | "command" | "automatic";
+}) {
+  console.error("[police-flight] erro completo ao publicar painel DAF", {
+    botId: input.botId,
+    channelId: input.channelId,
+    channelName: input.channelName ?? null,
+    error: input.error instanceof Error ? input.error.stack ?? input.error.message : String(input.error),
+    guildId: input.guildId,
+    permissions: input.permissions ?? null,
+    source: input.source
+  });
+}
+
+function discordErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object") return String(error);
+  const value = error as { code?: string | number; message?: string; rawError?: unknown };
+  return [value.message ?? "Erro desconhecido", value.code ? `(codigo ${value.code})` : "", value.rawError ? JSON.stringify(value.rawError) : ""]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isInvalidImageError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: string | number; message?: string; rawError?: unknown };
+  const details = `${value.message ?? ""} ${value.rawError ? JSON.stringify(value.rawError) : ""}`;
+  return String(value.code ?? "") === "50035" && /image|media|url/i.test(details);
+}
+
 async function safeReply(interaction: Interaction, payload: string | { content?: string; components?: unknown[]; flags?: number }) {
   if (!interaction.isRepliable()) return;
   const replyPayload = typeof payload === "string" ? { content: payload, flags: MessageFlags.Ephemeral } : payload;
@@ -648,6 +829,4 @@ function formatFooterDate(date: Date) {
 
 function str(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function ids(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
-function idList(value: unknown, fallback: string | null) { return [...new Set([...ids(value), fallback].filter((item): item is string => Boolean(item)))]; }
-function firstId(values: string[] | undefined, fallback: string | null | undefined) { return values?.[0] ?? fallback ?? null; }
 function color(value: string) { const hex = value.replace("#", ""); return /^[0-9a-f]{6}$/i.test(hex) ? Number.parseInt(hex, 16) : 0x3b82f6; }
