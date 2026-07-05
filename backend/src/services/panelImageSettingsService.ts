@@ -212,7 +212,7 @@ export async function savePanelImageUpload(input: {
     previousUrl: current.imageUrl || null
   });
 
-  return savePanelImageSettings(input.guildId, input.botId, input.panelId, {
+  const saved = await savePanelImageSettings(input.guildId, input.botId, input.panelId, {
     imageEnabled: true,
     imagePosition: current.imagePosition === "none" ? defaultUploadImagePosition(input.panelId) : current.imagePosition,
     imageSize: current.imageSize,
@@ -220,6 +220,19 @@ export async function savePanelImageUpload(input: {
     layoutMode: current.layoutMode,
     useGlobalDefault: false
   }, input.actorId);
+
+  if (current.imageUrl && current.imageUrl !== stored.publicUrl) {
+    void removePersistentImageByUrl({
+      actorId: input.actorId,
+      botId: input.botId,
+      guildId: input.guildId,
+      imageType: "panel",
+      moduleId: input.panelId,
+      url: current.imageUrl
+    }).catch(() => null);
+  }
+
+  return saved;
 }
 
 function defaultUploadImagePosition(panelId: string): PanelImagePosition {

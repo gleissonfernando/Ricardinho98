@@ -352,18 +352,49 @@ export async function savePanelImageSettings(
 }
 
 export async function uploadPanelImage(guildId: string, panelId: string, file: File, botId?: string | null) {
+  const uploadFile = await optimizeImageForUpload(file);
   const { data } = await api.put<{ settings: PanelImageSettings }>(
     `/panel-images/${guildId}/${encodeURIComponent(panelId)}/upload`,
-    file,
+    uploadFile,
     {
       headers: {
-        "Content-Type": file.type || "application/octet-stream"
+        "Content-Type": uploadFile.type || "application/octet-stream"
       },
       params: botParams(botId),
-      timeout: 30000
+      timeout: 90000
     }
   );
   return data.settings;
+}
+
+async function optimizeImageForUpload(file: File) {
+  const compressibleTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+  if (!compressibleTypes.has(file.type) || file.size <= 512 * 1024 || typeof createImageBitmap !== "function") {
+    return file;
+  }
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.84));
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "imagem";
+    return new File([blob], `${baseName}.webp`, { lastModified: file.lastModified, type: "image/webp" });
+  } catch {
+    return file;
+  } finally {
+    bitmap?.close();
+  }
 }
 
 export async function removePanelImage(guildId: string, panelId: string, botId?: string | null) {
@@ -735,23 +766,25 @@ export async function saveAutomatedLogSettings(guildId: string, botId: string, p
 export async function syncAutomatedLogStructure(guildId: string, botId: string) { const { data } = await api.post<{ settings: import("../types").AutomatedLogSettings }>(`/automated-logs/${guildId}/sync`, undefined, { params: botParams(botId) }); return data.settings; }
 
 export async function uploadWelcomeImage(guildId: string, file: File, botId?: string | null) {
-  const { data } = await api.put<{ settings: GuildSettings }>(`/settings/${guildId}/welcome-image`, file, {
+  const uploadFile = await optimizeImageForUpload(file);
+  const { data } = await api.put<{ settings: GuildSettings }>(`/settings/${guildId}/welcome-image`, uploadFile, {
     headers: {
-      "Content-Type": file.type || "application/octet-stream"
+      "Content-Type": uploadFile.type || "application/octet-stream"
     },
     params: botParams(botId),
-    timeout: 30000
+    timeout: 90000
   });
   return data.settings;
 }
 
 export async function uploadLeaveImage(guildId: string, file: File, botId?: string | null) {
-  const { data } = await api.put<{ settings: GuildSettings }>(`/settings/${guildId}/leave-image`, file, {
+  const uploadFile = await optimizeImageForUpload(file);
+  const { data } = await api.put<{ settings: GuildSettings }>(`/settings/${guildId}/leave-image`, uploadFile, {
     headers: {
-      "Content-Type": file.type || "application/octet-stream"
+      "Content-Type": uploadFile.type || "application/octet-stream"
     },
     params: botParams(botId),
-    timeout: 30000
+    timeout: 90000
   });
   return data.settings;
 }
@@ -1625,15 +1658,16 @@ export async function publishFivemFacPanel(guildId: string, botId: string) {
 }
 
 export async function uploadFivemFacAbsencePhoto(guildId: string, botId: string, absenceId: string, file: File) {
+  const uploadFile = await optimizeImageForUpload(file);
   const { data } = await api.put<{ absence: FivemFacAbsence }>(
     `/fivem/${guildId}/fac/absences/${absenceId}/photo`,
-    file,
+    uploadFile,
     {
       headers: {
-        "Content-Type": file.type || "application/octet-stream"
+        "Content-Type": uploadFile.type || "application/octet-stream"
       },
       params: botParams(botId),
-      timeout: 30000
+      timeout: 90000
     }
   );
   return data.absence;
@@ -1875,14 +1909,15 @@ export async function deleteOrvitechProduct(botId: string, guildId: string, prod
 }
 
 export async function uploadOrvitechProductBanner(botId: string, guildId: string, productId: string, file: File) {
+  const uploadFile = await optimizeImageForUpload(file);
   const { data } = await api.put<{ product: OrvitechProduct }>(
     `/dev/bots/${encodeURIComponent(botId)}/guilds/${encodeURIComponent(guildId)}/orvitech-sales/products/${encodeURIComponent(productId)}/banner`,
-    file,
+    uploadFile,
     {
       headers: {
-        "Content-Type": file.type || "application/octet-stream"
+        "Content-Type": uploadFile.type || "application/octet-stream"
       },
-      timeout: 30000
+      timeout: 90000
     }
   );
   return data.product;

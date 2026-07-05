@@ -164,6 +164,11 @@ async function assertCanManage(user: AuthSessionUser, guildId: string, botId: st
 }
 
 function moduleIdForPanel(panelId: string) {
+  if (panelId === "dm-system") return "dm-system";
+  if (panelId === "summons-system") return "summons-system";
+  if (panelId === "police-flight") return "police-flight";
+  if (panelId === "police-rh") return "police-rh";
+  if (panelId === "fivem-absence") return "fivem-absences";
   if (panelId === "manual-registration") return "manual-registration";
   if (panelId === "fivem-orders") return "fivem-orders";
   if (panelId === "fivem-hierarchy" || /^fivem-hierarchy-banner-[23]$/i.test(panelId)) return "fivem-hierarchy";

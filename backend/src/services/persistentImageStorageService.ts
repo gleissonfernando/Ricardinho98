@@ -63,7 +63,7 @@ export async function savePersistentImage(input: {
   const { persistentImages } = await getMongoCollections();
   await persistentImages.insertOne(doc);
 
-  await createLog({
+  void createLog({
     botId: input.botId ?? null,
     guildId: input.guildId,
     message: `Imagem ${input.imageType} do modulo ${input.moduleId} enviada para armazenamento persistente.`,

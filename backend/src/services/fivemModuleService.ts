@@ -32,10 +32,10 @@ export const BUILTIN_FIVEM_MODULES: FivemModuleDefinition[] = [
   },
   {
     builtIn: true,
-    description: "Solicitacoes de RH policial, ausencias, aprovacoes e historico.",
+    description: "Fluxo de ausencias, aprovacoes e historico de justificativas da FAC.",
     id: "fivem-absences",
-    permissions: "Admin Policia, RH, Lideranca",
-    title: "RH - Ausencias e Adornos"
+    permissions: "Admin FiveM, Lideranca",
+    title: "Sistema de Ausencias FAC"
   },
   {
     builtIn: true,
@@ -99,6 +99,13 @@ export const BUILTIN_FIVEM_MODULES: FivemModuleDefinition[] = [
     id: "police-reports",
     permissions: "Admin Policia, IAB",
     title: "Sistema de Denuncias IAB"
+  },
+  {
+    builtIn: true,
+    description: "RH policial com solicitacoes separadas de ausencia e adorno.",
+    id: "police-rh",
+    permissions: "Admin Policia, RH, Lideranca",
+    title: "RH - Ausencias e Adornos"
   },
   {
     builtIn: true,

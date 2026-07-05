@@ -1096,6 +1096,7 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "patrol-reports": ShieldCheck,
     "police-reports": ShieldAlert,
     "police-flight": Radio,
+    "police-rh": CalendarClock,
     "dm-system": AtSign,
     "summons-system": ShieldAlert
   };
@@ -1105,11 +1106,11 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
 
 function isPoliceModule(moduleId: string) {
   return moduleId === "fivem-hierarchy"
-    || moduleId === "fivem-absences"
     || moduleId === "police-actions"
     || moduleId === "police-patrol-reports"
     || moduleId === "patrol-reports"
     || moduleId === "police-reports"
+    || moduleId === "police-rh"
     || moduleId === "dm-system"
     || moduleId === "summons-system";
 }

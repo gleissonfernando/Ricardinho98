@@ -14,6 +14,7 @@ import type { FivemHierarchyPanel } from "./apiClient";
 import { resolvePanelImageUrl, type PanelVisualConfig, type PanelVisualPosition } from "./panelVisualRenderer";
 
 const scheduledGuilds = new Map<string, NodeJS.Timeout>();
+const publishingPanels = new Map<string, Promise<void>>();
 
 export const hierarchyCommand: BotCommand = {
   data: new SlashCommandBuilder()
@@ -56,7 +57,7 @@ export const hierarchyCommand: BotCommand = {
 export function startFivemHierarchyService(client: Client<true>, context: BotContext) {
   context.socket.onFivemHierarchyPanelUpdate((payload) => {
     const guild = client.guilds.cache.get(payload.guildId);
-    if (guild) void refreshHierarchyPanelsForGuild(guild, context, payload.panelId);
+    if (guild) scheduleHierarchyRefresh(guild, context, payload.panelId);
   });
 
   for (const guild of client.guilds.cache.values()) {
@@ -70,27 +71,58 @@ export async function handleFivemHierarchyInteraction(interaction: Interaction, 
   return false;
 }
 
-export function scheduleHierarchyRefresh(guild: Guild, context: BotContext) {
+export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, panelId?: string | null) {
   if (!isBotModuleEnabled("fivem-hierarchy")) return;
-  const current = scheduledGuilds.get(guild.id);
+  const key = `${guild.id}:${panelId ?? "all"}`;
+  const current = scheduledGuilds.get(key);
   if (current) clearTimeout(current);
   const timeout = setTimeout(() => {
-    scheduledGuilds.delete(guild.id);
-    void refreshHierarchyPanelsForGuild(guild, context);
+    scheduledGuilds.delete(key);
+    void refreshHierarchyPanelsForGuild(guild, context, panelId);
   }, 2500);
   timeout.unref();
-  scheduledGuilds.set(guild.id, timeout);
+  scheduledGuilds.set(key, timeout);
 }
 
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null) {
   const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
   const lookup = panelId?.trim().toLowerCase() ?? null;
-  const scoped = panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup));
+  const scoped = dedupeHierarchyPanels(panels.filter((panel) => panel.guildId === guild.id && (!lookup || panel.id === panelId || panel.unitId?.toLowerCase() === lookup)));
   if (!scoped.length) return;
   await guild.members.fetch().catch(() => null);
   for (const panel of scoped) {
-    await publishHierarchyPanel(guild, context, panel);
+    await publishHierarchyPanelOnce(guild, context, panel);
   }
+}
+
+function dedupeHierarchyPanels(panels: FivemHierarchyPanel[]) {
+  const byUnitAndChannel = new Map<string, FivemHierarchyPanel>();
+
+  panels.forEach((panel) => {
+    const key = `${panel.panelChannelId ?? "no-channel"}:${panel.unitId?.toLowerCase() || panel.id}`;
+    const current = byUnitAndChannel.get(key);
+
+    if (!current || (!current.panelMessageId && panel.panelMessageId)) {
+      byUnitAndChannel.set(key, panel);
+    }
+  });
+
+  return [...byUnitAndChannel.values()];
+}
+
+async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel) {
+  const key = `${guild.id}:${panel.id}`;
+  const current = publishingPanels.get(key);
+  if (current) {
+    await current;
+    return;
+  }
+
+  const task = publishHierarchyPanel(guild, context, panel).finally(() => {
+    publishingPanels.delete(key);
+  });
+  publishingPanels.set(key, task);
+  await task;
 }
 
 async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel) {
@@ -129,7 +161,7 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
     : { type: 10, content: header });
 
   pushExtraHierarchyMedia(components, extraImages, ["below_title"], panel.title);
-  components.push({ type: 10, content: renderHierarchyText(guild, panel) });
+  renderHierarchyTextChunks(guild, panel).forEach((content) => components.push({ type: 10, content }));
   pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["bottom", "footer"], panel.title);
   pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer", "below_text"], panel.title);
 
@@ -163,27 +195,26 @@ async function getPanelVisualSlots(context: BotContext, guildId: string, basePan
   });
 }
 
-function renderHierarchyText(guild: Guild, panel: FivemHierarchyPanel) {
+function renderHierarchyTextChunks(guild: Guild, panel: FivemHierarchyPanel) {
   const listedMemberIds = new Set<string>();
-
-  return panel.hierarchies
+  const blocks = panel.hierarchies
     .filter((item) => item.active)
     .sort((a, b) => a.order - b.order)
     .map((item) => {
       const candidates = item.roleId ? Array.from(guild.members.cache.values())
         .filter((member) => member.roles.cache.has(item.roleId) && !listedMemberIds.has(member.id))
         .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR")) : [];
-      candidates.forEach((member) => listedMemberIds.add(member.id));
-      const members = candidates
-        .slice(0, item.limit ?? 50)
-        .map((member) => formatHierarchyMember(member, panel.displayMode));
+      const displayedCandidates = candidates.slice(0, item.limit ?? 50);
+      displayedCandidates.forEach((member) => listedMemberIds.add(member.id));
+      const members = displayedCandidates.map((member) => formatHierarchyMember(member, panel.displayMode));
       if (!members.length && item.showWhenEmpty === false) return null;
       const heading = [item.emoji, `**${item.name}**`].filter(Boolean).join(" ");
       return `${heading}\n${members.length ? members.join("\n") : (item.emptyText || panel.emptyText || "Nenhum membro")}`;
     })
-    .filter((value): value is string => Boolean(value))
-    .join("\n\n")
-    .slice(0, 3800) || "*Nenhuma hierarquia configurada.*";
+    .filter((value): value is string => Boolean(value));
+
+  if (!blocks.length) return ["*Nenhuma hierarquia configurada.*"];
+  return chunkHierarchyBlocks(blocks);
 }
 
 async function findHierarchyPanel(guildId: string, context: BotContext, unitId: string | null) {
@@ -210,7 +241,25 @@ function normalizeHierarchyImagePosition(position: PanelVisualPosition | undefin
 
 function normalizeHierarchyMainImagePosition(position: PanelVisualPosition | undefined) {
   const normalized = normalizeHierarchyImagePosition(position);
-  return normalized === "banner" || normalized === "thumbnail" ? "side" : normalized;
+  return normalized === "none" ? "none" : "side";
+}
+
+function chunkHierarchyBlocks(blocks: string[]) {
+  const chunks: string[] = [];
+  let current = "";
+
+  blocks.forEach((block) => {
+    const next = current ? `${current}\n\n${block}` : block;
+    if (next.length > 3800 && current) {
+      chunks.push(current);
+      current = block;
+      return;
+    }
+    current = next;
+  });
+
+  if (current) chunks.push(current);
+  return chunks.slice(0, 8);
 }
 
 function pushHierarchyMedia(components: unknown[], imageUrl: string | null, position: PanelVisualPosition | "none", acceptedPositions: string[], description: string) {

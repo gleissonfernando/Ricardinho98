@@ -1,7 +1,7 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   MessageFlags, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, TextInputBuilder,
-  TextInputStyle, type ChatInputCommandInteraction, type GuildMember, type Interaction
+  TextInputStyle, UserSelectMenuBuilder, type ChatInputCommandInteraction, type GuildMember, type Interaction
 } from "discord.js";
 import type { BotContext } from "../types";
 import type { DmButtonConfig, DmSettings, SummonsRecord, SummonsSettings } from "./apiClient";
@@ -50,13 +50,17 @@ export async function showSummonsModal(interaction: ChatInputCommandInteraction,
   if (!hasRole(interaction.member as GuildMember, settings.authorizedRoleIds) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
     return void await interaction.reply({ content: "Você não possui um cargo autorizado.", ephemeral: true });
   }
-  const modal = new ModalBuilder().setCustomId(`${SUMMONS_PREFIX}:create`).setTitle("Criar intimação");
-  modal.addComponents(
-    input("target", "ID ou menção do usuário", "123456789012345678", true),
-    input("reason", "Motivo da intimação", "Descreva o motivo", true, true),
-    input("notes", "Observações (opcional)", "Informações adicionais", false, true)
-  );
-  await interaction.showModal(modal);
+  await interaction.reply(configPayload("Criar intimação", [
+    "Selecione o membro que será intimado."
+  ], [
+    new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId(`${SUMMONS_PREFIX}:select_target`)
+        .setPlaceholder("Pesquisar membro do servidor")
+        .setMinValues(1)
+        .setMaxValues(1)
+    )
+  ]));
 }
 
 export async function showSummonsConfigPanel(interaction: ChatInputCommandInteraction, context: BotContext) {
@@ -128,9 +132,19 @@ async function handleDm(interaction: any, context: BotContext) {
 async function handleSummons(interaction: any, context: BotContext) {
   const [action, id] = interaction.customId.split(":").slice(1);
   const settings = await context.api.getSummonsSettings(interaction.guildId);
+  if (action === "select_target" && interaction.isUserSelectMenu()) {
+    const targetId = interaction.values[0];
+    const modal = new ModalBuilder().setCustomId(`${SUMMONS_PREFIX}:create:${targetId}`).setTitle("Criar intimação");
+    modal.addComponents(
+      input("reason", "Motivo da intimação", "Descreva o motivo", true, true),
+      input("notes", "Observações (opcional)", "Informações adicionais", false, true)
+    );
+    await interaction.showModal(modal);
+    return;
+  }
   if (action === "create" && interaction.isModalSubmit()) {
     await interaction.deferReply({ ephemeral: true });
-    const targetId = snowflakeFrom(interaction.fields.getTextInputValue("target"));
+    const targetId = snowflakeFrom(id ?? "");
     const record = await context.api.createSummons({ guildId: interaction.guildId, targetId, requesterId: interaction.user.id, reason: interaction.fields.getTextInputValue("reason"), notes: nullable(interaction.fields.getTextInputValue("notes")) });
     try {
       const channel = await createSummonsChannel(interaction, settings, record);
