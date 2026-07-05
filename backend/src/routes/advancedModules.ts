@@ -35,7 +35,8 @@ const moduleIdSchema = z.enum([
   "first-lady",
   "music",
   "police-reports",
-  "police-flight"
+  "police-flight",
+  "police-rh"
 ]);
 const primitiveConfigValue = z.union([
   z.boolean(),

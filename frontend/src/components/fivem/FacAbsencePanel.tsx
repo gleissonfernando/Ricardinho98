@@ -598,23 +598,23 @@ function AbsenceRow({
               ref={inputRef}
               type="file"
             />
-            <Button disabled={photoSaving} onClick={() => inputRef.current?.click()} size="sm" variant="outline">
+            <Button disabled={photoSaving} onClick={() => inputRef.current?.click()} size="sm" type="button" variant="outline">
               <ImageIcon className="h-4 w-4" />
               Selecionar Foto
             </Button>
             {selectedFile ? (
               <>
-                <Button disabled={photoSaving} onClick={() => void handleSavePhoto()} size="sm">
+                <Button disabled={photoSaving} onClick={() => void handleSavePhoto()} size="sm" type="button">
                   {photoSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   Salvar Foto
                 </Button>
-                <Button disabled={photoSaving} onClick={() => setSelectedFile(null)} size="sm" variant="outline">
+                <Button disabled={photoSaving} onClick={() => setSelectedFile(null)} size="sm" type="button" variant="outline">
                   <Trash2 className="h-4 w-4" />
                   Remover
                 </Button>
               </>
             ) : absence.photoUrl ? (
-              <Button disabled={photoSaving} onClick={() => void handleRemoveSavedPhoto()} size="sm" variant="outline">
+              <Button disabled={photoSaving} onClick={() => void handleRemoveSavedPhoto()} size="sm" type="button" variant="outline">
                 {photoSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 Remover Foto
               </Button>

@@ -596,6 +596,7 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "police-patrol-reports": "police-patrol-reports",
   "police-reports": "police-reports",
   "police-flight": "police-flight",
+  "police-rh": "police-rh",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -4207,6 +4208,7 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "police-actions",
       "police-patrol-reports",
       "police-reports",
+      "police-rh",
       "fivem-fac"
     ].includes(moduleId);
   }
@@ -8818,31 +8820,242 @@ function readResponseMessage(error: unknown) {
 }
 
 function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canManage: boolean; guild: DashboardGuild | null }) {
+  const [config, setConfig] = useState<PoliceRhConfig>(defaultPoliceRhConfig);
+  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
+  const [categories, setCategories] = useState<GuildCategoryOption[]>([]);
+  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!botId || !guild) return;
+    let mounted = true;
+    setLoading(true);
+    setMessage(null);
+
+    Promise.all([
+      getAdvancedModuleConfig(botId, guild.id, "police-rh"),
+      getGuildLiveOptions(guild.id, botId)
+    ])
+      .then(([module, options]) => {
+        if (!mounted) return;
+        setConfig(normalizePoliceRhConfig(module.config));
+        setChannels(options.channels);
+        setCategories(options.categories ?? []);
+        setRoles(options.roles.filter((role) => role.id !== guild.id));
+      })
+      .catch((error) => {
+        if (mounted) setMessage(readResponseMessage(error) ?? "Não foi possível carregar o sistema RH, Ausência e Adorno.");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [botId, guild?.id]);
+
+  function patch(patchValue: Partial<PoliceRhConfig>) {
+    setConfig((current) => ({ ...current, ...patchValue }));
+  }
+
+  async function save() {
+    if (!botId || !guild) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
+        config,
+        guildName: guild.name
+      });
+      setConfig(normalizePoliceRhConfig(saved.config));
+      setMessage("Configurações do RH, Ausência e Adorno salvas.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Não foi possível salvar o sistema RH, Ausência e Adorno.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!botId || !guild) {
     return <Card><CardContent className="py-10 text-center text-zinc-500">Selecione um bot e um servidor.</CardContent></Card>;
   }
+
+  const disabled = !canManage || loading || saving;
+  const roleOptions = roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }));
+  const channelOptions = channels.map((channel) => ({ id: channel.id, name: channel.name }));
+  const categoryOptions = categories.map((category) => ({ id: category.id, name: category.name }));
 
   return (
     <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle>RH Policial</CardTitle>
-          <CardDescription>Sistema exclusivo da Policia, separado das ausencias da FAC.</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>RH, Ausência e Adorno</CardTitle>
+              <CardDescription>Configurações policiais deste módulo, sem redirecionar para FAC, IA ou outro menu.</CardDescription>
+            </div>
+            <Switch checked={config.enabled} disabled={disabled} onCheckedChange={(enabled) => patch({ enabled })} />
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
-            <p className="font-semibold text-white">Registrar Ausencia</p>
-            <p className="mt-2 text-sm text-zinc-400">Solicitacoes, analise, cargo temporario e retorno automatico.</p>
-          </div>
-          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
-            <p className="font-semibold text-white">Solicitar Adorno</p>
-            <p className="mt-2 text-sm text-zinc-400">Envio de imagem, avaliacao da equipe e registro nas logs policiais.</p>
-          </div>
+        <CardContent className="space-y-5">
+          {message ? <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-200">{message}</div> : null}
+          {loading ? <div className="flex min-h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div> : (
+            <>
+              <section className="grid gap-4 lg:grid-cols-3">
+                <PoliceRhConfigSection icon={Users} title="Sistema de RH" description="Cargos, logs, responsáveis, permissões e painel Components V2.">
+                  <FivemResourceMultiSelect disabled={disabled} label="Cargos permitidos" onChange={(rhAllowedRoleIds) => patch({ rhAllowedRoleIds })} options={roleOptions} prefix="@" values={config.rhAllowedRoleIds} />
+                  <FivemResourceMultiSelect disabled={disabled} label="Responsáveis do RH" onChange={(rhResponsibleRoleIds) => patch({ rhResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.rhResponsibleRoleIds} />
+                  <FivemResourceSelect disabled={disabled} label="Canal de logs do RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
+                  <FivemResourceSelect disabled={disabled} label="Canal do painel RH" onChange={(rhPanelChannelId) => patch({ rhPanelChannelId })} options={channelOptions} prefix="#" value={config.rhPanelChannelId} />
+                </PoliceRhConfigSection>
+
+                <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Painel, categoria temporária, logs, cargo de ausência, aprovação, DM e imagens.">
+                  <FivemResourceSelect disabled={disabled} label="Canal do painel" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
+                  <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(absenceCategoryId) => patch({ absenceCategoryId })} options={categoryOptions} value={config.absenceCategoryId} />
+                  <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
+                  <FivemResourceSelect disabled={disabled} label="Cargo de ausência" onChange={(absenceRoleId) => patch({ absenceRoleId })} options={roleOptions} prefix="@" value={config.absenceRoleId} />
+                  <FivemResourceMultiSelect disabled={disabled} label="Aprovadores" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
+                  <PoliceRhTextarea disabled={disabled} label="Mensagem de DM" onChange={(absenceDmMessage) => patch({ absenceDmMessage })} value={config.absenceDmMessage} />
+                </PoliceRhConfigSection>
+
+                <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adorno" description="Painel, categoria temporária, logs, responsáveis marcados, aprovação, DM e imagens.">
+                  <FivemResourceSelect disabled={disabled} label="Canal do painel" onChange={(adornoPanelChannelId) => patch({ adornoPanelChannelId })} options={channelOptions} prefix="#" value={config.adornoPanelChannelId} />
+                  <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(adornoCategoryId) => patch({ adornoCategoryId })} options={categoryOptions} value={config.adornoCategoryId} />
+                  <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
+                  <FivemResourceMultiSelect disabled={disabled} label="Responsáveis marcados" onChange={(adornoResponsibleRoleIds) => patch({ adornoResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.adornoResponsibleRoleIds} />
+                  <FivemResourceMultiSelect disabled={disabled} label="Aprovadores" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
+                  <PoliceRhTextarea disabled={disabled} label="Mensagem de DM" onChange={(adornoDmMessage) => patch({ adornoDmMessage })} value={config.adornoDmMessage} />
+                </PoliceRhConfigSection>
+              </section>
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
+                <Button disabled={disabled} onClick={() => void save()} type="button">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  Salvar configurações
+                </Button>
+                <Badge variant={config.enabled ? "success" : "muted"}>{config.enabled ? "Módulo ativo" : "Módulo inativo"}</Badge>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
-      <PanelImageSettings botId={botId} canManage={canManage} guildId={guild.id} panelId="police-rh" panelLabel="RH Policial" />
+      <PanelImageSettings
+        botId={botId}
+        canManage={canManage}
+        guildId={guild.id}
+        panelLabel="RH, Ausência e Adorno"
+        panelSlots={[
+          { id: "police-rh", label: "RH - Painel principal" },
+          { id: "police-rh-absence", label: "Ausência - Banner/cabeçalho/rodapé" },
+          { id: "police-rh-adorno", label: "Adorno - Banner/cabeçalho/rodapé" }
+        ]}
+      />
     </div>
   );
+}
+
+type PoliceRhConfig = {
+  adornoApproverRoleIds: string[];
+  adornoCategoryId: string | null;
+  adornoDmMessage: string;
+  adornoLogChannelId: string | null;
+  adornoPanelChannelId: string | null;
+  adornoResponsibleRoleIds: string[];
+  absenceApproverRoleIds: string[];
+  absenceCategoryId: string | null;
+  absenceDmMessage: string;
+  absenceLogChannelId: string | null;
+  absencePanelChannelId: string | null;
+  absenceRoleId: string | null;
+  enabled: boolean;
+  rhAllowedRoleIds: string[];
+  rhLogChannelId: string | null;
+  rhPanelChannelId: string | null;
+  rhResponsibleRoleIds: string[];
+};
+
+const defaultPoliceRhConfig: PoliceRhConfig = {
+  adornoApproverRoleIds: [],
+  adornoCategoryId: null,
+  adornoDmMessage: "Sua solicitação de adorno foi atualizada pela equipe.",
+  adornoLogChannelId: null,
+  adornoPanelChannelId: null,
+  adornoResponsibleRoleIds: [],
+  absenceApproverRoleIds: [],
+  absenceCategoryId: null,
+  absenceDmMessage: "Sua solicitação de ausência foi atualizada pela equipe.",
+  absenceLogChannelId: null,
+  absencePanelChannelId: null,
+  absenceRoleId: null,
+  enabled: false,
+  rhAllowedRoleIds: [],
+  rhLogChannelId: null,
+  rhPanelChannelId: null,
+  rhResponsibleRoleIds: []
+};
+
+function PoliceRhConfigSection({ children, description, icon: Icon, title }: { children: React.ReactNode; description: string; icon: typeof Bot; title: string }) {
+  return (
+    <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black text-zinc-300">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="font-semibold text-white">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PoliceRhTextarea({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: string) => void; value: string }) {
+  return (
+    <label className="grid gap-2 text-xs font-medium text-zinc-400">
+      <span>{label}</span>
+      <textarea className="min-h-24 rounded-lg border border-zinc-800 bg-[#09090b] p-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value)} value={value} />
+    </label>
+  );
+}
+
+function normalizePoliceRhConfig(raw: Record<string, unknown>): PoliceRhConfig {
+  return {
+    ...defaultPoliceRhConfig,
+    enabled: raw.enabled === true,
+    rhAllowedRoleIds: readStringList(raw.rhAllowedRoleIds),
+    rhResponsibleRoleIds: readStringList(raw.rhResponsibleRoleIds),
+    rhLogChannelId: readNullableString(raw.rhLogChannelId),
+    rhPanelChannelId: readNullableString(raw.rhPanelChannelId),
+    absencePanelChannelId: readNullableString(raw.absencePanelChannelId),
+    absenceCategoryId: readNullableString(raw.absenceCategoryId),
+    absenceLogChannelId: readNullableString(raw.absenceLogChannelId),
+    absenceRoleId: readNullableString(raw.absenceRoleId),
+    absenceApproverRoleIds: readStringList(raw.absenceApproverRoleIds),
+    absenceDmMessage: readStringValue(raw.absenceDmMessage) || defaultPoliceRhConfig.absenceDmMessage,
+    adornoPanelChannelId: readNullableString(raw.adornoPanelChannelId),
+    adornoCategoryId: readNullableString(raw.adornoCategoryId),
+    adornoLogChannelId: readNullableString(raw.adornoLogChannelId),
+    adornoResponsibleRoleIds: readStringList(raw.adornoResponsibleRoleIds),
+    adornoApproverRoleIds: readStringList(raw.adornoApproverRoleIds),
+    adornoDmMessage: readStringValue(raw.adornoDmMessage) || defaultPoliceRhConfig.adornoDmMessage
+  };
+}
+
+function readStringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+function readNullableString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readStringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function visualPanelIdForView(view: ViewId) {
