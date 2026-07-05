@@ -9,7 +9,6 @@ import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRend
 
 const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
-const SUMMONS_TEAM_NAME = "Equipe IAB";
 const SUMMONS_WEBHOOK_NAME = "Intimações Institucionais";
 const ANONYMOUS_TEAM_NAME = "Human Resources - NPD";
 const DISCORD_ROLE_SELECT_LIMIT = 25;
@@ -721,11 +720,8 @@ function parseCompetence(value: string | undefined): SummonsCompetence | null {
 function competenceLabel(value: SummonsCompetence) {
   return value === "iab" ? "IAB" : value === "conselho" ? "Conselho" : value === "hcmd" ? "High Command" : "Comissário";
 }
-function teamNameForCompetence(value: SummonsCompetence, settings?: SummonsSettings) {
-  if (value === "iab") return settings?.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME;
-  if (value === "conselho") return "Conselho";
-  if (value === "hcmd") return "High Command";
-  return "Comissário";
+function teamNameForCompetence(_value: SummonsCompetence, _settings?: SummonsSettings) {
+  return ANONYMOUS_TEAM_NAME;
 }
 function roleIdsForCompetence(settings: SummonsSettings, competence: SummonsCompetence) {
   if (competence === "iab") return summonsTeamRoleIds(settings);
@@ -807,13 +803,13 @@ function summonsSettingsSnapshot(settings: SummonsSettings) {
     teamRoleIds: summonsTeamRoleIds(settings),
     teamAvatarUrl: settings.teamAvatarUrl,
     privateLogChannelId: settings.privateLogChannelId,
-    publicResponsibleName: settings.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME,
+    publicResponsibleName: ANONYMOUS_TEAM_NAME,
     dmTitle: "📨 Você recebeu uma intimação",
     dmDescription: "Você foi intimado para prestar esclarecimentos no canal indicado abaixo.",
     dmButtonText: "🔗 Acessar conversa",
     bannerUrl: settings.bannerUrl,
     color: settings.color,
-    defaultMessage: `Este canal é confidencial e destinado à conversa com ${settings.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME}.`
+    defaultMessage: `Este canal é confidencial e destinado à conversa com ${ANONYMOUS_TEAM_NAME}.`
   };
 }
 function snowflakeFrom(value: string) { const match = value.match(/\d{5,32}/); if (!match) throw new Error("Informe um ID ou menção válida."); return match[0]; }

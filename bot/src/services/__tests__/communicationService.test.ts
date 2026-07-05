@@ -91,8 +91,8 @@ test("painel e DM de intimação ocultam o criador real", () => {
   const dm = JSON.stringify(summonsDmPayload(summonsSettings, summons, summons.guildId, summons.channelId!));
   assert.doesNotMatch(panel, new RegExp(summons.requesterId));
   assert.doesNotMatch(dm, new RegExp(summons.requesterId));
-  assert.match(panel, /Equipe NPD/);
-  assert.match(dm, /Equipe NPD/);
+  assert.match(panel, /Human Resources - NPD/);
+  assert.match(dm, /Human Resources - NPD/);
   assert.match(dm, /Acessar conversa/);
   assert.ok(dm.includes("discord.com/channels/333333/444444"));
 });
