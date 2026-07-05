@@ -276,6 +276,11 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
   if (!botId) return null;
   const runtime = await context.api.getBotGuildConfig(botId, guildId);
   const raw = runtime.modules[MODULE_ID] ?? {};
+  const [panelVisual, absenceVisual, adornoVisual] = await Promise.all([
+    loadPanelVisual(context, guildId, "police-rh"),
+    loadPanelVisual(context, guildId, "police-rh-absence"),
+    loadPanelVisual(context, guildId, "police-rh-adorno")
+  ]);
   return {
     enabled: raw.enabled === true,
     panelChannelId: readString(raw.panelChannelId) ?? readString(raw.rhPanelChannelId) ?? readString(raw.absencePanelChannelId) ?? readString(raw.adornoPanelChannelId),
@@ -284,8 +289,8 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelDescription: readString(raw.panelDescription) ?? "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
     panelColor: readString(raw.panelColor) ?? "#7c3aed",
     panelBannerUrl: readString(raw.panelBannerUrl) ?? "",
-    panelImageUrl: readString(raw.panelImageUrl) ?? "",
-    panelImagePosition: readImagePosition(raw.panelImagePosition),
+    panelImageUrl: readString(raw.panelImageUrl) ?? panelVisual.imageUrl,
+    panelImagePosition: readImagePosition(raw.panelImagePosition, panelVisual.imagePosition),
     panelFooterText: readString(raw.panelFooterText) ?? "📌 RH - Sistema interno",
     panelFooterImageUrl: readString(raw.panelFooterImageUrl) ?? "",
     absenceEnabled: raw.absenceEnabled !== false,
@@ -298,8 +303,8 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "❌ Sua solicitação de ausência foi recusada.",
     absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
     absenceFooterImageUrl: readString(raw.absenceFooterImageUrl) ?? "",
-    absenceImagePosition: readImagePosition(raw.absenceImagePosition),
-    absenceImageUrl: readString(raw.absenceImageUrl) ?? "",
+    absenceImagePosition: readImagePosition(raw.absenceImagePosition, absenceVisual.imagePosition),
+    absenceImageUrl: readString(raw.absenceImageUrl) ?? absenceVisual.imageUrl,
     adornoEnabled: raw.adornoEnabled !== false,
     adornoCategoryId: readString(raw.adornoCategoryId),
     adornoLogChannelId: readString(raw.adornoLogChannelId),
@@ -309,8 +314,8 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     adornoDmApprovedMessage: readString(raw.adornoDmApprovedMessage) ?? "✅ Sua solicitação de adorno foi aprovada.",
     adornoDmRejectedMessage: readString(raw.adornoDmRejectedMessage) ?? "❌ Sua solicitação de adorno foi recusada.",
     adornoFooterImageUrl: readString(raw.adornoFooterImageUrl) ?? "",
-    adornoImagePosition: readImagePosition(raw.adornoImagePosition),
-    adornoImageUrl: readString(raw.adornoImageUrl) ?? "",
+    adornoImagePosition: readImagePosition(raw.adornoImagePosition, adornoVisual.imagePosition),
+    adornoImageUrl: readString(raw.adornoImageUrl) ?? adornoVisual.imageUrl,
     rhLogChannelId: readString(raw.rhLogChannelId)
   };
 }
@@ -361,11 +366,19 @@ function withEmoji(value: string, emoji: string) {
 function visual(imageUrl: string, imagePosition: PanelVisualPosition): PanelVisualConfig | null {
   return imageUrl ? { imageEnabled: true, imagePosition, imageUrl } : null;
 }
+async function loadPanelVisual(context: BotContext, guildId: string, panelId: string): Promise<{ imagePosition: PanelVisualPosition; imageUrl: string }> {
+  const settings = await context.api.getPanelVisualSettings(guildId, panelId).catch(() => null);
+  if (!settings?.imageEnabled || !settings.imageUrl) return { imagePosition: "none", imageUrl: "" };
+  return {
+    imagePosition: readImagePosition(settings.imagePosition, "top"),
+    imageUrl: settings.imageUrl
+  };
+}
 function readString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function idList(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
 function uniqueIds(ids: string[]) { return [...new Set(ids.filter((id) => /^\d{5,32}$/.test(id)))]; }
-function readImagePosition(value: unknown): PanelVisualPosition {
-  return typeof value === "string" && ["top", "middle", "side", "footer", "none"].includes(value) ? value as PanelVisualPosition : "side";
+function readImagePosition(value: unknown, fallback: PanelVisualPosition = "side"): PanelVisualPosition {
+  return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : fallback;
 }
 function colorToInt(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x7c3aed; }
 function safeChannelName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 90) || "rh"; }

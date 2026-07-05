@@ -8958,13 +8958,18 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
     try {
       const image = await uploadPanelImage(guild.id, "police-rh", file, botId);
       const nextImagePosition = config.panelImagePosition === "none" ? "top" : config.panelImagePosition;
-      setConfig((current) => ({
-        ...current,
+      const nextConfig = {
+        ...config,
         panelImagePosition: nextImagePosition,
         panelImageUrl: image.imageUrl,
-        panelBannerUrl: image.imagePosition === "banner" ? image.imageUrl : current.panelBannerUrl
-      }));
-      setMessage("🖼️ Imagem enviada. Clique em salvar ou publicar para aplicar no painel RH.");
+        panelBannerUrl: image.imagePosition === "banner" ? image.imageUrl : config.panelBannerUrl
+      };
+      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
+        config: nextConfig,
+        guildName: guild.name
+      });
+      setConfig(normalizePoliceRhConfig(saved.config));
+      setMessage("🖼️ Imagem enviada e salva no painel RH.");
     } catch (error) {
       setMessage(readResponseMessage(error) ?? "Não foi possível enviar a imagem do RH.");
     } finally {
@@ -8972,9 +8977,23 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
     }
   }
 
-  function removeRhImage() {
-    patch({ panelBannerUrl: "", panelFooterImageUrl: "", panelImageUrl: "", panelImagePosition: "none" });
-    setMessage("🗑️ Imagem removida. Clique em salvar ou publicar para aplicar.");
+  async function removeRhImage() {
+    if (!botId || !guild) return;
+    const nextConfig = { ...config, panelBannerUrl: "", panelFooterImageUrl: "", panelImageUrl: "", panelImagePosition: "none" as const };
+    setImageUploading(true);
+    setMessage(null);
+    try {
+      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
+        config: nextConfig,
+        guildName: guild.name
+      });
+      setConfig(normalizePoliceRhConfig(saved.config));
+      setMessage("🗑️ Imagem removida do painel RH.");
+    } catch (error) {
+      setMessage(readResponseMessage(error) ?? "Não foi possível remover a imagem do RH.");
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   if (!botId || !guild) {
@@ -9089,7 +9108,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
                       </label>
                       <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
                       <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
-                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={removeRhImage} type="button" variant="outline">
+                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={() => void removeRhImage()} type="button" variant="outline">
                         <Trash2 className="h-4 w-4" />
                         Remover imagem
                       </Button>
