@@ -1076,6 +1076,8 @@ export type FivemHierarchyEntry = {
 };
 
 export type FivemHierarchyPanel = {
+  autoUpdateEnabled: boolean;
+  autoUpdateIntervalSeconds: number;
   botId: string | null;
   color: string;
   createdAt: string;

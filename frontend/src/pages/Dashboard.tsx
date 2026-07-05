@@ -3294,13 +3294,13 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
 }
 
 const hierarchyUnitTemplates = [
-  { unitId: "du", name: "DU", title: "Hierarquia - DU", description: "Lista de membros da unidade DU", color: "#1d4ed8", ranks: ["Chief of Detectives", "Assistant Chief", "Detective III", "Detective II", "Detective I", "DU Probationary"] },
-  { unitId: "cbp", name: "CBP", title: "Hierarquia - CBP", description: "Lista de membros da unidade CBP", color: "#16a34a", ranks: ["CBP Commander", "CBP Deputy Commander", "CBP Customs Coordinator", "CBP Defense Agent III", "CBP Defense Agent II", "CBP Defense Agent I", "CBP Probationary Agent"] },
-  { unitId: "traffic", name: "TRAFFIC", title: "Hierarquia - TRAFFIC", description: "Lista de membros da unidade TRAFFIC", color: "#7c3aed", ranks: ["Chief Of Traffic Enforcement", "Assistant Chief", "Coordinator", "Traffic Senior", "Traffic Officer", "Traffic Probationary"] },
-  { unitId: "mary", name: "MARY", title: "Hierarquia - MARY", description: "Lista de membros da unidade MARY", color: "#52525b", ranks: ["MARY Commander", "MARY Deputy Commander", "MARY Coordinator", "MARY Veteran", "MARY Senior", "MARY Officer", "MARY Probationary"] },
-  { unitId: "fast", name: "FAST", title: "Hierarquia - FAST", description: "Lista de membros da unidade FAST", color: "#eab308", ranks: ["Commander FAST", "FAST Deputy Commander", "FAST Coordinator", "FAST Veteran", "FAST Senior", "FAST Officer", "FAST Probationary"] },
-  { unitId: "daf", name: "DAF", title: "Hierarquia - DAF", description: "Lista de membros da unidade DAF", color: "#d4d4d8", ranks: ["Commander D.A.F", "DAF Deputy Commander", "DAF Coordinator", "DAF Veteran", "DAF Senior", "DAF Officer", "DAF Probationary"] },
-  { unitId: "swat", name: "SWAT", title: "HIERARQUIA SWAT", description: "Lista de membros da unidade SWAT", color: "#0f172a", ranks: ["COMMANDER", "DEPUTY COMMANDER", "COORDINATOR", "INSTRUCTOR", "OPERATOR", "PROBATORY"], swat: true }
+  { unitId: "du", name: "DU", title: "Hierarquia - DU", description: "Lista oficial de membros da unidade DU", color: "#1d4ed8", ranks: ["Chief of Detectives", "Assistant Chief", "Detective III", "Detective II", "Detective I", "DU Probationary"] },
+  { unitId: "cbp", name: "CBP", title: "Hierarquia - CBP", description: "Lista oficial de membros da unidade CBP", color: "#16a34a", ranks: ["CBP Commander", "CBP Deputy Commander", "CBP Customs Coordinator", "CBP Defense Agent III", "CBP Defense Agent II", "CBP Defense Agent I", "CBP Probationary Agent"] },
+  { unitId: "traffic", name: "TRAFFIC", title: "Hierarquia - TRAFFIC", description: "Lista oficial de membros da unidade TRAFFIC", color: "#7c3aed", ranks: ["Chief Of Traffic Enforcement", "Assistant Chief", "Coordinator", "Traffic Senior", "Traffic Officer", "Traffic Probationary"] },
+  { unitId: "mary", name: "MARY", title: "Hierarquia - MARY", description: "Lista oficial de membros da unidade MARY", color: "#52525b", ranks: ["MARY Commander", "MARY Deputy Commander", "MARY Coordinator", "MARY Veteran", "MARY Senior", "MARY Officer", "MARY Probationary"] },
+  { unitId: "fast", name: "FAST", title: "Hierarquia - FAST", description: "Lista oficial de membros da unidade FAST", color: "#eab308", ranks: ["Commander FAST", "FAST Deputy Commander", "FAST Coordinator", "FAST Veteran", "FAST Senior", "FAST Officer", "FAST Probationary"] },
+  { unitId: "daf", name: "DAF", title: "Hierarquia - DAF", description: "Lista oficial de membros da unidade DAF", color: "#d4d4d8", ranks: ["Commander D.A.F", "DAF Deputy Commander", "DAF Coordinator", "DAF Veteran", "DAF Senior", "DAF Officer", "DAF Probationary"] },
+  { unitId: "swat", name: "SWAT", title: "Hierarquia - SWAT", description: "Lista oficial de membros da unidade SWAT", color: "#0f172a", ranks: ["COMMANDER", "DEPUTY COMMANDER", "COORDINATOR", "INSTRUCTOR", "OPERATOR", "PROBATORY"], swat: true }
 ] as const;
 
 function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
@@ -3350,7 +3350,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   function addHierarchy() {
     setDraft((current) => current ? {
       ...current,
-      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: null, emptyText: "Nenhum membro", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
+      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: defaultHierarchyEmoji(current.hierarchies.length), emptyText: "Nenhum membro encontrado com este cargo.", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
     } : current);
   }
 
@@ -3491,6 +3491,13 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   Unidade ativa
                   <Switch checked={draft.enabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ enabled: checked })} />
                 </label>
+                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
+                  Atualizacao automatica
+                  <Switch checked={draft.autoUpdateEnabled !== false} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ autoUpdateEnabled: checked })} />
+                </label>
+                <label className="block text-xs font-medium text-zinc-400">Intervalo automatico (segundos)
+                  <input className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} min={30} onChange={(event) => patchDraft({ autoUpdateIntervalSeconds: Math.max(30, Number(event.target.value) || 300) })} type="number" value={draft.autoUpdateIntervalSeconds ?? 300} />
+                </label>
                 <label className="block text-xs font-medium text-zinc-400">Formato dos membros
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ displayMode: event.target.value as FivemHierarchyPanelType["displayMode"] })} value={draft.displayMode}>
                     <option value="mention">Mencao do usuario</option>
@@ -3499,7 +3506,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                     <option value="name_with_id">Nome + ID funcional</option>
                   </select>
                 </label>
-                <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro" })} value={draft.emptyText} />
+                <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro encontrado com este cargo." })} value={draft.emptyText} />
                 <FivemResourceMultiSelect
                   disabled={!canManage}
                   label="Cargos que podem editar este painel"
@@ -3583,20 +3590,24 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
 
 function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; roles: GuildRoleOption[] }) {
   const footer = panel.useGlobalFooter ? panel.globalFooterText : panel.footerText;
+  const updatedAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()).replace(",", " às");
+  const title = formatHierarchyPreviewTitle(panel);
   return (
     <section className="rounded-lg border border-zinc-800 bg-[#111214] p-4">
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-white">{panel.title}</h3>
-          <p className="mt-1 text-sm text-zinc-400">{panel.description}</p>
-          <div className="mt-4 space-y-4 text-sm text-zinc-200">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Previa Components V2</p>
+          <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
+          <p className="mt-1 text-sm text-zinc-400">{panel.description || `Lista oficial de membros da unidade ${panel.name}`}</p>
+          <p className="mt-2 text-xs text-zinc-500">🔄 Atualizado automaticamente em: {updatedAt}</p>
+          <div className="mt-4 space-y-3 text-sm text-zinc-200">
             {panel.hierarchies.filter((item) => item.active).sort((a, b) => a.order - b.order).map((item) => {
               const role = roles.find((option) => option.id === item.roleId);
-              const empty = item.emptyText || panel.emptyText || "Nenhum membro";
+              const empty = item.emptyText || panel.emptyText || "Nenhum membro encontrado com este cargo.";
               return (
-                <div key={item.id}>
+                <div className="rounded-md border border-zinc-800 bg-black/25 px-3 py-2" key={item.id}>
                   <p className="font-bold text-white">{[item.emoji, item.name].filter(Boolean).join(" ")}</p>
-                  <p className="mt-1 whitespace-pre-line text-zinc-300">{role ? `@${role.name}` : empty}</p>
+                  <p className="mt-2 whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-zinc-300">{role ? `@${role.name} — ${role.name}` : empty}</p>
                 </div>
               );
             })}
@@ -3607,6 +3618,15 @@ function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; ro
       </div>
     </section>
   );
+}
+
+function formatHierarchyPreviewTitle(panel: FivemHierarchyPanelType) {
+  const normalized = (panel.title || `Hierarquia - ${panel.name}`).replace(/\s+-\s+/g, " — ");
+  return normalized.startsWith("📋") ? normalized : `📋 ${normalized}`;
+}
+
+function defaultHierarchyEmoji(index: number) {
+  return ["👑", "🛡️", "🎖️", "⭐", "⭐", "👮", "🧪"][index] ?? "•";
 }
 
 function hierarchyBannerSlots(panel: FivemHierarchyPanelType) {
@@ -3626,22 +3646,24 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
 function createHierarchyPanelFromTemplate(guildId: string, botId: string | null | undefined, template: typeof hierarchyUnitTemplates[number]): FivemHierarchyPanelType {
   const now = new Date().toISOString();
   return {
+    autoUpdateEnabled: true,
+    autoUpdateIntervalSeconds: 300,
     botId: botId ?? null,
     color: template.color,
     createdAt: now,
     description: template.description,
     displayMode: "mention",
-    emptyText: "Nenhum membro",
+    emptyText: "Nenhum membro encontrado com este cargo.",
     enabled: true,
     editorRoleIds: [],
     footerEnabled: true,
     footerIconUrl: null,
     footerScope: "unit",
-    footerText: "NPD - North Police Department",
+    footerText: "NPD • North Police Department",
     globalFooterIconUrl: null,
-    globalFooterText: "NPD - North Police Department",
+    globalFooterText: "NPD • North Police Department",
     guildId,
-    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: "swat" in template && template.swat ? "•" : null, emptyText: "Nenhum membro", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
+    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: defaultHierarchyEmoji(index), emptyText: "Nenhum membro encontrado com este cargo.", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
     id: `hierarchy-${template.unitId}`,
     imagePosition: "thumbnail",
     imageUrl: null,

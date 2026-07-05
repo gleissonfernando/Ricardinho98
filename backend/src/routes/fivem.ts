@@ -203,6 +203,8 @@ const hierarchyEntrySchema = z.object({
   showWhenEmpty: z.boolean().optional()
 });
 const hierarchyPanelSchema = z.object({
+  autoUpdateEnabled: z.boolean().optional(),
+  autoUpdateIntervalSeconds: z.coerce.number().int().min(30).max(86400).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   description: z.string().max(1200).nullable().optional(),
   displayMode: z.enum(["mention", "display_name", "nickname", "name_with_id"]).optional(),

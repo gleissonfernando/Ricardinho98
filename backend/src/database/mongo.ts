@@ -581,6 +581,8 @@ export type MongoFivemHierarchyEntry = {
 
 export type MongoFivemHierarchyPanel = {
   _id: string;
+  autoUpdateEnabled?: boolean;
+  autoUpdateIntervalSeconds?: number;
   botId: string | null;
   color: string;
   createdAt: Date;

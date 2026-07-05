@@ -277,6 +277,8 @@ export type FivemHierarchyEntry = {
 };
 
 export type FivemHierarchyPanel = {
+  autoUpdateEnabled?: boolean;
+  autoUpdateIntervalSeconds?: number;
   color: string;
   description: string | null;
   displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
