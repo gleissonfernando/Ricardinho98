@@ -5,7 +5,13 @@ import type { BotCommand } from "../types";
 export const dmCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("dm")
-    .setDescription("Envia uma mensagem privada oculta."),
+    .setDescription("Envia uma mensagem privada oculta.")
+    .addStringOption((option) =>
+      option
+        .setName("imagem_url")
+        .setDescription("Imagem temporária desta DM (png, jpg, jpeg, gif ou webp).")
+        .setRequired(false)
+    ),
   moduleId: "dm-system",
   async execute(interaction, context) {
     await showDmModal(interaction, context);

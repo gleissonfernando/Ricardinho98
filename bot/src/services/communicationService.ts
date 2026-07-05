@@ -10,16 +10,20 @@ import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRend
 const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
 const SUMMONS_TEAM_NAME = "Equipe AB";
-const dmSelectionSettings = new Map<string, { expiresAt: number; settings: DmSettings }>();
+const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
+const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
 
 export async function showDmModal(interaction: ChatInputCommandInteraction, context: BotContext) {
   const settings = await context.api.getDmSettings(interaction.guildId!);
   if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de DM está desativado.", flags: MessageFlags.Ephemeral });
   if (!canUseDm(interaction.member as GuildMember, settings)) {
-    return void await interaction.reply({ content: "Você não tem permissão para usar este sistema.", flags: MessageFlags.Ephemeral });
+    return void await interaction.reply({ content: "Você não tem permissão para usar este comando.", flags: MessageFlags.Ephemeral });
   }
+  const override = validateImageUrl(interaction.options.getString("imagem_url"));
   dmSelectionSettings.set(`${interaction.guildId}:${interaction.user.id}`, {
     expiresAt: Date.now() + 5 * 60_000,
+    imageUrlOverride: override.ok ? override.url : null,
+    imageWarning: override.ok ? null : override.warning,
     settings
   });
   await interaction.reply({
@@ -27,7 +31,7 @@ export async function showDmModal(interaction: ChatInputCommandInteraction, cont
       type: 17,
       accent_color: color(settings.color),
       components: [
-        { type: 10, content: "## Enviar DM\nSelecione o usuário que receberá a mensagem privada.\n\n**Segurança:** não envie senhas, tokens ou informações confidenciais por este sistema." },
+        { type: 10, content: `## 📨 Enviar DM oficial\nSelecione o usuário que receberá a mensagem privada.\n\n**Equipe:** **${settings.teamName ?? "Equipe NPD"}**\n${override.warning ? `\n⚠️ **Imagem ignorada:** ${override.warning}\n` : ""}\n**Segurança:** não envie senhas, tokens ou informações confidenciais por este sistema.` },
         new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
           new UserSelectMenuBuilder()
             .setCustomId(`${DM_PREFIX}:select_target`)
@@ -99,11 +103,12 @@ export async function handleCommunicationInteraction(interaction: Interaction, c
 async function handleDm(interaction: any, context: BotContext) {
   const [, action, id] = interaction.customId.split(":");
   let settings: DmSettings;
+  let cachedSelection: { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings } | undefined;
   if (action === "select_target" && interaction.isUserSelectMenu()) {
     const key = `${interaction.guildId}:${interaction.user.id}`;
-    const cached = dmSelectionSettings.get(key);
-    settings = cached && cached.expiresAt > Date.now()
-      ? cached.settings
+    cachedSelection = dmSelectionSettings.get(key);
+    settings = cachedSelection && cachedSelection.expiresAt > Date.now()
+      ? cachedSelection.settings
       : await context.api.getDmSettings(interaction.guildId);
     dmSelectionSettings.delete(key);
   } else {
@@ -114,17 +119,23 @@ async function handleDm(interaction: any, context: BotContext) {
   }
   if (action === "select_target" && interaction.isUserSelectMenu()) {
     if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de DM está desativado.", flags: MessageFlags.Ephemeral });
-    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.reply({ content: "Você não tem permissão para usar este sistema.", flags: MessageFlags.Ephemeral });
+    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.reply({ content: "Você não tem permissão para usar este comando.", flags: MessageFlags.Ephemeral });
     const targetId = interaction.values[0];
     const target = await interaction.guild.members.fetch(targetId).catch(() => null);
     if (!target) return void await interaction.reply({ content: "Usuário não encontrado no servidor.", flags: MessageFlags.Ephemeral });
     if (settings.blockBots !== false && target.user.bot) return void await interaction.reply({ content: "Não é permitido enviar DM para bots neste sistema.", flags: MessageFlags.Ephemeral });
+    const draftKey = `${interaction.guildId}:${interaction.user.id}:${targetId}`;
+    dmMessageDrafts.set(draftKey, {
+      expiresAt: Date.now() + 10 * 60_000,
+      imageUrlOverride: cachedSelection?.imageUrlOverride ?? null,
+      imageWarning: cachedSelection?.imageWarning ?? null
+    });
     await interaction.showModal(createDmMessageModal(settings, targetId));
     return;
   }
   if (action === "send" && interaction.isModalSubmit()) {
     if (!settings.enabled) return void await interaction.editReply("O Sistema de DM está desativado.");
-    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.editReply("Você não tem permissão para usar este sistema.");
+    if (!canUseDm(interaction.member as GuildMember, settings)) return void await interaction.editReply("Você não tem permissão para usar este comando.");
     const targetId = snowflakeFrom(id ?? "");
     const title = interaction.fields.getTextInputValue("title").trim();
     const description = interaction.fields.getTextInputValue("description").trim();
@@ -132,15 +143,26 @@ async function handleDm(interaction: any, context: BotContext) {
     if (!description) return void await interaction.editReply("A descrição não pode ficar vazia.");
     if (title.length > 60) return void await interaction.editReply("O título deve ter no máximo 60 caracteres.");
     if (description.length > 300) return void await interaction.editReply("A mensagem deve ter no máximo 300 caracteres.");
-    let status: "sent" | "failed" = "sent"; let error: string | null = null;
+    const draftKey = `${interaction.guildId}:${interaction.user.id}:${targetId}`;
+    const draft = dmMessageDrafts.get(draftKey);
+    dmMessageDrafts.delete(draftKey);
+    const imageOverride = draft && draft.expiresAt > Date.now() ? draft.imageUrlOverride : null;
+    const draftWarning = draft && draft.expiresAt > Date.now() ? draft.imageWarning : null;
+    const built = buildDmPayload(settings, title, description, interaction.guild.name, imageOverride);
+    let status: "sent" | "failed" = "sent"; let error: string | null = null; let imageUsed = built.imageUsed; let imageWarning = draftWarning ?? built.imageWarning;
     try {
       const member = await interaction.guild.members.fetch(targetId).catch(() => null);
       if (!member) throw new Error("Usuário não encontrado.");
       if (settings.blockBots !== false && member.user.bot) throw new Error("Envio para bot bloqueado.");
       const user = await context.client.users.fetch(targetId);
-      await user.send(dmPayload(settings, title, description, interaction.guild.name));
+      await user.send(built.payload).catch(async (sendError: unknown) => {
+        if (!imageUsed || !isImageDeliveryError(sendError)) throw sendError;
+        imageUsed = false;
+        imageWarning = "A imagem configurada não carregou no Discord; a DM foi reenviada sem imagem.";
+        await user.send(buildDmPayload(settings, title, description, interaction.guild.name, null, true).payload);
+      });
     } catch (caught) { status = "failed"; error = dmErrorMessage(caught); }
-    await context.api.recordDm({ guildId: interaction.guildId, senderId: interaction.user.id, targetId, title, description, button: null, status, error }).catch((logError: unknown) => {
+    await context.api.recordDm({ guildId: interaction.guildId, senderId: interaction.user.id, targetId, title, description: settings.saveContentInLogs ? description : "", hasImage: imageUsed, button: null, status, error }).catch((logError: unknown) => {
       console.error("[dm-system] falha ao persistir log de DM", {
         error: messageOf(logError),
         guildId: interaction.guildId,
@@ -149,11 +171,11 @@ async function handleDm(interaction: any, context: BotContext) {
         targetId
       });
     });
-    await sendDmLog(interaction, settings, targetId, title, description, status, error);
+    await sendDmLog(interaction, settings, targetId, title, description, imageUsed, status, error);
     await interaction.editReply(status === "sent"
-      ? `Mensagem enviada com sucesso para <@${targetId}>.`
+      ? `Mensagem enviada com sucesso para <@${targetId}>.${imageWarning ? `\n${imageWarning}` : ""}`
       : error === "DM fechada"
-        ? "Não foi possível enviar a mensagem. O usuário está com a DM fechada."
+        ? "Não foi possível enviar a DM. O usuário pode estar com mensagens privadas desativadas."
         : `Não foi possível enviar a mensagem: ${error}`);
     return;
   }
@@ -287,19 +309,56 @@ async function closeSummons(interaction: any, context: BotContext, settings: Sum
 }
 
 export function dmPayload(settings: DmSettings, title: string, description: string, guildName: string) {
-  const imageUrl = settings.imagePosition === "none" ? null : resolvePanelImageUrl(settings.imageUrl);
-  return renderComponentsV2Panel({
+  return buildDmPayload(settings, title, description, guildName).payload;
+}
+
+function buildDmPayload(settings: DmSettings, title: string, description: string, guildName: string, imageUrlOverride: string | null = null, skipConfiguredImage = false) {
+  const configuredImage = skipConfiguredImage ? null : settings.imageUrl ?? settings.bannerUrl;
+  const imageCandidate = imageUrlOverride ?? configuredImage;
+  const imagePosition = normalizeDmImagePosition(settings.imagePosition);
+  const validImage = imagePosition === "none" ? { ok: true as const, url: null, warning: null } : validateImageUrl(imageCandidate);
+  const imageUrl = validImage.ok && validImage.url ? resolvePanelImageUrl(validImage.url) : null;
+  const teamName = settings.teamName?.trim() || `Equipe ${guildName}`;
+  const payload = renderComponentsV2Panel({
     accentColor: color(settings.color),
     description: "",
     fields: [
-      `**Título:**\n${title}`,
-      `**Mensagem:**\n${description}`
+      `**Título:**\n**${title}**`,
+      "━━━━━━━━━━━━━━━━━━━━",
+      `**Mensagem:**\n**${description}**`
     ],
-    footerText: `Enviado por: Equipe ${guildName}${settings.footerText ? `\n${settings.footerText}` : ""}`,
-    image: imageUrl ? { imageEnabled: true, imagePosition: settings.imagePosition, imageUrl } : null,
+    footerText: `Enviado por: **${teamName}**${settings.footerText ? `\n${settings.footerText}` : ""}`,
+    image: imageUrl ? { imageEnabled: true, imagePosition, imageUrl } : null,
     moduleId: "dm-system",
-    title: "📩 Mensagem da equipe"
+    title: "📨 Mensagem da equipe"
   });
+  return { payload, imageUsed: Boolean(imageUrl), imageWarning: validImage.ok ? null : validImage.warning };
+}
+
+function normalizeDmImagePosition(position: DmSettings["imagePosition"]) {
+  if (position === "thumbnail") return "thumbnail";
+  if (position === "banner" || position === "top" || position === "footer" || position === "side") return "banner";
+  return "none";
+}
+
+function validateImageUrl(value: string | null | undefined): { ok: true; url: string | null; warning: null } | { ok: false; url: null; warning: string } {
+  const trimmed = value?.trim();
+  if (!trimmed) return { ok: true, url: null, warning: null };
+  if (trimmed.startsWith("/")) return { ok: true, url: trimmed, warning: null };
+  try {
+    const parsed = new URL(trimmed);
+    if (!["http:", "https:"].includes(parsed.protocol)) return { ok: false, url: null, warning: "use uma URL http/https válida." };
+    const path = parsed.pathname.toLowerCase();
+    if (!/\.(png|jpe?g|gif|webp)$/i.test(path)) return { ok: false, url: null, warning: "a URL precisa terminar em png, jpg, jpeg, gif ou webp." };
+    return { ok: true, url: trimmed, warning: null };
+  } catch {
+    return { ok: false, url: null, warning: "URL de imagem inválida." };
+  }
+}
+
+function isImageDeliveryError(error: unknown) {
+  const message = messageOf(error);
+  return /image|embed|invalid form body|url|400/i.test(message);
 }
 
 export function createDmMessageModal(settings: DmSettings, targetId: string) {
@@ -392,14 +451,14 @@ async function replaceDeferredWithComponents(interaction: any, payload: any) {
     await interaction.editReply({ content: "A operação foi concluída, mas não foi possível renderizar a confirmação.", components: [] }).catch(() => undefined);
   });
 }
-async function sendDmLog(interaction: any, settings: DmSettings, targetId: string, title: string, description: string, status: string, error: string | null) {
+async function sendDmLog(interaction: any, settings: DmSettings, targetId: string, title: string, description: string, hasImage: boolean, status: string, error: string | null) {
   if (!settings.logChannelId) return;
   const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null);
   if (channel?.isTextBased() && !channel.isDMBased()) await channel.send({
     components: [{
       type: 17,
       accent_color: status === "sent" ? 0x22c55e : 0xef4444,
-      components: [{ type: 10, content: `## Log de DM\n**Quem enviou:** <@${interaction.user.id}>\n**Quem recebeu:** <@${targetId}>\n**Título da mensagem:** ${title}\n**Mensagem enviada:** ${description}\n**Servidor:** ${interaction.guild.name}\n**Status:** ${status === "sent" ? "enviada" : "falhou"}\n**Data e horário:** <t:${Math.floor(Date.now() / 1000)}:f>${error ? `\n**Motivo:** ${error}` : ""}` }]
+      components: [{ type: 10, content: `## 📨 Log de DM\n**Quem enviou:** <@${interaction.user.id}>\n**Quem recebeu:** <@${targetId}>\n**Título enviado:** ${title}\n**Tinha imagem:** ${hasImage ? "Sim" : "Não"}\n**Servidor:** ${interaction.guild.name}\n**Status:** ${status === "sent" ? "enviada" : "falhou"}\n**Data e horário:** <t:${Math.floor(Date.now() / 1000)}:f>${settings.saveContentInLogs ? `\n\n**Conteúdo da DM:**\n${description}` : ""}${error ? `\n**Motivo:** ${error}` : ""}` }]
     }],
     flags: MessageFlags.IsComponentsV2
   }).catch((logError: unknown) => {

@@ -18,7 +18,9 @@ const settings: DmSettings = {
   id: "settings",
   imagePosition: "none",
   imageUrl: null,
-  logChannelId: null
+  logChannelId: null,
+  saveContentInLogs: false,
+  teamName: "Equipe NPD"
 };
 
 test("modal de DM possui somente titulo e mensagem com limites curtos", () => {
@@ -34,7 +36,7 @@ test("DM Components V2 mostra identidade da equipe sem expor o staff", () => {
   const serialized = JSON.stringify(payload);
   assert.equal(payload.flags, 32768);
   assert.match(serialized, /Mensagem da equipe/);
-  assert.match(serialized, /Equipe Human Resources - NPD/);
+  assert.match(serialized, /Equipe NPD/);
   assert.doesNotMatch(serialized, /staff|responsável/i);
 });
 

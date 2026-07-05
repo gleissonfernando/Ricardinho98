@@ -15,9 +15,10 @@ const dmSettingsSchema = z.object({
   logChannelId: snowflake.nullable().optional(), bannerUrl: z.string().max(2048).nullable().optional(),
   imageUrl: z.string().max(2048).nullable().optional(), blockBots: z.boolean().optional(),
   imagePosition: z.enum(["none", "top", "footer", "side", "thumbnail", "banner"]).optional(),
+  teamName: z.string().min(1).max(80).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), defaultTitle: z.string().min(1).max(60).optional(),
   defaultText: z.string().min(1).max(300).optional(), footerText: z.string().max(2048).nullable().optional(),
-  buttons: z.array(buttonSchema).max(5).optional()
+  buttons: z.array(buttonSchema).max(5).optional(), saveContentInLogs: z.boolean().optional()
 });
 const summonsSettingsSchema = z.object({
   enabled: z.boolean().optional(), categoryId: snowflake.nullable().optional(), temporaryCategoryId: snowflake.nullable().optional(),
@@ -38,7 +39,7 @@ communicationRouter.get("/bot/dm/:guildId", requireBot, async (req, res, next) =
 communicationRouter.patch("/bot/dm/:guildId", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, DM_MODULE_ID); res.json({ settings: await saveDmSettings(botId, snowflake.parse(req.params.guildId), dmSettingsSchema.parse(req.body), null) }); } catch (error) { next(error); } });
 communicationRouter.post("/bot/dm/log", requireBot, async (req, res, next) => { try {
   const botId = await botIdFor(req); await licensed(botId, DM_MODULE_ID);
-  const input = z.object({ guildId: snowflake, senderId: snowflake, targetId: snowflake, title: z.string().max(60), description: z.string().max(300), button: buttonSchema.nullable(), status: z.enum(["sent", "failed"]), error: z.string().max(1000).nullable().optional() }).parse(req.body);
+  const input = z.object({ guildId: snowflake, senderId: snowflake, targetId: snowflake, title: z.string().max(60), description: z.string().max(300), hasImage: z.boolean().optional(), button: buttonSchema.nullable(), status: z.enum(["sent", "failed"]), error: z.string().max(1000).nullable().optional() }).parse(req.body);
   res.status(201).json({ log: await recordDm({ botId, ...input }) });
 } catch (error) { next(error); } });
 communicationRouter.get("/bot/summons/:guildId", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID); res.json({ settings: await getSummonsSettings(botId, snowflake.parse(req.params.guildId)) }); } catch (error) { next(error); } });

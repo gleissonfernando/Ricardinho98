@@ -1272,11 +1272,13 @@ export type MongoDmSettings = {
   imageUrl: string | null;
   imagePosition: "none" | "top" | "footer" | "side" | "thumbnail" | "banner";
   color: string;
+  teamName: string;
   defaultTitle: string;
   defaultText: string;
   footerText: string | null;
   buttons: MongoDmButton[];
   blockBots: boolean;
+  saveContentInLogs: boolean;
   createdAt: Date;
   updatedAt: Date;
   updatedBy: string | null;
@@ -1290,6 +1292,7 @@ export type MongoDmLog = {
   targetId: string;
   title: string;
   description: string;
+  hasImage?: boolean;
   button: MongoDmButton | null;
   status: "sent" | "failed";
   error: string | null;

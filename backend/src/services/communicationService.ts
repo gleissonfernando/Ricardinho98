@@ -25,8 +25,9 @@ export async function getDmSettings(botId: string, guildId: string) {
   const now = new Date();
   const value: MongoDmSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, authorizedRoleIds: [], logChannelId: null,
-    bannerUrl: null, imageUrl: null, imagePosition: "top", color: "#5865f2", defaultTitle: "Mensagem da equipe",
+    bannerUrl: null, imageUrl: null, imagePosition: "none", color: "#7c3aed", teamName: "Equipe NPD", defaultTitle: "Mensagem da equipe",
     defaultText: "Você recebeu uma nova mensagem da equipe.", footerText: null, buttons: [], blockBots: true,
+    saveContentInLogs: false,
     createdAt: now, updatedAt: now, updatedBy: null
   };
   await dmSettings.updateOne({ botId, guildId }, { $setOnInsert: value }, { upsert: true });
@@ -42,7 +43,7 @@ export async function saveDmSettings(botId: string, guildId: string, input: Part
 
 export async function recordDm(input: {
   botId: string; guildId: string; senderId: string; targetId: string; title: string;
-  description: string; button: MongoDmButton | null; status: "sent" | "failed"; error?: string | null;
+  description: string; hasImage?: boolean; button: MongoDmButton | null; status: "sent" | "failed"; error?: string | null;
 }) {
   const { dmLogs } = await getMongoCollections();
   const value = { _id: randomUUID(), ...input, error: input.error ?? null, createdAt: new Date() };
@@ -112,7 +113,17 @@ export async function getSummons(botId: string, id: string) {
 }
 
 function dmSettingsDto(value: MongoDmSettings) {
-  return { ...value, imageUrl: value.imageUrl ?? null, imagePosition: value.imagePosition ?? "top", blockBots: value.blockBots ?? true, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
+  return {
+    ...value,
+    imageUrl: value.imageUrl ?? null,
+    imagePosition: value.imagePosition ?? "none",
+    teamName: value.teamName ?? "Equipe NPD",
+    blockBots: value.blockBots ?? true,
+    saveContentInLogs: value.saveContentInLogs ?? false,
+    id: value._id,
+    createdAt: value.createdAt.toISOString(),
+    updatedAt: value.updatedAt.toISOString()
+  };
 }
 function summonsSettingsDto(value: MongoSummonsSettings) {
   return {
@@ -143,12 +154,18 @@ function normalizeDmSettingsInput(input: Partial<Omit<MongoDmSettings, "_id" | "
   const next: typeof input = { ...input };
   if ("bannerUrl" in next) next.bannerUrl = normalizeHttpsUrl(next.bannerUrl);
   if ("imageUrl" in next) next.imageUrl = normalizeImageUrl(next.imageUrl);
+  if ("teamName" in next) next.teamName = normalizeText(next.teamName, "Equipe NPD", 80);
   if (next.buttons) {
     next.buttons = next.buttons
       .map((button) => ({ ...button, url: normalizeHttpsUrl(button.url) }))
       .filter((button) => button.style !== "link" || Boolean(button.url));
   }
   return next;
+}
+
+function normalizeText(value: string | null | undefined, fallback: string, maxLength: number) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : fallback;
 }
 
 function normalizeImageUrl(value: string | null | undefined) {
