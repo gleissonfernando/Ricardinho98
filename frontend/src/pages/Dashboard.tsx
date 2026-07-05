@@ -3520,16 +3520,15 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
               </div>
+              <div className="rounded-lg border border-purple-500/20 bg-purple-500/[0.06] px-3 py-2 text-xs text-purple-100">
+                Editando banners da hierarquia: <strong>{draft.name}</strong>. Cada banner salvo aqui fica vinculado ao ID interno <code className="rounded bg-black/30 px-1">{draft.id}</code> e não aparece em outras unidades.
+              </div>
               <PanelImageSettings
                 botId={botId}
                 canManage={canManage}
                 guildId={guild?.id ?? null}
                 panelLabel={`Hierarquia - ${draft.name}`}
-                panelSlots={[
-                  { id: draft.id, label: `${draft.name} - Imagem principal` },
-                  { id: `${draft.id}-banner-2`, label: `${draft.name} - Banner 2` },
-                  { id: `${draft.id}-banner-3`, label: `${draft.name} - Banner 3` }
-                ]}
+                panelSlots={hierarchyBannerSlots(draft)}
               />
               <HierarchyPreview panel={draft} roles={roles} />
               {draft.id !== "new" ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
@@ -3567,6 +3566,16 @@ function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; ro
       </div>
     </section>
   );
+}
+
+function hierarchyBannerSlots(panel: FivemHierarchyPanelType) {
+  return Array.from({ length: 8 }, (_, index) => {
+    const number = index + 1;
+    return {
+      id: index === 0 ? panel.id : `${panel.id}-banner-${number}`,
+      label: index === 0 ? `${panel.name} - Imagem principal` : `${panel.name} - Banner ${number}`
+    };
+  });
 }
 
 function createEmptyHierarchyPanel(guildId: string, botId?: string | null): FivemHierarchyPanelType {

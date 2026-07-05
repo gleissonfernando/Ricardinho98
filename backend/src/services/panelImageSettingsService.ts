@@ -67,7 +67,7 @@ const DEFAULT_SETTINGS = {
   imagePosition: "none" as PanelImagePosition,
   imageSize: "medium" as PanelImageSize,
   imageUrl: "",
-  layoutMode: "embed" as PanelImageLayoutMode,
+  layoutMode: "components_v2" as PanelImageLayoutMode,
   useGlobalDefault: true
 };
 
@@ -160,6 +160,8 @@ export async function savePanelImageSettings(
       guildId,
       message: `Imagem do painel ${panelId} atualizada.`,
       metadata: {
+        bannerId: panelId,
+        hierarchyId: hierarchyPanelId(panelId),
         imageType: "panel",
         moduleId: panelId,
         newUrl: next.imageUrl || null,
@@ -198,7 +200,11 @@ function emitPanelRefresh(guildId: string, botId: string, panelId: string) {
 }
 
 function refreshPanelId(panelId: string) {
-  return panelId.replace(/-banner-[23]$/i, "");
+  return panelId.replace(/-banner-\d+$/i, "");
+}
+
+function hierarchyPanelId(panelId: string) {
+  return /^hierarchy-/i.test(panelId) ? refreshPanelId(panelId) : null;
 }
 
 export async function savePanelImageUpload(input: {

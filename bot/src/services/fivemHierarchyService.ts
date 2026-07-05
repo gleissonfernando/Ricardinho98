@@ -220,8 +220,8 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
   pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["below_title", "middle"], panel.title);
   pushExtraHierarchyMedia(components, extraImages, ["below_title", "middle"], panel.title);
   renderHierarchyTextChunks(members ?? guild, panel).forEach((content) => components.push({ type: 10, content }));
-  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["below_text"], panel.title);
-  pushExtraHierarchyMedia(components, extraImages, ["below_text"], panel.title);
+  pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["below_text", "before_buttons", "above_buttons"], panel.title);
+  pushExtraHierarchyMedia(components, extraImages, ["side", "thumbnail", "below_text", "before_buttons", "above_buttons"], panel.title);
   pushHierarchyMedia(components, mainImageUrl, mainImagePosition, ["bottom", "footer"], panel.title);
   pushExtraHierarchyMedia(components, extraImages, ["bottom", "footer"], panel.title);
 
@@ -241,7 +241,7 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
 }
 
 export function getHierarchyPanelVisualIds(basePanelId: string) {
-  return [basePanelId, `${basePanelId}-banner-2`, `${basePanelId}-banner-3`];
+  return Array.from({ length: 8 }, (_, index) => index === 0 ? basePanelId : `${basePanelId}-banner-${index + 1}`);
 }
 
 async function getPanelVisualSlots(context: BotContext, guildId: string, basePanelId: string) {

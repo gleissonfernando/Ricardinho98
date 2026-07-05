@@ -41,28 +41,29 @@ const PANELS: PanelDefinition[] = [
 
 const positionOptions: Array<{ label: string; value: PanelImagePosition }> = [
   { label: "Sem imagem", value: "none" },
-  { label: "Banner principal", value: "banner" },
-  { label: "Miniatura", value: "thumbnail" },
-  { label: "Lateral", value: "side" },
-  { label: "Topo do painel", value: "top" },
-  { label: "Abaixo do titulo", value: "below_title" },
-  { label: "Meio do conteudo", value: "middle" },
-  { label: "Final do painel", value: "bottom" },
-  { label: "Antes dos botoes", value: "before_buttons" },
-  { label: "Imagem no rodape", value: "footer" }
+  { label: "Imagem principal / banner", value: "banner" },
+  { label: "Thumbnail", value: "thumbnail" },
+  { label: "Lateral direita", value: "side" },
+  { label: "Topo / cabeçalho", value: "top" },
+  { label: "Antes da lista de membros", value: "below_title" },
+  { label: "Entre seções", value: "middle" },
+  { label: "Depois da lista de membros", value: "below_text" },
+  { label: "Banner extra personalizado", value: "before_buttons" },
+  { label: "Rodapé", value: "footer" },
+  { label: "Final do painel", value: "bottom" }
 ];
 
 const sizeOptions: Array<{ label: string; value: PanelImageSize }> = [
   { label: "Pequena", value: "small" },
-  { label: "Media", value: "medium" },
+  { label: "Automática / média", value: "medium" },
   { label: "Grande", value: "large" },
-  { label: "Banner completo", value: "full_banner" },
+  { label: "Original ajustada / banner completo", value: "full_banner" },
   { label: "Personalizado", value: "custom" }
 ];
 
 const layoutOptions: Array<{ label: string; value: PanelImageLayoutMode }> = [
-  { label: "Embed", value: "embed" },
-  { label: "Components V2", value: "components_v2" }
+  { label: "Components V2 (padrão)", value: "components_v2" },
+  { label: "Embed tradicional", value: "embed" }
 ];
 
 const advancedPositions = new Set<PanelImagePosition>(["top", "below_title", "middle", "bottom", "before_buttons", "below_text", "above_buttons"]);
@@ -150,6 +151,15 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
     () => Object.values(settingsByPanel).filter((item) => item.imageEnabled && item.imageUrl).length,
     [settingsByPanel]
   );
+
+  function selectNewBannerSlot() {
+    const target = panelChoices.find((panel) => !settingsByPanel[panel.id]?.imageEnabled && !settingsByPanel[panel.id]?.imageUrl) ?? panelChoices[panelChoices.length - 1];
+    if (target) {
+      setSelectedPanelId(target.id);
+      setStatus("Novo banner selecionado. Configure imagem, posicao e clique em salvar.");
+      setError(null);
+    }
+  }
 
   function updateDraft<K extends keyof PanelImageSettingsDto>(key: K, value: PanelImageSettingsDto[K]) {
     setDraft((current) => {
@@ -267,6 +277,11 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {multiSlotMode ? (
+              <Button disabled={disabled} onClick={selectNewBannerSlot} size="sm" type="button" variant="outline">
+                Novo banner
+              </Button>
+            ) : null}
             <span className="text-xs text-zinc-500">{draft.imageEnabled ? "Ativo" : "Inativo"}</span>
             <Switch
               checked={draft.imageEnabled}
@@ -308,7 +323,7 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
 
           <div className="space-y-4">
             {selectedPanelId !== "global-default" ? <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-300"><span><strong className="block text-zinc-100">Usar padrão visual global</strong>Desative para personalizar somente este módulo.</span><Switch checked={draft.useGlobalDefault} disabled={disabled} onCheckedChange={(checked) => updateDraft("useGlobalDefault", checked)} /></label> : null}
-            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-5 text-blue-100">Topo/banner destacam a imagem primeiro; thumbnail/lateral mantêm o texto ao lado; meio e abaixo do título dividem o conteúdo; antes dos botões destaca a ação; final e rodapé encerram o painel.</div>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-5 text-blue-100">Topo/banner destacam a imagem primeiro; thumbnail/lateral ficam ajustados no card; antes/depois da lista e entre seções dividem os membros; rodapé fica compacto para não estourar o painel.</div>
             {draft.imageInvalidReason ? <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">{draft.imageInvalidReason}</div> : null}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {!fixedPanel ? <label className="grid gap-2 text-sm">
@@ -551,7 +566,7 @@ function defaultSettings(guildId: string, botId: string, panelId: string): Panel
     imagePosition: "none",
     imageSize: "medium",
     imageUrl: "",
-    layoutMode: "embed",
+    layoutMode: "components_v2",
     panelId,
     updatedAt: null,
     useGlobalDefault: panelId !== "global-default"
