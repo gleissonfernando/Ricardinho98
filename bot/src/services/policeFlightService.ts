@@ -305,8 +305,7 @@ async function publishDafPanelUnlocked(
   const requiredPermissions = [
     permissionState.viewChannel,
     permissionState.sendMessages,
-    permissionState.embedLinks,
-    !image.url || permissionState.attachFiles
+    permissionState.embedLinks
   ];
   if (requiredPermissions.some((allowed) => !allowed)) {
     logDafPublishError({
@@ -318,7 +317,7 @@ async function publishDafPanelUnlocked(
       permissions: permissionState,
       source
     });
-    throw new Error("O bot não tem permissão para publicar no canal selecionado. Verifique: Ver Canal, Enviar Mensagens, Usar Componentes/Embeds e Anexar Arquivos.");
+    throw new Error("O bot não tem permissão para publicar no canal selecionado. Verifique: Ver Canal, Enviar Mensagens e Usar Componentes/Embeds.");
   }
 
   if (!config.openedAt || config.status === "closed") {
