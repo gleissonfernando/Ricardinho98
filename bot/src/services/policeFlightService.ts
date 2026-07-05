@@ -8,6 +8,7 @@ import {
   ModalBuilder,
   PermissionFlagsBits,
   RoleSelectMenuBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
@@ -16,8 +17,8 @@ import {
   type Client,
   type Guild,
   type Interaction,
-  type ModalSubmitInteraction,
-  type RoleSelectMenuInteraction
+  type RoleSelectMenuInteraction,
+  type StringSelectMenuInteraction
 } from "discord.js";
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
@@ -121,11 +122,6 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
   }
 
   const action = interaction.customId.split(":")[1] ?? "";
-  if (interaction.isButton() && interaction.customId.startsWith(`${PREFIX}:`) && action === "join") {
-    await interaction.showModal(joinModal());
-    return true;
-  }
-
   const opensModal = interaction.isButton()
     && interaction.customId.startsWith(`${CONFIG_PREFIX}:`)
     && action === "texts";
@@ -144,11 +140,14 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
     return true;
   }
 
-  if (interaction.isModalSubmit() && action === "join") {
-    await deferEphemeral(interaction);
-    const role = parseFlightRole(interaction.fields.getTextInputValue("category"));
+  if (interaction.isButton() && action === "join") {
+    await showJoinCategorySelect(interaction);
+    return true;
+  }
+  if (interaction.isStringSelectMenu() && action === "join_category") {
+    const role = parseFlightRole(interaction.values[0] ?? "");
     if (!role) {
-      await editDeferred(interaction, "Categoria invalida. Informe Piloto ou Atirador.");
+      await editDeferred(interaction, "Categoria invalida. Selecione Piloto ou Atirador.");
       return true;
     }
     await joinRole(interaction, context, config, role);
@@ -394,7 +393,7 @@ async function publishDafPanelUnlocked(
   };
 }
 
-async function joinRole(interaction: ModalSubmitInteraction, context: BotContext, config: FlightConfig, role: FlightRole) {
+async function joinRole(interaction: StringSelectMenuInteraction, context: BotContext, config: FlightConfig, role: FlightRole) {
   const member = await ensureGuildMember(interaction);
   if (!member) {
     await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
@@ -609,21 +608,28 @@ function textModal(config: FlightConfig) {
     );
 }
 
-function joinModal() {
-  return new ModalBuilder()
-    .setCustomId(`${PREFIX}:join`)
-    .setTitle("Entrar na Escalacao DAF")
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId("category")
-          .setLabel("Categoria")
-          .setPlaceholder("Piloto ou Atirador")
-          .setStyle(TextInputStyle.Short)
-          .setMaxLength(30)
-          .setRequired(true)
+async function showJoinCategorySelect(interaction: ButtonInteraction) {
+  const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`${PREFIX}:join_category`)
+      .setPlaceholder("Selecione Piloto ou Atirador")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(
+        { label: "Piloto", value: "pilot", emoji: "✈️", description: "Entrar na escala como Piloto" },
+        { label: "Atirador", value: "shooter", emoji: "🎯", description: "Entrar na escala como Atirador" }
       )
-    );
+  );
+  await editDeferred(interaction, {
+    components: [{
+      type: 17,
+      components: [
+        { type: 10, content: "## Entrar na Escalacao DAF\nSelecione em qual categoria voce vai entrar." },
+        select
+      ]
+    }],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  });
 }
 
 async function loadConfig(guildId: string, context: BotContext, required = false) {
@@ -866,10 +872,11 @@ async function deferEphemeral(interaction: Interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
 }
 
-async function editDeferred(interaction: Interaction, content: string) {
+async function editDeferred(interaction: Interaction, payload: string | { content?: string; components?: unknown[]; flags?: number }) {
   if (!interaction.isRepliable()) return;
-  if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [] }).catch(() => undefined);
-  else await safeReply(interaction, content);
+  const replyPayload = typeof payload === "string" ? { content: payload, components: [] } : payload;
+  if (interaction.deferred || interaction.replied) await interaction.editReply(replyPayload as never).catch(() => undefined);
+  else await safeReply(interaction, payload);
 }
 
 async function loadDafPanelImage(guildId: string, context: BotContext, legacyImage: string | null) {
