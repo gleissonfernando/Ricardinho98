@@ -20,6 +20,7 @@ import { resolvePanelImageUrl, type PanelVisualConfig, type PanelVisualPosition 
 const scheduledGuilds = new Map<string, NodeJS.Timeout>();
 const publishingPanels = new Map<string, Promise<void>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
+let hierarchyRuntime: { client: Client<true>; context: BotContext } | null = null;
 
 type HierarchyRefreshOptions = {
   allowCreate?: boolean;
@@ -90,6 +91,8 @@ export const hierarchyCommand: BotCommand = {
 };
 
 export function startFivemHierarchyService(client: Client<true>, context: BotContext) {
+  hierarchyRuntime = { client, context };
+
   context.socket.onFivemHierarchyPanelUpdate((payload) => {
     const guild = client.guilds.cache.get(payload.guildId);
     if (!guild) return;
@@ -172,13 +175,19 @@ export async function atualizarTodasHierarquias(guild: Guild, context: BotContex
 export async function syncHierarchyPanel(
   guildId: string,
   hierarchyId: string,
-  guild: Guild,
-  context: BotContext,
+  guild?: Guild,
+  context?: BotContext,
   options: HierarchyRefreshOptions = {},
   knownPanel?: FivemHierarchyPanel,
   knownMembers?: HierarchyMemberCache,
   knownRoleIds?: Set<string>
 ) {
+  context ??= hierarchyRuntime?.context;
+  guild ??= hierarchyRuntime?.client.guilds.cache.get(guildId);
+  if (!context || !guild) {
+    console.warn(`[HIERARQUIA] syncHierarchyPanel sem contexto ativo para guild=${guildId} hierarchy=${hierarchyId}.`);
+    return;
+  }
   if (guild.id !== guildId) return;
   const panel = knownPanel ?? (await context.api.getActiveFivemHierarchyPanels().catch(() => []))
     .find((item) => item.guildId === guildId && item.id === hierarchyId);
