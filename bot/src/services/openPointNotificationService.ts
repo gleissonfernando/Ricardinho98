@@ -157,10 +157,10 @@ export async function handleOpenPointInteraction(interaction: Interaction, conte
     await interaction.update(appliedFinePayload(userId, interaction.user.id));
     await sendOpenPointLog(interaction.guild, settings, logPayload("✅ Multa aplicada", "Uma multa administrativa foi marcada como aplicada.", [
       `**Usuário:** <@${userId}>`,
-      `**Staff:** <@${interaction.user.id}>`,
+      `**Aplicada por:** <@${interaction.user.id}>`,
       `**Servidor:** ${interaction.guild.name}`,
       `**Data:** <t:${Math.floor(Date.now() / 1000)}:f>`
-    ], 0x22c55e));
+    ], 0x22c55e, { userIds: [userId, interaction.user.id] }));
     await interaction.followUp({ content: `Multa aplicada por <@${interaction.user.id}> em <t:${Math.floor(Date.now() / 1000)}:f>.`, ephemeral: true });
     return true;
   }
@@ -250,14 +250,26 @@ async function maybeSendFinePanel(interaction: ChatInputCommandInteraction, cont
   const sent = await channel.send(finePayload(settings, counter.userId, targetName, interaction.user.id, staffName)).then(() => true).catch(() => false);
   if (!sent) return "failed";
   await context.api.markOpenPointFineGenerated(interaction.guild.id, counter.userId);
-  await sendOpenPointLog(interaction.guild, settings, logPayload("🚨 Multa gerada", settings.fineRoleId ? "O painel de multa foi enviado." : "O painel de multa foi enviado, mas nenhum cargo de multa está configurado.", [
+  const logActions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${PREFIX}:fine_applied:${counter.userId}`)
+      .setEmoji("✅")
+      .setLabel("Multa aplicada")
+      .setStyle(ButtonStyle.Success)
+  );
+  await sendOpenPointLog(interaction.guild, settings, logPayload("🚨 Multa Administrativa — Ponto em Aberto", `<@${counter.userId}> atingiu **${counter.totalNotifications} notificações** por ponto aberto e foi encaminhado para multa.`, [
     `**Usuário:** <@${counter.userId}> | ${targetName}`,
-    `**Staff:** <@${interaction.user.id}> | ${staffName}`,
+    `**Aplicado por:** <@${interaction.user.id}> | ${staffName}`,
+    settings.fineRoleId ? `**Cargo responsável:** <@&${settings.fineRoleId}>` : "**Cargo responsável:** não configurado",
     `**Quantidade atual:** ${counter.totalNotifications}`,
     `**Canal de multa:** <#${settings.fineChannelId}>`,
     `**Servidor:** ${interaction.guild.name}`,
     `**Data:** <t:${Math.floor(Date.now() / 1000)}:f>`
-  ], 0xef4444));
+  ], 0xef4444, {
+    actions: [logActions],
+    roleIds: settings.fineRoleId ? [settings.fineRoleId] : [],
+    userIds: [counter.userId, interaction.user.id]
+  }));
   return "sent";
 }
 
@@ -396,16 +408,31 @@ async function sendOpenPointLog(guild: Guild, settings: OpenPointSettings, paylo
   await channel.send(payload).catch(() => undefined);
 }
 
-function logPayload(title: string, description: string, fields: string[], accentColor: number) {
+function logPayload(
+  title: string,
+  description: string,
+  fields: string[],
+  accentColor: number,
+  options: {
+    actions?: ActionRowBuilder<ButtonBuilder>[];
+    roleIds?: string[];
+    userIds?: string[];
+  } = {}
+) {
   return {
     ...renderComponentsV2Panel({
       accentColor,
+      actions: options.actions,
       description,
       fields,
       footerText: "NPD • Logs de Ponto Aberto",
       moduleId: MODULE_ID,
       title
     }),
-    allowedMentions: { parse: [] }
+    allowedMentions: {
+      parse: [],
+      roles: options.roleIds ?? [],
+      users: options.userIds ?? []
+    }
   };
 }

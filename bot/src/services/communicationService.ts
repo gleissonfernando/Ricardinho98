@@ -15,7 +15,7 @@ const ANONYMOUS_TEAM_NAME = "Human Resources - NPD";
 const DISCORD_ROLE_SELECT_LIMIT = 25;
 const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
 const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
-const summonsDrafts = new Map<string, { expiresAt: number; finalCompetence?: SummonsCompetence; redirectReason?: string | null; responsibleId?: string; selectedCompetence?: SummonsCompetence; targetId?: string }>();
+const summonsDrafts = new Map<string, { expiresAt: number; finalCompetence?: SummonsCompetence; redirectReason?: string | null; selectedCompetence?: SummonsCompetence; targetId?: string }>();
 
 export async function showDmModal(interaction: ChatInputCommandInteraction, context: BotContext) {
   const settings = await context.api.getDmSettings(interaction.guildId!);
@@ -141,7 +141,7 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
     avatarURL: botAvatarUrl(message),
     content: proxiedContent || undefined,
     files: attachments,
-    username: ANONYMOUS_TEAM_NAME
+    username: teamNameForCompetence(competence, settings)
   });
 
   await sendSummonsProxyLog(message, settings, record, proxiedContent, attachments.length);
@@ -269,19 +269,20 @@ async function handleSummons(interaction: any, context: BotContext) {
     if (!target) return void await interaction.reply({ content: "Usuário não encontrado no servidor.", flags: MessageFlags.Ephemeral });
     const resolved = resolveFinalCompetence(settings, target, draft.selectedCompetence);
     summonsDrafts.set(summonsDraftKey(interaction), { ...draft, ...resolved, expiresAt: Date.now() + 10 * 60_000, targetId });
-    await interaction.update(await summonsResponsibleSelectionPayload(interaction, settings, resolved.finalCompetence, resolved.redirectReason));
-    return;
-  }
-  if (action === "select_responsible" && interaction.isStringSelectMenu()) {
-    const draft = validSummonsDraft(interaction);
-    if (!draft?.targetId || !draft.finalCompetence) return void await interaction.reply({ content: "Fluxo expirado. Use /intimacao novamente.", flags: MessageFlags.Ephemeral });
-    const responsibleId = interaction.values[0];
-    const responsible = await interaction.guild.members.fetch(responsibleId).catch(() => null);
-    if (!responsible || !hasRole(responsible, roleIdsForCompetence(settings, draft.finalCompetence))) {
-      return void await interaction.reply({ content: "Responsável sem cargo do órgão competente.", flags: MessageFlags.Ephemeral });
+    try {
+      await interaction.showModal(createSummonsMessageModal(targetId));
+    } catch (error) {
+      console.error("[summons] falha ao abrir modal", {
+        error: messageOf(error),
+        guildId: interaction.guildId
+      });
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "Não foi possível abrir o modal da intimação. Verifique as configurações do sistema.",
+          flags: MessageFlags.Ephemeral
+        }).catch(() => undefined);
+      }
     }
-    summonsDrafts.set(summonsDraftKey(interaction), { ...draft, expiresAt: Date.now() + 10 * 60_000, responsibleId });
-    await interaction.showModal(createSummonsMessageModal(draft.targetId));
     return;
   }
   if (action === "create" && interaction.isModalSubmit()) {
@@ -292,43 +293,32 @@ async function handleSummons(interaction: any, context: BotContext) {
     }
     const targetId = snowflakeFrom(id ?? "");
     const draft = validSummonsDraft(interaction);
-    if (!draft?.targetId || draft.targetId !== targetId || !draft.finalCompetence || !draft.responsibleId || !draft.selectedCompetence) {
+    if (!draft?.targetId || draft.targetId !== targetId || !draft.finalCompetence || !draft.selectedCompetence) {
       return void await interaction.editReply("Fluxo de intimação expirado. Use /intimacao novamente.");
     }
     const title = interaction.fields.getTextInputValue("title").trim();
-    const reason = interaction.fields.getTextInputValue("reason").trim();
     const description = interaction.fields.getTextInputValue("description").trim();
-    const deadline = interaction.fields.getTextInputValue("deadline").trim();
-    const notes = nullable(interaction.fields.getTextInputValue("notes"));
     const target = await interaction.guild.members.fetch(targetId).catch(() => null);
-    const responsible = await interaction.guild.members.fetch(draft.responsibleId).catch(() => null);
     const displayTarget = target?.displayName ?? targetId;
-    const displayResponsible = responsible?.displayName ?? draft.responsibleId;
     const formattedReason = [
       `**Título:** ${title}`,
-      `**Motivo:** ${reason}`,
-      `**Descrição:** ${description}`,
-      `**Prazo:** ${deadline || settings.defaultDeadline || "Não definido"}`,
-      notes ? `**Observações:** ${notes}` : null
+      `**Descrição:** ${description}`
     ].filter(Boolean).join("\n");
     const record = await context.api.createSummons({
       guildId: interaction.guildId,
       targetId,
       requesterId: interaction.user.id,
       reason: formattedReason,
-      notes,
+      notes: null,
       settingsSnapshot: {
         ...summonsSettingsSnapshot(settings),
         autoRedirected: Boolean(draft.redirectReason),
-        createdByDisplayName: (interaction.member as GuildMember).displayName,
         finalCompetence: draft.finalCompetence,
         redirectReason: draft.redirectReason ?? null,
-        responsibleDisplayName: displayResponsible,
-        responsibleId: draft.responsibleId,
         selectedCompetence: draft.selectedCompetence,
         targetDisplayName: displayTarget,
         title,
-        deadline: deadline || settings.defaultDeadline || null
+        deadline: settings.defaultDeadline || null
       }
     });
     summonsDrafts.delete(summonsDraftKey(interaction));
@@ -426,7 +416,7 @@ async function createSummonsChannel(interaction: any, settings: SummonsSettings,
 async function closeSummons(interaction: any, context: BotContext, settings: SummonsSettings, id: string, action = "finalizada") {
   await interaction.deferUpdate();
   const record = await context.api.getSummons(id);
-  const teamName = teamNameForCompetence(recordCompetence(record));
+  const teamName = teamNameForCompetence(recordCompetence(record), settings);
   const channel = interaction.channel;
   const transcript = settings.transcriptEnabled && channel?.isTextBased() ? await makeTranscript(channel) : null;
   const deleteAt = new Date(Date.now() + settings.deleteDelaySeconds * 1000);
@@ -504,18 +494,14 @@ export function createSummonsMessageModal(targetId: string) {
     .setCustomId(`${SUMMONS_PREFIX}:create:${targetId}`)
     .setTitle("Intimação institucional")
     .addComponents(
-      input("title", "Título da intimação", "Ex.: Comparecimento obrigatório", true, false, 100),
-      input("reason", "Motivo da intimação", "Informe o motivo principal", true, false, 300),
-      input("description", "Descrição do ocorrido", "Descreva o ocorrido", true, true, 1000),
-      input("deadline", "Prazo ou horário", "Ex.: Hoje às 20h", false, false, 120),
-      input("notes", "Observações ou provas", "Links, provas ou observações adicionais", false, true, 1000)
+      input("title", "Título da intimação", "Ex: Convocação para esclarecimentos", true, false, 100),
+      input("description", "Descrição do ocorrido", "Descreva o motivo da intimação...", true, true, 850)
     );
 }
 export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
   const competence = recordCompetence(record);
-  const teamName = teamNameForCompetence(competence);
+  const teamName = teamNameForCompetence(competence, settings);
   const deadline = snapshotString(record, "deadline");
-  const redirected = snapshotString(record, "redirectReason");
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setLabel("Cancelar Intimação").setStyle(ButtonStyle.Danger)
@@ -527,14 +513,11 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
     fields: [
       `**Intimado:** <@${record.targetId}>`,
       `**Órgão competente:** ${competenceLabel(competence)}`,
-      `**Responsável:** ${snapshotString(record, "responsibleDisplayName") ?? teamName}`,
       `**Motivo:** ${record.reason}`,
       "**Status:** Aguardando resposta",
-      `**Criado por:** ${teamName}`,
+      `**Remetente:** ${teamName}`,
       `**Data de criação:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>`,
-      `**Prazo:** ${deadline ?? "Não definido"}`,
-      `**Redirecionamento:** ${redirected ?? "não aplicado"}`,
-      ...(record.notes ? [`**Observações:** ${record.notes}`] : [])
+      `**Prazo:** ${deadline ?? "Não definido"}`
     ],
     image: (settings.panelBannerUrl ?? settings.bannerUrl) ? { imageEnabled: true, imagePosition: "banner", imageUrl: resolvePanelImageUrl(settings.panelBannerUrl ?? settings.bannerUrl) } : null,
     moduleId: SUMMONS_PREFIX,
@@ -545,7 +528,7 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
 export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecord, guildId: string, channelId: string) {
   const channelUrl = `https://discord.com/channels/${guildId}/${channelId}`;
   const competence = recordCompetence(record);
-  const teamName = teamNameForCompetence(competence);
+  const teamName = teamNameForCompetence(competence, settings);
   const deadline = snapshotString(record, "deadline");
   const targetName = snapshotString(record, "targetDisplayName") ?? `<@${record.targetId}>`;
   const action = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -554,19 +537,17 @@ export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecor
   return renderComponentsV2Panel({
     accentColor: color(settings.color),
     actions: [action],
-    description: `${teamName} está solicitando sua presença para uma conversa.`,
+    description: "Você foi intimado para prestar esclarecimentos no canal indicado abaixo.",
     fields: [
       `**Intimado:** ${targetName}`,
-      `**Órgão responsável:** ${competenceLabel(competence)}`,
-      `**Mensagem:**\n${record.reason}`,
-      `**Prazo:** ${deadline ?? "Não definido"}`,
-      "**Canal:** Acesse o canal abaixo para continuar o atendimento.",
+      `**Órgão responsável:** ${teamName}`,
       `**Canal:** <#${channelId}>`,
-      `**Equipe:** ${teamName}`
+      `**Prazo:** ${deadline ?? "Não definido"}`,
+      "Acesse o canal para responder à intimação."
     ],
     image: settings.bannerUrl ? { imageEnabled: true, imagePosition: "banner", imageUrl: resolvePanelImageUrl(settings.bannerUrl) } : null,
     moduleId: `${SUMMONS_PREFIX}-dm`,
-    title: `📨 Solicitação - ${teamName}`
+    title: "📨 Você recebeu uma intimação"
   });
 }
 
@@ -639,7 +620,7 @@ async function sendSummonsLog(interaction: any, settings: SummonsSettings, recor
     components: [{
       type: 17,
       accent_color: color(settings.color),
-      components: [{ type: 10, content: `# Intimação ${action}\n**ID:** ${record.id}\n**Competência:** ${competenceLabel(competence)}\n**Intimado:** <@${record.targetId}>\n**Criado por:** <@${record.requesterId}>\n**Responsável:** ${recordResponsibleId(record) ? `<@${recordResponsibleId(record)}>` : "não definido"}\n**Redirecionamento:** ${snapshotString(record, "redirectReason") ?? "não aplicado"}\n**Motivo:** ${record.reason}\n**Canal:** ${record.channelId ? `<#${record.channelId}>` : "não criado"}\n**Data:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>\n**Status:** ${record.status}\n**DM:** ${record.dmDeliveryStatus}${record.dmDeliveryError ? ` — ${record.dmDeliveryError}` : ""}${error ? `\n**Erro:** ${error}` : ""}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }]
+      components: [{ type: 10, content: `# Intimação ${action}\n**ID:** ${record.id}\n**Competência:** ${competenceLabel(competence)}\n**Intimado:** <@${record.targetId}>\n**Remetente:** ${teamNameForCompetence(competence, settings)}\n**Motivo:** ${record.reason}\n**Canal:** ${record.channelId ? `<#${record.channelId}>` : "não criado"}\n**Data:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>\n**Status:** ${record.status}\n**DM:** ${record.dmDeliveryStatus}${record.dmDeliveryError ? ` — ${record.dmDeliveryError}` : ""}${error ? `\n**Erro:** ${error}` : ""}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }]
     }],
     flags: MessageFlags.IsComponentsV2
   }).catch((logError: unknown) => console.error("[summons] falha ao enviar log privado", {
@@ -671,7 +652,7 @@ async function sendSummonsProxyLog(message: Message, settings: SummonsSettings, 
         content: [
           `# Mensagem anônima - ${ANONYMOUS_TEAM_NAME}`,
           `**Intimação:** ${record.id}`,
-          `**Autor real:** <@${message.author.id}> (${message.author.id})`,
+          `**Remetente:** ${teamNameForCompetence(recordCompetence(record), settings)}`,
           `**Canal temporário:** <#${message.channel.id}>`,
           `**Intimado:** <@${record.targetId}> (${record.targetId})`,
           `**Data:** <t:${Math.floor(Date.now() / 1000)}:f>`,
@@ -734,40 +715,14 @@ function summonsTargetSelectionPayload(selected: SummonsCompetence) {
     )
   ]);
 }
-async function summonsResponsibleSelectionPayload(interaction: any, settings: SummonsSettings, competence: SummonsCompetence, redirectReason: string | null) {
-  const roleIds = roleIdsForCompetence(settings, competence);
-  const members = await interaction.guild.members.fetch().catch(() => null);
-  const options = members
-    ? [...members.values()]
-      .filter((member: GuildMember) => !member.user.bot && hasRole(member, roleIds))
-      .sort((left: GuildMember, right: GuildMember) => left.displayName.localeCompare(right.displayName))
-      .slice(0, 25)
-      .map((member: GuildMember) => ({ label: member.displayName.slice(0, 100), value: member.id, description: competenceLabel(competence).slice(0, 100) }))
-    : [];
-  if (!options.length) options.push({ label: "Nenhum responsável configurado", value: "none", description: "Configure cargos para este órgão" });
-  return configPayload("📨 Selecionar responsável", [
-    `**Competência final:** ${competenceLabel(competence)}`,
-    redirectReason ? `**Redirecionamento automático:** ${redirectReason}` : "**Redirecionamento automático:** não aplicado",
-    "Selecione o responsável pela intimação."
-  ], [
-    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`${SUMMONS_PREFIX}:select_responsible`)
-        .setPlaceholder("Selecionar responsável")
-        .setMinValues(1)
-        .setMaxValues(1)
-        .addOptions(options)
-    )
-  ]);
-}
 function parseCompetence(value: string | undefined): SummonsCompetence | null {
   return value === "iab" || value === "conselho" || value === "hcmd" || value === "comissario" ? value : null;
 }
 function competenceLabel(value: SummonsCompetence) {
   return value === "iab" ? "IAB" : value === "conselho" ? "Conselho" : value === "hcmd" ? "High Command" : "Comissário";
 }
-function teamNameForCompetence(value: SummonsCompetence) {
-  if (value === "iab") return "Equipe IAB";
+function teamNameForCompetence(value: SummonsCompetence, settings?: SummonsSettings) {
+  if (value === "iab") return settings?.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME;
   if (value === "conselho") return "Conselho";
   if (value === "hcmd") return "High Command";
   return "Comissário";
@@ -852,13 +807,13 @@ function summonsSettingsSnapshot(settings: SummonsSettings) {
     teamRoleIds: summonsTeamRoleIds(settings),
     teamAvatarUrl: settings.teamAvatarUrl,
     privateLogChannelId: settings.privateLogChannelId,
-    publicResponsibleName: SUMMONS_TEAM_NAME,
-    dmTitle: `📨 Solicitação da ${SUMMONS_TEAM_NAME}`,
-    dmDescription: `A ${SUMMONS_TEAM_NAME} está solicitando sua presença para uma conversa.`,
+    publicResponsibleName: settings.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME,
+    dmTitle: "📨 Você recebeu uma intimação",
+    dmDescription: "Você foi intimado para prestar esclarecimentos no canal indicado abaixo.",
     dmButtonText: "🔗 Acessar conversa",
     bannerUrl: settings.bannerUrl,
     color: settings.color,
-    defaultMessage: `Este canal é confidencial e destinado à conversa com a ${SUMMONS_TEAM_NAME}.`
+    defaultMessage: `Este canal é confidencial e destinado à conversa com ${settings.publicResponsibleName?.trim() || SUMMONS_TEAM_NAME}.`
   };
 }
 function snowflakeFrom(value: string) { const match = value.match(/\d{5,32}/); if (!match) throw new Error("Informe um ID ou menção válida."); return match[0]; }

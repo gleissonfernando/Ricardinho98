@@ -3,17 +3,15 @@ import test from 'node:test';
 import { collectHierarchyMembersForPanel, getHierarchyPanelVisualIds } from '../fivemHierarchyService';
 
 test('gera ids de visual exclusivos para cada painel de hierarquia', () => {
-  assert.deepStrictEqual(getHierarchyPanelVisualIds('fivem-hierarchy'), [
-    'fivem-hierarchy',
-    'fivem-hierarchy-banner-2',
-    'fivem-hierarchy-banner-3'
-  ]);
+  assert.deepStrictEqual(
+    getHierarchyPanelVisualIds('fivem-hierarchy'),
+    ['fivem-hierarchy', ...Array.from({ length: 7 }, (_, index) => `fivem-hierarchy-banner-${index + 2}`)]
+  );
 
-  assert.deepStrictEqual(getHierarchyPanelVisualIds('panel-abc'), [
-    'panel-abc',
-    'panel-abc-banner-2',
-    'panel-abc-banner-3'
-  ]);
+  assert.deepStrictEqual(
+    getHierarchyPanelVisualIds('panel-abc'),
+    ['panel-abc', ...Array.from({ length: 7 }, (_, index) => `panel-abc-banner-${index + 2}`)]
+  );
 });
 
 test('mantem o mesmo membro em todos os paineis onde possui cargo', () => {
@@ -65,6 +63,17 @@ test('mantem o mesmo membro em cinco paineis independentes sem escolher cargo pr
 
   assert.equal(appearances.flat().length, 5);
   assert.ok(appearances.every((entries) => entries.length === 1 && entries[0]?.userId === 'user-5'));
+});
+
+test('remove apenas do painel cujo cargo foi perdido', () => {
+  const before = fakeMember('user-1', ['role-daf', 'role-swat']);
+  const after = fakeMember('user-1', ['role-swat']);
+  const dafPanel = fakePanel('panel-daf', 'daf', 'role-daf');
+  const swatPanel = fakePanel('panel-swat', 'swat', 'role-swat');
+
+  assert.equal(collectHierarchyMembersForPanel(fakeGuild([before]) as any, dafPanel as any).length, 1);
+  assert.equal(collectHierarchyMembersForPanel(fakeGuild([after]) as any, dafPanel as any).length, 0);
+  assert.equal(collectHierarchyMembersForPanel(fakeGuild([after]) as any, swatPanel as any).length, 1);
 });
 
 test('deduplica apenas dentro do mesmo bloco do mesmo painel', () => {

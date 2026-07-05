@@ -57,7 +57,9 @@ export const hierarchyCommand: BotCommand = {
       return;
     }
     const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
-    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, { allowCreate: true });
+    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, {
+      allowCreate: subcommand === "postar"
+    });
     await interaction.editReply(syncAll ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
   }
 };
@@ -155,12 +157,29 @@ export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotC
     guild.channels.fetch()
   ]);
   for (const panel of scoped) {
-    await publishHierarchyPanelOnce(guild, context, panel, members, options);
+    await atualizarHierarquia(guild.id, panel.id, guild, context, options, panel, members);
   }
 }
 
 export async function atualizarTodasHierarquias(guild: Guild, context: BotContext) {
-  await refreshHierarchyPanelsForGuild(guild, context, null, { allowCreate: true });
+  await refreshHierarchyPanelsForGuild(guild, context, null, { allowCreate: false });
+}
+
+export async function atualizarHierarquia(
+  guildId: string,
+  hierarchyId: string,
+  guild: Guild,
+  context: BotContext,
+  options: HierarchyRefreshOptions = {},
+  knownPanel?: FivemHierarchyPanel,
+  knownMembers?: HierarchyMemberCache
+) {
+  if (guild.id !== guildId) return;
+  const panel = knownPanel ?? (await context.api.getActiveFivemHierarchyPanels().catch(() => []))
+    .find((item) => item.guildId === guildId && item.id === hierarchyId);
+  if (!panel?.enabled) return;
+  const members = knownMembers ?? await fetchHierarchyMembers(guild);
+  await publishHierarchyPanelOnce(guild, context, panel, members, options);
 }
 
 async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
@@ -168,7 +187,7 @@ async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, pane
   const current = publishingPanels.get(key);
   if (current) {
     await current;
-    return;
+    return publishHierarchyPanelOnce(guild, context, panel, members, options);
   }
 
   const task = publishHierarchyPanel(guild, context, panel, members, options).finally(() => {

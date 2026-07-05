@@ -91,16 +91,20 @@ test("painel e DM de intimação ocultam o criador real", () => {
   const dm = JSON.stringify(summonsDmPayload(summonsSettings, summons, summons.guildId, summons.channelId!));
   assert.doesNotMatch(panel, new RegExp(summons.requesterId));
   assert.doesNotMatch(dm, new RegExp(summons.requesterId));
-  assert.match(panel, /Equipe IAB/);
+  assert.match(panel, /Equipe NPD/);
+  assert.match(dm, /Equipe NPD/);
   assert.match(dm, /Acessar conversa/);
   assert.ok(dm.includes("discord.com/channels/333333/444444"));
 });
 
-test("modal da Equipe IAB possui somente a descrição obrigatória", () => {
+test("modal da intimação possui somente título e descrição obrigatórios", () => {
   const modal = createSummonsMessageModal("888888").toJSON();
-  const rows = modal.components as Array<{ components: Array<{ custom_id?: string; max_length?: number; required?: boolean }> }>;
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.components[0]?.custom_id, "description");
-  assert.equal(rows[0]?.components[0]?.max_length, 1000);
-  assert.equal(rows[0]?.components[0]?.required, true);
+  const rows = modal.components as Array<{ components: Array<{ custom_id?: string; max_length?: number; placeholder?: string; required?: boolean }> }>;
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((row) => row.components[0]?.custom_id), ["title", "description"]);
+  assert.deepEqual(rows.map((row) => row.components[0]?.required), [true, true]);
+  assert.deepEqual(rows.map((row) => row.components[0]?.placeholder), [
+    "Ex: Convocação para esclarecimentos",
+    "Descreva o motivo da intimação..."
+  ]);
 });

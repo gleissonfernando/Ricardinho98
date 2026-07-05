@@ -107,7 +107,7 @@ export async function saveFivemHierarchyPanel(guildId: string, botId: string | n
     botId: normalizedBotId,
     createdAt: current?.createdAt ?? now,
     guildId,
-    panelMessageId: normalizeSnowflake(input.panelMessageId ?? current?.panelMessageId),
+    panelMessageId: current?.panelMessageId ?? normalizeSnowflake(input.panelMessageId),
     updatedAt: now,
     updatedBy: actorId
   };

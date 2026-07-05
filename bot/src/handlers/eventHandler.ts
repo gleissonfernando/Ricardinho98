@@ -172,6 +172,21 @@ export function registerEvents(client: Client, context: BotContext) {
     });
   }
 
+  if (isBotModuleEnabled("fivem-hierarchy")) {
+    client.on(Events.GuildRoleCreate, (role) => {
+      if (isMaintenanceModeActive()) return;
+      runEvent("guildRoleCreate.fivemHierarchy", async () => {
+        scheduleHierarchyRefresh(role.guild, context);
+      });
+    });
+    client.on(Events.GuildRoleDelete, (role) => {
+      if (isMaintenanceModeActive()) return;
+      runEvent("guildRoleDelete.fivemHierarchy", async () => {
+        scheduleHierarchyRefresh(role.guild, context);
+      });
+    });
+  }
+
   if (managedRuntimeBot || isBotModuleEnabled("logs") || isSelfBotModuleEnabled()) {
     client.on(Events.MessageDelete, (message) => {
       if (isMaintenanceModeActive()) return;
