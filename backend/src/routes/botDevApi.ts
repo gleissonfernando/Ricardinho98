@@ -54,6 +54,8 @@ const policeFlightStateSchema = z.object({
   descriptionText: z.string().trim().max(1200).optional(),
   panelFooter: z.string().trim().max(200).optional(),
   panelImage: z.string().trim().max(500).nullable().optional(),
+  leaveButtonText: z.string().trim().min(1).max(80).optional(),
+  leaveButtonEmoji: z.string().trim().max(40).optional(),
   allowSameUserBothFunctions: z.boolean().optional(),
   allowReplaceOccupiedRole: z.boolean().optional(),
   scaleId: z.coerce.number().int().min(1).max(1_000_000).optional(),

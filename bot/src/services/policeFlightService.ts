@@ -55,7 +55,9 @@ type FlightConfig = {
   enterPilotButtonText: string;
   enterShooterButtonText: string;
   enterButtonText: string;
+  leaveButtonText: string;
   enterButtonEmoji: string;
+  leaveButtonEmoji: string;
   closeButtonEmoji: string;
   closeButtonText: string;
   embedColor: string;
@@ -119,6 +121,11 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
   }
 
   const action = interaction.customId.split(":")[1] ?? "";
+  if (interaction.isButton() && interaction.customId.startsWith(`${PREFIX}:`) && action === "join") {
+    await interaction.showModal(joinModal());
+    return true;
+  }
+
   const opensModal = interaction.isButton()
     && interaction.customId.startsWith(`${CONFIG_PREFIX}:`)
     && action === "texts";
@@ -137,12 +144,18 @@ export async function handlePoliceFlightInteraction(interaction: Interaction, co
     return true;
   }
 
-  if (interaction.isButton() && action === "pilot") {
-    await joinRole(interaction, context, config, "pilot");
+  if (interaction.isModalSubmit() && action === "join") {
+    await deferEphemeral(interaction);
+    const role = parseFlightRole(interaction.fields.getTextInputValue("category"));
+    if (!role) {
+      await editDeferred(interaction, "Categoria invalida. Informe Piloto ou Atirador.");
+      return true;
+    }
+    await joinRole(interaction, context, config, role);
     return true;
   }
-  if (interaction.isButton() && action === "shooter") {
-    await joinRole(interaction, context, config, "shooter");
+  if (interaction.isButton() && action === "leave") {
+    await leaveScale(interaction, context, config);
     return true;
   }
   if (interaction.isButton() && action === "close") {
@@ -190,14 +203,6 @@ async function handleConfigInteraction(interaction: Interaction, context: BotCon
     await deferEphemeral(interaction);
     await sendScaleLog(interaction.guild, config, { ...config, closedBy: interaction.user.id, closedAt: new Date().toISOString() }, true);
     await editDeferred(interaction, config.logChannelId ? "Log de teste enviado." : "Configure o canal de logs antes de testar.");
-    return;
-  }
-  if (interaction.isButton() && action === "toggle_same_user") {
-    await deferEphemeral(interaction);
-    await context.api.updatePoliceFlightState(interaction.guild.id, {
-      allowSameUserBothFunctions: !config.allowSameUserBothFunctions
-    });
-    await editDeferred(interaction, `Modo atualizado: ${!config.allowSameUserBothFunctions ? "permite" : "bloqueia"} mesma pessoa nas duas funcoes.`);
     return;
   }
   if (interaction.isButton() && action === "texts") {
@@ -327,7 +332,7 @@ async function publishDafPanelUnlocked(
     throw new Error("O bot não tem permissão para publicar no canal selecionado. Verifique: Ver Canal, Enviar Mensagens e Usar Componentes/Embeds.");
   }
 
-  if (!config.openedAt || config.status === "closed") {
+  if (!config.openedAt) {
     const saved = await context.api.updatePoliceFlightState(guild.id, {
       status: "open",
       openedBy: openedByUserId,
@@ -336,7 +341,7 @@ async function publishDafPanelUnlocked(
       closedAt: null,
       pilotIds: [],
       shooterIds: [],
-      scaleId: config.status === "closed" ? config.scaleId + 1 : config.scaleId
+      scaleId: config.scaleId
     });
     config = normalizeDafConfig(saved.config);
   }
@@ -386,8 +391,7 @@ async function publishDafPanelUnlocked(
   };
 }
 
-async function joinRole(interaction: ButtonInteraction, context: BotContext, config: FlightConfig, role: FlightRole) {
-  await deferEphemeral(interaction);
+async function joinRole(interaction: ModalSubmitInteraction, context: BotContext, config: FlightConfig, role: FlightRole) {
   const member = await ensureGuildMember(interaction);
   if (!member) {
     await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
@@ -403,7 +407,12 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
     return;
   }
 
-  if (!config.openedAt || config.status === "closed") {
+  if (config.status === "closed") {
+    await editDeferred(interaction, "Esta escalacao ja foi encerrada.");
+    return;
+  }
+
+  if (!config.openedAt) {
     config.status = "open";
     config.openedBy = interaction.user.id;
     config.openedAt = new Date().toISOString();
@@ -411,26 +420,25 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
     config.closedAt = null;
   }
 
-  if (!config.allowSameUserBothFunctions) {
-    if (role === "pilot") config.shooterIds = config.shooterIds.filter((id) => id !== interaction.user.id);
-    else config.pilotIds = config.pilotIds.filter((id) => id !== interaction.user.id);
+  const alreadyPilot = config.pilotIds.includes(interaction.user.id);
+  const alreadyShooter = config.shooterIds.includes(interaction.user.id);
+  if ((role === "pilot" && alreadyPilot) || (role === "shooter" && alreadyShooter)) {
+    await editDeferred(interaction, `Voce ja esta na escala como ${role === "pilot" ? "Piloto" : "Atirador"}.`);
+    return;
+  }
+  if (alreadyPilot || alreadyShooter) {
+    await editDeferred(interaction, "Voce ja ocupa uma categoria nesta escalacao. Saia da escalacao antes de entrar em outra categoria.");
+    return;
   }
 
   const key = role === "pilot" ? "pilotIds" : "shooterIds";
   const maxSlots = role === "pilot" ? config.maxPilots : config.maxShooters;
   const currentIds = uniqueIds(config[key]);
-  const alreadyInRole = currentIds.includes(interaction.user.id);
-  if (!config.allowReplaceOccupiedRole && currentIds.length >= maxSlots && !alreadyInRole) {
+  if (currentIds.length >= maxSlots) {
     await editDeferred(interaction, `As vagas de ${role === "pilot" ? "Piloto" : "Atirador"} ja estao preenchidas.`);
     return;
   }
-  if (alreadyInRole) {
-    config[key] = currentIds;
-  } else if (currentIds.length < maxSlots) {
-    config[key] = [...currentIds, interaction.user.id].slice(0, maxSlots);
-  } else {
-    config[key] = [...currentIds.slice(1), interaction.user.id].slice(0, maxSlots);
-  }
+  config[key] = [...currentIds, interaction.user.id].slice(0, maxSlots);
 
   const saved = await context.api.updatePoliceFlightState(interaction.guildId!, {
     status: config.status,
@@ -446,21 +454,50 @@ async function joinRole(interaction: ButtonInteraction, context: BotContext, con
   await editDeferred(interaction, `Voce entrou na escala como ${role === "pilot" ? "Piloto" : "Atirador"}.`);
 }
 
-async function closeScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
-  await deferEphemeral(interaction);
+async function leaveScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
   const member = await ensureGuildMember(interaction);
   if (!member) {
     await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
     return;
   }
-  if (!hasAnyRole(member, [...config.allowedRoleIds, ...config.adminRoleIds, ...config.closeRoleIds, ...config.dafRoleIds])) {
-    await editDeferred(interaction, "Voce nao possui permissao para participar da escalacao da DAF.");
+  if (config.status === "closed") {
+    await editDeferred(interaction, "Esta escalacao ja foi encerrada.");
+    return;
+  }
+  if (!config.panelChannelId || !config.panelMessageId) {
+    await editDeferred(interaction, "Configure e publique o painel da DAF antes de usar a escala.");
     return;
   }
 
-  const wasInScale = config.pilotIds.includes(interaction.user.id) || config.shooterIds.includes(interaction.user.id);
-  if (!wasInScale && !hasAnyRole(member, [...config.adminRoleIds, ...config.closeRoleIds, ...config.allowedRoleIds])) {
-    await editDeferred(interaction, "Voce nao esta escalado em nenhuma funcao.");
+  const wasPilot = config.pilotIds.includes(interaction.user.id);
+  const wasShooter = config.shooterIds.includes(interaction.user.id);
+  if (!wasPilot && !wasShooter) {
+    await editDeferred(interaction, "Voce nao esta em nenhuma categoria desta escalacao.");
+    return;
+  }
+
+  const saved = await context.api.updatePoliceFlightState(interaction.guildId!, {
+    pilotIds: config.pilotIds.filter((id) => id !== interaction.user.id),
+    shooterIds: config.shooterIds.filter((id) => id !== interaction.user.id)
+  });
+  await refreshPanel(interaction.guild!, context, normalizeDafConfig(saved.config));
+  await editDeferred(interaction, `Voce saiu da escala de ${wasPilot ? "Piloto" : "Atirador"}.`);
+}
+
+async function closeScale(interaction: ButtonInteraction, context: BotContext, config: FlightConfig) {
+  const member = await ensureGuildMember(interaction);
+  if (!member) {
+    await editDeferred(interaction, "Nao foi possivel localizar seu membro no servidor.");
+    return;
+  }
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)
+    && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
+    && !canCloseScale(member, config)) {
+    await editDeferred(interaction, "Voce nao possui permissao para encerrar a escalacao da DAF.");
+    return;
+  }
+  if (config.status === "closed") {
+    await editDeferred(interaction, "Esta escalacao ja foi encerrada.");
     return;
   }
 
@@ -477,21 +514,10 @@ async function closeScale(interaction: ButtonInteraction, context: BotContext, c
     pilotIds: finalConfig.pilotIds,
     shooterIds: finalConfig.shooterIds
   });
-  await sendScaleLog(interaction.guild!, config, normalizeDafConfig(savedClosed.config), false);
-
-  const nextScaleId = Math.max(1, finalConfig.scaleId + 1);
-  const savedOpen = await context.api.updatePoliceFlightState(interaction.guildId!, {
-    status: "open",
-    openedBy: interaction.user.id,
-    openedAt: new Date().toISOString(),
-    closedBy: null,
-    closedAt: null,
-    pilotIds: [],
-    shooterIds: [],
-    scaleId: nextScaleId
-  });
-  await refreshPanel(interaction.guild!, context, normalizeDafConfig(savedOpen.config));
-  await editDeferred(interaction, "Escalacao fechada e registrada.");
+  const closedConfig = normalizeDafConfig(savedClosed.config);
+  await sendScaleLog(interaction.guild!, config, closedConfig, false);
+  await refreshPanel(interaction.guild!, context, closedConfig);
+  await editDeferred(interaction, "Escalacao encerrada, bloqueada e registrada.");
 }
 
 async function refreshPanel(guild: Guild, context: BotContext, config: FlightConfig) {
@@ -510,10 +536,11 @@ async function refreshPanel(guild: Guild, context: BotContext, config: FlightCon
 }
 
 function panelPayload(config: FlightConfig, image: { position: PanelVisualPosition; url: string } | null) {
+  const closed = config.status === "closed";
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:pilot`).setLabel(config.enterPilotButtonText).setStyle(ButtonStyle.Primary), config.enterButtonEmoji),
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:shooter`).setLabel(config.enterShooterButtonText).setStyle(ButtonStyle.Secondary), config.enterButtonEmoji),
-    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger), config.closeButtonEmoji)
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:join`).setLabel(config.enterButtonText).setStyle(ButtonStyle.Primary).setDisabled(closed), config.enterButtonEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:leave`).setLabel(config.leaveButtonText).setStyle(ButtonStyle.Secondary).setDisabled(closed), config.leaveButtonEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel(config.closeButtonText).setStyle(ButtonStyle.Danger).setDisabled(closed), config.closeButtonEmoji)
   );
   return renderComponentsV2Panel({
     accentColor: color(config.embedColor),
@@ -522,6 +549,7 @@ function panelPayload(config: FlightConfig, image: { position: PanelVisualPositi
     fields: [
       [
     `## HISTORICO - ESCALACAO #${config.scaleId}`,
+    `**Status:** ${closed ? "Encerrada" : "Aberta"}`,
     "",
     `**PILOTO**${config.pilotText ? `\n${config.pilotText}` : ""}`,
     formatSlots(config.pilotIds, config.maxPilots),
@@ -548,14 +576,13 @@ function configPanelPayload(config: FlightConfig) {
     new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:publish`).setLabel("Publicar painel").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:reset`).setLabel("Resetar escala").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:test_log`).setLabel("Testar log").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:toggle_same_user`).setLabel("Alternar modo").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${CONFIG_PREFIX}:texts`).setLabel("Editar textos").setStyle(ButtonStyle.Primary)
   );
   return [{
     type: 17,
     accent_color: color(config.embedColor),
     components: [
-      { type: 10, content: `# North Police Department - DAF\n\n**Status:** ${config.enabled ? "Ativado" : "Desativado"}\n**Painel:** ${config.panelChannelId ? `<#${config.panelChannelId}>` : "nao configurado"}\n**Logs:** ${config.logChannelId ? `<#${config.logChannelId}>` : "nao configurado"}\n**Modo:** ${config.allowSameUserBothFunctions ? "permite mesma pessoa nas duas funcoes" : "move usuario ao trocar de funcao"}` },
+      { type: 10, content: `# North Police Department - DAF\n\n**Status:** ${config.enabled ? "Ativado" : "Desativado"}\n**Painel:** ${config.panelChannelId ? `<#${config.panelChannelId}>` : "nao configurado"}\n**Logs:** ${config.logChannelId ? `<#${config.logChannelId}>` : "nao configurado"}\n**Regra:** cada usuario ocupa apenas uma categoria por escalacao.` },
       roleSelect("daf_roles", "Selecionar cargos da DAF"),
       roleSelect("allowed_roles", "Selecionar cargos autorizados"),
       channelSelect("panel_channel", "Selecionar canal do painel", [ChannelType.GuildText, ChannelType.GuildAnnouncement]),
@@ -574,6 +601,23 @@ function textModal(config: FlightConfig) {
       new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("titleText").setLabel("Titulo").setStyle(TextInputStyle.Short).setMaxLength(120).setRequired(true).setValue(config.titleText)),
       new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("descriptionText").setLabel("Descricao").setStyle(TextInputStyle.Paragraph).setMaxLength(1200).setRequired(false).setValue(config.descriptionText)),
       new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("panelFooter").setLabel("Rodape").setStyle(TextInputStyle.Short).setMaxLength(200).setRequired(false).setValue(config.panelFooter))
+    );
+}
+
+function joinModal() {
+  return new ModalBuilder()
+    .setCustomId(`${PREFIX}:join`)
+    .setTitle("Entrar na Escalacao DAF")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("category")
+          .setLabel("Categoria")
+          .setPlaceholder("Piloto ou Atirador")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(30)
+          .setRequired(true)
+      )
     );
 }
 
@@ -610,17 +654,21 @@ export function normalizeDafConfig(raw: Record<string, unknown>): FlightConfig {
     closeRoleIds: ids(raw.closeRoleIds),
     adminRoleIds: ids(raw.adminRoleIds),
     titleText: str(raw.panelTitle) ?? str(raw.titleText) ?? fallback.titleText,
-    descriptionText: str(raw.panelDescription) ?? str(raw.descriptionText) ?? fallback.descriptionText,
+    descriptionText: normalizeLegacyDefaultText(str(raw.panelDescription) ?? str(raw.descriptionText), [
+      "Use os botoes abaixo para abrir uma nova escalacao de voo.\nApos aberto, os membros assumem as posicoes de Piloto e Atirador.\n\nAo finalizar, clique em Fechar Escalacao para encerrar e registrar."
+    ], fallback.descriptionText),
     panelFooter: str(raw.panelFooter) ?? fallback.panelFooter,
     panelImage: str(raw.panelImage),
     pilotText: str(raw.pilotText) ?? fallback.pilotText,
     shooterText: str(raw.shooterText) ?? fallback.shooterText,
     enterPilotButtonText: str(raw.enterPilotButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Piloto",
     enterShooterButtonText: str(raw.enterShooterButtonText) ?? str(raw.enterButtonText) ?? "Entrar como Atirador",
-    enterButtonText: str(raw.enterButtonText) ?? fallback.enterButtonText,
+    enterButtonText: normalizeLegacyDefaultText(str(raw.enterButtonText), ["Abrir Escalacao de Voo"], fallback.enterButtonText),
+    leaveButtonText: str(raw.leaveButtonText) ?? fallback.leaveButtonText,
     enterButtonEmoji: str(raw.enterButtonEmoji) ?? fallback.enterButtonEmoji,
+    leaveButtonEmoji: str(raw.leaveButtonEmoji) ?? fallback.leaveButtonEmoji,
     closeButtonEmoji: str(raw.closeButtonEmoji) ?? fallback.closeButtonEmoji,
-    closeButtonText: str(raw.closeButtonText) ?? fallback.closeButtonText,
+    closeButtonText: normalizeLegacyDefaultText(str(raw.closeButtonText), ["Fechar escalacao", "Fechar Escalacao"], fallback.closeButtonText),
     embedColor: str(raw.embedColor) ?? fallback.embedColor,
     allowSameUserBothFunctions: raw.allowSameUserBothFunctions === true,
     allowReplaceOccupiedRole: raw.allowReplaceOccupiedRole !== false,
@@ -655,17 +703,19 @@ function defaultConfig(): FlightConfig {
     closeRoleIds: [],
     adminRoleIds: [],
     titleText: "North Police Department - DAF",
-    descriptionText: "",
+    descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Sair da Escalacao para liberar apenas a sua vaga.\n\nO encerramento oficial deve ser feito por um responsavel autorizado.",
     panelFooter: "",
     panelImage: null,
     pilotText: "Responsavel pelo voo",
     shooterText: "Responsavel pela cobertura",
     enterPilotButtonText: "Entrar como Piloto",
     enterShooterButtonText: "Entrar como Atirador",
-    enterButtonText: "Abrir Escalacao de Voo",
-    enterButtonEmoji: "🛫",
+    enterButtonText: "Entrar na Escalacao",
+    leaveButtonText: "Sair da Escalacao",
+    enterButtonEmoji: "✈️",
+    leaveButtonEmoji: "🚪",
     closeButtonEmoji: "🔒",
-    closeButtonText: "Fechar escalacao",
+    closeButtonText: "Encerrar Escalacao",
     embedColor: "#3b82f6",
     allowSameUserBothFunctions: false,
     allowReplaceOccupiedRole: true,
@@ -709,11 +759,14 @@ async function sendScaleLog(guild: Guild, config: FlightConfig, closedConfig: Fl
     "**Aberto por**",
     formatSlot(closedConfig.openedBy),
     "",
-    "**Fechado por**",
+    "**Responsavel pelo encerramento**",
     formatSlot(closedConfig.closedBy),
     "",
-    "**Periodo**",
-    `${formatLongDate(openedAt)} -> ${formatShortTime(closedAt)}`,
+    "**Horario de inicio**",
+    formatLongDate(openedAt),
+    "",
+    "**Horario de encerramento**",
+    formatLongDate(closedAt),
     "",
     `NPD - Escalacao #${closedConfig.scaleId} - Registro ${isTest ? "de teste" : "automatico"} - ${formatFooterDate(closedAt)}`
   ].join("\n");
@@ -744,6 +797,11 @@ async function ensureGuildMember(interaction: Interaction) {
 function allowedParticipantRoles(config: FlightConfig, role: FlightRole) {
   const roleSpecific = role === "pilot" ? config.pilotRoleIds : config.shooterRoleIds;
   return [...config.allowedRoleIds, ...config.dafRoleIds, ...roleSpecific, ...config.adminRoleIds];
+}
+
+function canCloseScale(member: { roles: { cache: Map<string, unknown> } }, config: FlightConfig) {
+  const roleIds = [...config.adminRoleIds, ...config.closeRoleIds].filter(Boolean);
+  return roleIds.length ? hasAnyRole(member, roleIds) : false;
 }
 
 function hasAnyRole(member: { roles: { cache: Map<string, unknown> } }, roleIds: string[]) {
@@ -860,12 +918,20 @@ function applyButtonEmoji(button: ButtonBuilder, emoji: string) {
   }
 }
 
-function formatLongDate(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(date);
+function parseFlightRole(value: string): FlightRole | null {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (["piloto", "pilot"].includes(normalized)) return "pilot";
+  if (["atirador", "shooter", "gunner"].includes(normalized)) return "shooter";
+  return null;
 }
 
-function formatShortTime(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(date);
+function formatLongDate(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(date);
 }
 
 function formatFooterDate(date: Date) {
@@ -875,6 +941,14 @@ function formatFooterDate(date: Date) {
 function str(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function ids(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
 function uniqueIds(value: string[]) { return [...new Set(value.filter((item) => /^\d{5,32}$/.test(item)))]; }
+function normalizeLegacyDefaultText(value: string | null, legacyDefaults: string[], fallback: string) {
+  if (!value) return fallback;
+  const normalizedValue = normalizeTextForComparison(value);
+  return legacyDefaults.some((legacy) => normalizeTextForComparison(legacy) === normalizedValue) ? fallback : value;
+}
+function normalizeTextForComparison(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
 function clampInt(value: unknown, min: number, max: number, fallback: number) {
   const number = Math.trunc(Number(value));
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
