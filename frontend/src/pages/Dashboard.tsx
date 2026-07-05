@@ -4259,7 +4259,11 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "police-actions",
       "police-patrol-reports",
       "police-reports",
+      "police-flight",
       "police-rh",
+      "dm-system",
+      "summons-system",
+      "open-point-notification",
       "fivem-fac"
     ].includes(moduleId);
   }

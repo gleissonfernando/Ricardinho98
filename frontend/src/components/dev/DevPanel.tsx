@@ -512,9 +512,9 @@ const botMenuItems: BotMenuItem[] = [
   {
     id: "police-patrol-reports",
     label: "Policia",
-    description: "RH, comunicacao, hierarquia, acoes e relatorios policiais",
+    description: "RH, comunicacao, intimacoes, ponto aberto, hierarquia, acoes e relatorios policiais",
     icon: ShieldCheck,
-    moduleIds: ["police-rh", "fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports", "police-flight", "dm-system", "summons-system"]
+    moduleIds: ["police-rh", "fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports", "police-flight", "dm-system", "summons-system", "open-point-notification"]
   },
   {
     id: "integrations",
@@ -526,6 +526,7 @@ const botMenuItems: BotMenuItem[] = [
 ];
 
 const moduleDashboardViews: Partial<Record<string, ViewId>> = {
+  "open-point-notification": "open-point-notification",
   "police-rh": "rh-ausencias-adornos"
 };
 
@@ -4446,7 +4447,8 @@ function isPoliceReleaseModule(moduleId: string) {
     || moduleId === "police-flight"
     || moduleId === "police-rh"
     || moduleId === "dm-system"
-    || moduleId === "summons-system";
+    || moduleId === "summons-system"
+    || moduleId === "open-point-notification";
 }
 
 function StatusBadge({ status }: { status: DevBotStatus }) {
