@@ -24,6 +24,10 @@ const summonsSettingsSchema = z.object({
   authorizedRoleIds: z.array(snowflake).max(50).optional(), moderatorRoleIds: z.array(snowflake).max(50).optional(),
   logChannelId: snowflake.nullable().optional(), bannerUrl: z.string().max(2048).nullable().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), defaultMessage: z.string().max(3000).optional(),
+  publicResponsibleName: z.string().trim().min(1).max(80).optional(),
+  dmTitle: z.string().trim().min(1).max(100).optional(),
+  dmDescription: z.string().trim().min(1).max(1000).optional(),
+  dmButtonText: z.string().trim().min(1).max(80).optional(),
   deleteDelaySeconds: z.coerce.number().int().min(3).max(86400).optional(), transcriptEnabled: z.boolean().optional()
 });
 
@@ -45,13 +49,13 @@ communicationRouter.get("/bot/summons/:guildId", requireBot, async (req, res, ne
 communicationRouter.patch("/bot/summons/:guildId", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID); res.json({ settings: await saveSummonsSettings(botId, snowflake.parse(req.params.guildId), summonsSettingsSchema.parse(req.body), null) }); } catch (error) { next(error); } });
 communicationRouter.post("/bot/summons", requireBot, async (req, res, next) => { try {
   const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID);
-  const input = z.object({ guildId: snowflake, targetId: snowflake, requesterId: snowflake, reason: z.string().min(1).max(1000), notes: z.string().max(2000).nullable().optional() }).parse(req.body);
+  const input = z.object({ guildId: snowflake, targetId: snowflake, requesterId: snowflake, reason: z.string().min(1).max(1000), notes: z.string().max(2000).nullable().optional(), settingsSnapshot: z.record(z.string(), z.unknown()).optional() }).parse(req.body);
   res.status(201).json({ summons: await createSummons({ botId, ...input }) });
 } catch (error) { next(error); } });
 communicationRouter.get("/bot/summons/item/:id", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID); const value = await getSummons(botId, req.params.id!); if (!value) throw routeError("Intimação não encontrada.", 404); res.json({ summons: value }); } catch (error) { next(error); } });
 communicationRouter.patch("/bot/summons/item/:id", requireBot, async (req, res, next) => { try {
   const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID);
-  const patch = z.object({ channelId: snowflake.nullable().optional(), panelMessageId: snowflake.nullable().optional(), status: z.enum(["creating", "active", "closing", "closed", "failed"]).optional(), transcript: z.string().max(500000).nullable().optional(), closedAt: z.coerce.date().nullable().optional(), closedBy: snowflake.nullable().optional(), deleteAt: z.coerce.date().nullable().optional() }).parse(req.body);
+  const patch = z.object({ channelId: snowflake.nullable().optional(), panelMessageId: snowflake.nullable().optional(), dmMessageId: snowflake.nullable().optional(), dmDeliveryStatus: z.enum(["pending", "sent", "failed"]).optional(), dmDeliveryError: z.string().max(1000).nullable().optional(), status: z.enum(["creating", "active", "closing", "closed", "failed"]).optional(), transcript: z.string().max(500000).nullable().optional(), closedAt: z.coerce.date().nullable().optional(), closedBy: snowflake.nullable().optional(), deleteAt: z.coerce.date().nullable().optional() }).parse(req.body);
   res.json({ summons: await updateSummons(botId, req.params.id!, patch) });
 } catch (error) { next(error); } });
 

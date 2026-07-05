@@ -67,6 +67,9 @@ export async function getSummonsSettings(botId: string, guildId: string) {
   const value: MongoSummonsSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, categoryId: null, temporaryCategoryId: null,
     authorizedRoleIds: [], moderatorRoleIds: [], logChannelId: null, bannerUrl: null, color: "#f59e0b",
+    publicResponsibleName: "Equipe NPD", dmTitle: "Você recebeu uma intimação",
+    dmDescription: "Você foi intimado pela equipe responsável.\nAcesse o canal abaixo para responder sua intimação.",
+    dmButtonText: "Responder intimação",
     defaultMessage: "Use este canal para conversar sobre a solicitação.", deleteDelaySeconds: 10,
     transcriptEnabled: true, createdAt: now, updatedAt: now, updatedBy: null
   };
@@ -81,11 +84,12 @@ export async function saveSummonsSettings(botId: string, guildId: string, input:
   return summonsSettingsDto((await summonsSettings.findOne({ botId, guildId }))!);
 }
 
-export async function createSummons(input: { botId: string; guildId: string; targetId: string; requesterId: string; reason: string; notes?: string | null }) {
+export async function createSummons(input: { botId: string; guildId: string; targetId: string; requesterId: string; reason: string; notes?: string | null; settingsSnapshot?: Record<string, unknown> }) {
   const { summons } = await getMongoCollections();
   const now = new Date();
   const value = {
-    _id: randomUUID(), ...input, notes: input.notes ?? null, channelId: null, panelMessageId: null,
+    _id: randomUUID(), ...input, notes: input.notes ?? null, settingsSnapshot: input.settingsSnapshot ?? {}, channelId: null, panelMessageId: null,
+    dmMessageId: null, dmDeliveryStatus: "pending" as const, dmDeliveryError: null,
     status: "creating" as const, transcript: null, createdAt: now, closedAt: null, closedBy: null,
     deleteAt: null, updatedAt: now
   };
@@ -111,11 +115,24 @@ function dmSettingsDto(value: MongoDmSettings) {
   return { ...value, imageUrl: value.imageUrl ?? null, imagePosition: value.imagePosition ?? "top", blockBots: value.blockBots ?? true, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
 }
 function summonsSettingsDto(value: MongoSummonsSettings) {
-  return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
+  return {
+    ...value,
+    publicResponsibleName: value.publicResponsibleName ?? "Equipe NPD",
+    dmTitle: value.dmTitle ?? "Você recebeu uma intimação",
+    dmDescription: value.dmDescription ?? "Você foi intimado pela equipe responsável.\nAcesse o canal abaixo para responder sua intimação.",
+    dmButtonText: value.dmButtonText ?? "Responder intimação",
+    id: value._id,
+    createdAt: value.createdAt.toISOString(),
+    updatedAt: value.updatedAt.toISOString()
+  };
 }
 function summonsDto(value: any) {
   return {
     ...value, id: value._id, createdAt: value.createdAt.toISOString(),
+    dmMessageId: value.dmMessageId ?? null,
+    dmDeliveryStatus: value.dmDeliveryStatus ?? "pending",
+    dmDeliveryError: value.dmDeliveryError ?? null,
+    settingsSnapshot: value.settingsSnapshot ?? {},
     closedAt: value.closedAt?.toISOString() ?? null, deleteAt: value.deleteAt?.toISOString() ?? null,
     updatedAt: value.updatedAt.toISOString()
   };

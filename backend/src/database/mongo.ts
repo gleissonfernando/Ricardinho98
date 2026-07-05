@@ -1308,6 +1308,10 @@ export type MongoSummonsSettings = {
   logChannelId: string | null;
   bannerUrl: string | null;
   color: string;
+  publicResponsibleName: string;
+  dmTitle: string;
+  dmDescription: string;
+  dmButtonText: string;
   defaultMessage: string;
   deleteDelaySeconds: number;
   transcriptEnabled: boolean;
@@ -1326,6 +1330,10 @@ export type MongoSummons = {
   notes: string | null;
   channelId: string | null;
   panelMessageId: string | null;
+  dmMessageId: string | null;
+  dmDeliveryStatus: "pending" | "sent" | "failed";
+  dmDeliveryError: string | null;
+  settingsSnapshot: Record<string, unknown>;
   status: "creating" | "active" | "closing" | "closed" | "failed";
   transcript: string | null;
   createdAt: Date;

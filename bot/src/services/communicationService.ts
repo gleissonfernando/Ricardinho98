@@ -82,6 +82,7 @@ export async function showSummonsConfigPanel(interaction: ChatInputCommandIntera
     `**Status:** ${settings.enabled ? "Ativo" : "Inativo"}`,
     `**Categoria:** ${settings.categoryId ? `<#${settings.categoryId}>` : "Não definida"}`,
     `**Logs:** ${settings.logChannelId ? `<#${settings.logChannelId}>` : "Não definido"}`,
+    `**Responsável público:** ${settings.publicResponsibleName}`,
     `**Exclusão:** ${settings.deleteDelaySeconds}s`
   ], [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -186,6 +187,10 @@ async function handleSummons(interaction: any, context: BotContext) {
   const [action, id] = interaction.customId.split(":").slice(1);
   const settings = await context.api.getSummonsSettings(interaction.guildId);
   if (action === "select_target" && interaction.isUserSelectMenu()) {
+    if (!settings.enabled) return void await interaction.reply({ content: "O Sistema de Intimação está desativado.", flags: MessageFlags.Ephemeral });
+    if (!hasRole(interaction.member as GuildMember, settings.authorizedRoleIds) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return void await interaction.reply({ content: "Você não possui um cargo autorizado para criar intimações.", flags: MessageFlags.Ephemeral });
+    }
     const targetId = interaction.values[0];
     const modal = new ModalBuilder().setCustomId(`${SUMMONS_PREFIX}:create:${targetId}`).setTitle("Criar intimação");
     modal.addComponents(
@@ -197,24 +202,59 @@ async function handleSummons(interaction: any, context: BotContext) {
   }
   if (action === "create" && interaction.isModalSubmit()) {
     await interaction.deferReply({ ephemeral: true });
+    if (!settings.enabled) return void await interaction.editReply("O Sistema de Intimação está desativado.");
+    if (!hasRole(interaction.member as GuildMember, settings.authorizedRoleIds) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return void await interaction.editReply("Você não possui um cargo autorizado para criar intimações.");
+    }
     const targetId = snowflakeFrom(id ?? "");
-    const record = await context.api.createSummons({ guildId: interaction.guildId, targetId, requesterId: interaction.user.id, reason: interaction.fields.getTextInputValue("reason"), notes: nullable(interaction.fields.getTextInputValue("notes")) });
+    const record = await context.api.createSummons({
+      guildId: interaction.guildId,
+      targetId,
+      requesterId: interaction.user.id,
+      reason: interaction.fields.getTextInputValue("reason"),
+      notes: nullable(interaction.fields.getTextInputValue("notes")),
+      settingsSnapshot: summonsSettingsSnapshot(settings)
+    });
     try {
       const channel = await createSummonsChannel(interaction, settings, record);
       const panel = await channel.send(summonsPanel(settings, record));
-      await context.api.updateSummons(record.id, { channelId: channel.id, panelMessageId: panel.id, status: "active" });
-      await interaction.editReply(`📢 Intimação criada com sucesso.\nAcesse o canal: <#${channel.id}>`);
-      await sendSummonsLog(interaction, settings, record, "criada");
-    } catch (error) { await context.api.updateSummons(record.id, { status: "failed" }); await interaction.editReply(`Falha ao criar a intimação: ${messageOf(error)}`); }
+      let dmMessageId: string | null = null;
+      let dmDeliveryStatus: "sent" | "failed" = "sent";
+      let dmDeliveryError: string | null = null;
+      try {
+        const target = await context.client.users.fetch(targetId);
+        const dm = await target.send(summonsDmPayload(settings, record, interaction.guild.id, channel.id));
+        dmMessageId = dm.id;
+      } catch (dmError) {
+        dmDeliveryStatus = "failed";
+        dmDeliveryError = messageOf(dmError);
+      }
+      const saved = await context.api.updateSummons(record.id, { channelId: channel.id, panelMessageId: panel.id, dmMessageId, dmDeliveryStatus, dmDeliveryError, status: "active" });
+      await replaceDeferredWithComponents(interaction, summonsCreatedConfirmation(saved));
+      await sendSummonsLog(interaction, settings, saved, "criada");
+    } catch (error) {
+      const failed = await context.api.updateSummons(record.id, { status: "failed" });
+      await replaceDeferredWithComponents(interaction, summonsFailureConfirmation(failed, messageOf(error)));
+      await sendSummonsLog(interaction, settings, failed, "falhou", null, messageOf(error));
+    }
     return;
   }
   if (action === "finish" && interaction.isButton()) {
     const record = await context.api.getSummons(id!);
-    if (record.requesterId !== interaction.user.id && !hasRole(interaction.member as GuildMember, settings.moderatorRoleIds)) return void await interaction.reply({ content: "Somente o responsável ou a moderação pode finalizar.", ephemeral: true });
+    if (!canManageSummons(interaction, settings)) return void await interaction.reply({ content: "Você não possui um cargo autorizado para gerenciar intimações.", ephemeral: true });
     await interaction.reply({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: "## Confirmar finalização\nO transcript será salvo e o canal será removido." }, new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:confirm:${record.id}`).setLabel("Confirmar").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:cancel:${record.id}`).setLabel("Cancelar").setStyle(ButtonStyle.Secondary))] }], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }); return;
   }
   if (action === "cancel" && interaction.isButton()) return void await interaction.update({ content: "Finalização cancelada.", components: [] });
-  if (action === "confirm" && interaction.isButton()) { await closeSummons(interaction, context, settings, id!); return; }
+  if (action === "confirm" && interaction.isButton()) {
+    if (!canManageSummons(interaction, settings)) return void await interaction.reply({ content: "Você não possui um cargo autorizado para finalizar intimações.", ephemeral: true });
+    await closeSummons(interaction, context, settings, id!);
+    return;
+  }
+  if (action === "abort" && interaction.isButton()) {
+    if (!canManageSummons(interaction, settings)) return void await interaction.reply({ content: "Você não possui um cargo autorizado para cancelar intimações.", ephemeral: true });
+    await closeSummons(interaction, context, settings, id!, "cancelada");
+    return;
+  }
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return void await interaction.reply({ content: "Você precisa de Gerenciar Servidor.", ephemeral: true });
   const dashboardPatch = async (patch: Partial<SummonsSettings>, message: string) => { await interaction.deferUpdate(); await context.api.saveSummonsSettings(interaction.guildId, patch); await interaction.editReply({ content: message, components: [] }); };
   if (action === "toggle") return dashboardPatch({ enabled: !settings.enabled }, `Sistema ${!settings.enabled ? "ativado" : "desativado"}.`);
@@ -222,35 +262,36 @@ async function handleSummons(interaction: any, context: BotContext) {
   if (action === "logs") return dashboardPatch({ logChannelId: interaction.values[0] }, "Canal de logs atualizado.");
   if (action === "roles") return dashboardPatch({ authorizedRoleIds: interaction.values }, "Cargos autorizados atualizados.");
   if (action === "moderators") return dashboardPatch({ moderatorRoleIds: interaction.values }, "Cargos de moderação atualizados.");
-  if (action === "visual" && interaction.isButton()) { const modal = new ModalBuilder().setCustomId(`${SUMMONS_PREFIX}:save_visual`).setTitle("Visual da intimação").addComponents(input("color", "Cor hexadecimal", settings.color, true), input("message", "Mensagem padrão", settings.defaultMessage, true, true), input("banner", "URL do banner", settings.bannerUrl ?? "", false), input("delay", "Tempo para excluir (segundos)", String(settings.deleteDelaySeconds), true)); await interaction.showModal(modal); return; }
-  if (action === "save_visual" && interaction.isModalSubmit()) { await interaction.deferReply({ ephemeral: true }); await context.api.saveSummonsSettings(interaction.guildId, { color: normalizedColor(interaction.fields.getTextInputValue("color")), defaultMessage: interaction.fields.getTextInputValue("message"), bannerUrl: nullable(interaction.fields.getTextInputValue("banner")), deleteDelaySeconds: Number(interaction.fields.getTextInputValue("delay")) }); await interaction.editReply("Configuração visual atualizada."); return; }
+  if (action === "visual" && interaction.isButton()) { const modal = new ModalBuilder().setCustomId(`${SUMMONS_PREFIX}:save_visual`).setTitle("Visual da intimação").addComponents(inputValue("responsible", "Nome público da equipe", settings.publicResponsibleName, true, false, 80), inputValue("dm_title", "Título da DM", settings.dmTitle, true, false, 100), inputValue("dm_description", "Descrição da DM", settings.dmDescription, true, true, 1000), inputValue("dm_button", "Texto do botão da DM", settings.dmButtonText, true, false, 80), inputValue("message", "Mensagem do canal temporário", settings.defaultMessage, true, true, 3000)); await interaction.showModal(modal); return; }
+  if (action === "save_visual" && interaction.isModalSubmit()) { await interaction.deferReply({ ephemeral: true }); await context.api.saveSummonsSettings(interaction.guildId, { publicResponsibleName: interaction.fields.getTextInputValue("responsible"), dmTitle: interaction.fields.getTextInputValue("dm_title"), dmDescription: interaction.fields.getTextInputValue("dm_description"), dmButtonText: interaction.fields.getTextInputValue("dm_button"), defaultMessage: interaction.fields.getTextInputValue("message") }); await interaction.editReply("Configuração visual atualizada."); return; }
   if (action === "test") await interaction.reply({ ...summonsPanel(settings, { id: "test", targetId: interaction.user.id, requesterId: interaction.user.id, reason: "Teste do sistema", notes: null } as SummonsRecord), flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
 }
 
 async function createSummonsChannel(interaction: any, settings: SummonsSettings, record: SummonsRecord) {
   const target = await interaction.guild.members.fetch(record.targetId);
   const slug = target.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 50) || record.targetId;
+  const staffRoleIds = [...new Set([...settings.authorizedRoleIds, ...settings.moderatorRoleIds])];
   return interaction.guild.channels.create({
     name: `intimacao-${slug}`, type: ChannelType.GuildText, parent: settings.temporaryCategoryId ?? settings.categoryId ?? undefined,
     permissionOverwrites: [
       { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: record.targetId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-      { id: record.requesterId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
-      ...settings.moderatorRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
+      { id: interaction.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] },
+      ...staffRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] }))
     ],
     reason: `Intimação ${record.id}`
   });
 }
 
-async function closeSummons(interaction: any, context: BotContext, settings: SummonsSettings, id: string) {
+async function closeSummons(interaction: any, context: BotContext, settings: SummonsSettings, id: string, action = "finalizada") {
   await interaction.deferUpdate();
   const record = await context.api.getSummons(id);
   const channel = interaction.channel;
   const transcript = settings.transcriptEnabled && channel?.isTextBased() ? await makeTranscript(channel) : null;
   const deleteAt = new Date(Date.now() + settings.deleteDelaySeconds * 1000);
-  await context.api.updateSummons(id, { status: "closing", transcript, closedAt: new Date().toISOString(), closedBy: interaction.user.id, deleteAt: deleteAt.toISOString() });
-  await channel?.send({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: `## Intimação finalizada\nFinalizada por <@${interaction.user.id}>. Este canal será excluído em ${settings.deleteDelaySeconds} segundos.` }] }], flags: MessageFlags.IsComponentsV2 });
-  await sendSummonsLog(interaction, settings, record, "finalizada", transcript);
+  const updated = await context.api.updateSummons(id, { status: "closing", transcript, closedAt: new Date().toISOString(), closedBy: interaction.user.id, deleteAt: deleteAt.toISOString() });
+  await channel?.send({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: `## Intimação ${action}\nA intimação foi ${action} pela equipe responsável. Este canal será excluído em ${settings.deleteDelaySeconds} segundos.` }] }], flags: MessageFlags.IsComponentsV2 });
+  await sendSummonsLog(interaction, settings, updated, action, transcript);
   setTimeout(() => void channel?.delete(`Intimação ${id} finalizada`).then(() => context.api.updateSummons(id, { status: "closed" })).catch(() => undefined), settings.deleteDelaySeconds * 1000).unref();
 }
 
@@ -279,11 +320,77 @@ export function createDmMessageModal(settings: DmSettings, targetId: string) {
       inputValue("description", "Mensagem", settings.defaultText, true, true, 300)
     );
 }
-function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
-  const components: any[] = [{ type: 10, content: `# 🔔 Intimação em andamento\n<@${record.targetId}>\n\n**Motivo:** ${record.reason}\n${record.notes ? `**Observações:** ${record.notes}\n` : ""}\n${settings.defaultMessage}` }];
-  if (settings.bannerUrl) components.unshift({ type: 12, items: [{ media: { url: settings.bannerUrl }, description: "Painel da Intimação" }] });
-  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Danger)));
-  return { components: [{ type: 17, accent_color: color(settings.color), components }], flags: MessageFlags.IsComponentsV2 as const };
+export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
+  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setLabel("Cancelar Intimação").setStyle(ButtonStyle.Danger)
+  );
+  return renderComponentsV2Panel({
+    accentColor: color(settings.color),
+    actions: [actions],
+    description: settings.defaultMessage,
+    fields: [
+      `**Intimado:** <@${record.targetId}>`,
+      `**Motivo:** ${record.reason}`,
+      "**Status:** Aguardando resposta",
+      `**Responsável:** ${settings.publicResponsibleName}`,
+      ...(record.notes ? [`**Observações:** ${record.notes}`] : [])
+    ],
+    image: settings.bannerUrl ? { imageEnabled: true, imagePosition: "banner", imageUrl: resolvePanelImageUrl(settings.bannerUrl) } : null,
+    moduleId: SUMMONS_PREFIX,
+    title: "🔔 Intimação aberta"
+  });
+}
+
+export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecord, guildId: string, channelId: string) {
+  const channelUrl = `https://discord.com/channels/${guildId}/${channelId}`;
+  const action = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setLabel(settings.dmButtonText).setURL(channelUrl).setStyle(ButtonStyle.Link)
+  );
+  return renderComponentsV2Panel({
+    accentColor: color(settings.color),
+    actions: [action],
+    description: settings.dmDescription,
+    fields: [
+      `**Canal:** <#${channelId}>`,
+      `**Responsável:** ${settings.publicResponsibleName}`
+    ],
+    image: settings.bannerUrl ? { imageEnabled: true, imagePosition: "banner", imageUrl: resolvePanelImageUrl(settings.bannerUrl) } : null,
+    moduleId: `${SUMMONS_PREFIX}-dm`,
+    title: settings.dmTitle
+  });
+}
+
+function summonsCreatedConfirmation(record: SummonsRecord) {
+  return {
+    components: [{
+      type: 17,
+      accent_color: 0x22c55e,
+      components: [{
+        type: 10,
+        content: `# Intimação criada\n**ID da intimação:** ${record.id}\n**Intimado:** <@${record.targetId}>\n**Canal temporário:** ${record.channelId ? `<#${record.channelId}>` : "indisponível"}\n**Status:** ativa\n**DM:** ${record.dmDeliveryStatus === "sent" ? "enviada" : "falhou"}`
+      }]
+    }],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  };
+}
+
+function summonsFailureConfirmation(record: SummonsRecord, error: string) {
+  return {
+    components: [{
+      type: 17,
+      accent_color: 0xef4444,
+      components: [{ type: 10, content: `# Falha ao criar intimação\n**ID:** ${record.id}\n**Status:** falhou\n**Motivo:** ${error}` }]
+    }],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  };
+}
+
+async function replaceDeferredWithComponents(interaction: any, payload: any) {
+  await interaction.deleteReply().catch(() => undefined);
+  await interaction.followUp(payload).catch(async () => {
+    await interaction.editReply({ content: "A operação foi concluída, mas não foi possível renderizar a confirmação.", components: [] }).catch(() => undefined);
+  });
 }
 async function sendDmLog(interaction: any, settings: DmSettings, targetId: string, title: string, description: string, status: string, error: string | null) {
   if (!settings.logChannelId) return;
@@ -305,7 +412,31 @@ async function sendDmLog(interaction: any, settings: DmSettings, targetId: strin
     });
   });
 }
-async function sendSummonsLog(interaction: any, settings: SummonsSettings, record: SummonsRecord, action: string, transcript?: string | null) { if (!settings.logChannelId) return; const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null); if (channel?.isTextBased() && !channel.isDMBased()) await channel.send({ components: [{ type: 17, accent_color: color(settings.color), components: [{ type: 10, content: `## Intimação ${action}\n**ID:** ${record.id}\n**Intimado:** <@${record.targetId}>\n**Responsável:** <@${record.requesterId}>\n**Motivo:** ${record.reason}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }] }], flags: MessageFlags.IsComponentsV2 }); }
+async function sendSummonsLog(interaction: any, settings: SummonsSettings, record: SummonsRecord, action: string, transcript?: string | null, error?: string | null) {
+  if (!settings.logChannelId) return;
+  const channel = await interaction.guild.channels.fetch(settings.logChannelId).catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) return;
+  if (channel.permissionsFor(interaction.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel)) {
+    console.error("[summons] log privado não enviado porque o canal configurado é público", {
+      channelId: channel.id,
+      guildId: interaction.guildId,
+      recordId: record.id
+    });
+    return;
+  }
+  await channel.send({
+    components: [{
+      type: 17,
+      accent_color: color(settings.color),
+      components: [{ type: 10, content: `# Intimação ${action}\n**ID:** ${record.id}\n**Intimado:** <@${record.targetId}>\n**Criado por:** <@${record.requesterId}>\n**Motivo:** ${record.reason}\n**Canal:** ${record.channelId ? `<#${record.channelId}>` : "não criado"}\n**Data:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>\n**Status:** ${record.status}\n**DM:** ${record.dmDeliveryStatus}${record.dmDeliveryError ? ` — ${record.dmDeliveryError}` : ""}${error ? `\n**Erro:** ${error}` : ""}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }]
+    }],
+    flags: MessageFlags.IsComponentsV2
+  }).catch((logError: unknown) => console.error("[summons] falha ao enviar log privado", {
+    error: messageOf(logError),
+    guildId: interaction.guildId,
+    recordId: record.id
+  }));
+}
 async function makeTranscript(channel: any) { const messages = await channel.messages.fetch({ limit: 100 }); return [...messages.values()].reverse().map((message: any) => `[${message.createdAt.toISOString()}] ${message.author.tag}: ${message.cleanContent || "(anexo/componente)"}`).join("\n").slice(0, 490000); }
 function configPayload(title: string, lines: string[], rows: any[]) { return { components: [{ type: 17, accent_color: 0x5865f2, components: [{ type: 10, content: `# ${title}\n${lines.join("\n")}` }, ...rows] }], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }; }
 function input(id: string, label: string, placeholder: string, required: boolean, paragraph = false) { return new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(placeholder.slice(0, 100)).setRequired(required).setStyle(paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short)); }
@@ -318,6 +449,23 @@ function inputValue(id: string, label: string, value: string, required: boolean,
 }
 function hasRole(member: GuildMember, roles: string[]) { return roles.some((id) => member.roles.cache.has(id)); }
 function canUseDm(member: GuildMember, settings: DmSettings) { return settings.authorizedRoleIds.length > 0 && hasRole(member, settings.authorizedRoleIds); }
+function canManageSummons(interaction: any, settings: SummonsSettings) {
+  return interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
+    || hasRole(interaction.member as GuildMember, settings.moderatorRoleIds);
+}
+function summonsSettingsSnapshot(settings: SummonsSettings) {
+  return {
+    authorizedRoleIds: settings.authorizedRoleIds,
+    moderatorRoleIds: settings.moderatorRoleIds,
+    publicResponsibleName: settings.publicResponsibleName,
+    dmTitle: settings.dmTitle,
+    dmDescription: settings.dmDescription,
+    dmButtonText: settings.dmButtonText,
+    bannerUrl: settings.bannerUrl,
+    color: settings.color,
+    defaultMessage: settings.defaultMessage
+  };
+}
 function snowflakeFrom(value: string) { const match = value.match(/\d{5,32}/); if (!match) throw new Error("Informe um ID ou menção válida."); return match[0]; }
 function normalizedColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : "#5865f2"; }
 function nullable(value: string) { return value.trim() || null; }

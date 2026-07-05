@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DmSettings } from "../apiClient";
-import { createDmMessageModal, dmPayload } from "../communicationService";
+import type { DmSettings, SummonsRecord, SummonsSettings } from "../apiClient";
+import { createDmMessageModal, dmPayload, summonsDmPayload, summonsPanel } from "../communicationService";
 
 const settings: DmSettings = {
   authorizedRoleIds: [],
@@ -36,4 +36,42 @@ test("DM Components V2 mostra identidade da equipe sem expor o staff", () => {
   assert.match(serialized, /Mensagem da equipe/);
   assert.match(serialized, /Equipe Human Resources - NPD/);
   assert.doesNotMatch(serialized, /staff|responsável/i);
+});
+
+const summonsSettings: SummonsSettings = {
+  authorizedRoleIds: ["111111"],
+  bannerUrl: null,
+  botId: "bot",
+  categoryId: null,
+  color: "#f59e0b",
+  defaultMessage: "Responda neste canal.",
+  deleteDelaySeconds: 10,
+  dmButtonText: "Responder intimação",
+  dmDescription: "Acesse o canal para responder.",
+  dmTitle: "Você recebeu uma intimação",
+  enabled: true,
+  guildId: "guild",
+  id: "settings",
+  logChannelId: null,
+  moderatorRoleIds: ["222222"],
+  publicResponsibleName: "Equipe NPD",
+  temporaryCategoryId: null,
+  transcriptEnabled: true
+};
+
+const summons: SummonsRecord = {
+  botId: "bot", channelId: "444444", closedAt: null, closedBy: null, createdAt: new Date().toISOString(),
+  deleteAt: null, dmDeliveryError: null, dmDeliveryStatus: "sent", dmMessageId: "555555", guildId: "333333",
+  id: "summons-id", notes: null, panelMessageId: "666666", reason: "Comparecimento", requesterId: "777777",
+  settingsSnapshot: {}, status: "active", targetId: "888888", transcript: null, updatedAt: new Date().toISOString()
+};
+
+test("painel e DM de intimação ocultam o criador real", () => {
+  const panel = JSON.stringify(summonsPanel(summonsSettings, summons));
+  const dm = JSON.stringify(summonsDmPayload(summonsSettings, summons, summons.guildId, summons.channelId!));
+  assert.doesNotMatch(panel, new RegExp(summons.requesterId));
+  assert.doesNotMatch(dm, new RegExp(summons.requesterId));
+  assert.match(panel, /Equipe NPD/);
+  assert.match(dm, /Responder intimação/);
+  assert.ok(dm.includes("discord.com/channels/333333/444444"));
 });
