@@ -1270,6 +1270,7 @@ export type MongoDmSettings = {
   logChannelId: string | null;
   bannerUrl: string | null;
   imageUrl: string | null;
+  imagePosition: "none" | "top" | "footer" | "side" | "thumbnail" | "banner";
   color: string;
   defaultTitle: string;
   defaultText: string;

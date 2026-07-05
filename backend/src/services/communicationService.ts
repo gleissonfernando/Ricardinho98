@@ -25,8 +25,8 @@ export async function getDmSettings(botId: string, guildId: string) {
   const now = new Date();
   const value: MongoDmSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, authorizedRoleIds: [], logChannelId: null,
-    bannerUrl: null, imageUrl: null, color: "#5865f2", defaultTitle: "Mensagem da equipe",
-    defaultText: "Você recebeu uma nova mensagem.", footerText: null, buttons: [], blockBots: true,
+    bannerUrl: null, imageUrl: null, imagePosition: "top", color: "#5865f2", defaultTitle: "Mensagem da equipe",
+    defaultText: "Você recebeu uma nova mensagem da equipe.", footerText: null, buttons: [], blockBots: true,
     createdAt: now, updatedAt: now, updatedBy: null
   };
   await dmSettings.updateOne({ botId, guildId }, { $setOnInsert: value }, { upsert: true });
@@ -108,7 +108,7 @@ export async function getSummons(botId: string, id: string) {
 }
 
 function dmSettingsDto(value: MongoDmSettings) {
-  return { ...value, imageUrl: value.imageUrl ?? null, blockBots: value.blockBots ?? true, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
+  return { ...value, imageUrl: value.imageUrl ?? null, imagePosition: value.imagePosition ?? "top", blockBots: value.blockBots ?? true, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
 }
 function summonsSettingsDto(value: MongoSummonsSettings) {
   return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() };
@@ -124,13 +124,20 @@ function summonsDto(value: any) {
 function normalizeDmSettingsInput(input: Partial<Omit<MongoDmSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>) {
   const next: typeof input = { ...input };
   if ("bannerUrl" in next) next.bannerUrl = normalizeHttpsUrl(next.bannerUrl);
-  if ("imageUrl" in next) next.imageUrl = normalizeHttpsUrl(next.imageUrl);
+  if ("imageUrl" in next) next.imageUrl = normalizeImageUrl(next.imageUrl);
   if (next.buttons) {
     next.buttons = next.buttons
       .map((button) => ({ ...button, url: normalizeHttpsUrl(button.url) }))
       .filter((button) => button.style !== "link" || Boolean(button.url));
   }
   return next;
+}
+
+function normalizeImageUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("/") || trimmed.startsWith("https://")) return trimmed;
+  throw Object.assign(new Error("Use uma URL HTTPS válida ou uma imagem enviada pelo upload."), { statusCode: 400 });
 }
 
 function normalizeHttpsUrl(value: string | null | undefined) {
