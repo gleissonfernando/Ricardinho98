@@ -87,6 +87,51 @@ export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, pane
   scheduledGuilds.set(key, timeout);
 }
 
+export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMember, newMember: GuildMember, context: BotContext) {
+  if (!isBotModuleEnabled("fivem-hierarchy")) return;
+
+  const oldRoleIds = new Set(oldMember.roles.cache.keys());
+  const newRoleIds = new Set(newMember.roles.cache.keys());
+  const changedRoleIds = new Set<string>();
+
+  for (const roleId of newRoleIds) {
+    if (!oldRoleIds.has(roleId)) changedRoleIds.add(roleId);
+  }
+
+  for (const roleId of oldRoleIds) {
+    if (!newRoleIds.has(roleId)) changedRoleIds.add(roleId);
+  }
+
+  const nameChanged = oldMember.displayName !== newMember.displayName || oldMember.nickname !== newMember.nickname;
+  if (!changedRoleIds.size && !nameChanged) return;
+
+  const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
+  const affectedPanelIds = new Set<string>();
+
+  for (const panel of panels) {
+    if (panel.guildId !== newMember.guild.id || !panel.enabled) continue;
+
+    const configuredRoleIds = configuredHierarchyRoleIds(panel);
+    if (!configuredRoleIds.size) continue;
+
+    if (changedRoleIds.size && intersects(changedRoleIds, configuredRoleIds)) {
+      affectedPanelIds.add(panel.id);
+      continue;
+    }
+
+    if (nameChanged && (memberHasAnyRole(oldMember, configuredRoleIds) || memberHasAnyRole(newMember, configuredRoleIds))) {
+      affectedPanelIds.add(panel.id);
+    }
+  }
+
+  if (!affectedPanelIds.size) return;
+
+  console.log(`[HIERARQUIA] Alteracao relevante detectada para ${newMember.user.tag}. Atualizando ${affectedPanelIds.size} painel(is).`);
+  for (const panelId of affectedPanelIds) {
+    scheduleHierarchyRefresh(newMember.guild, context, panelId);
+  }
+}
+
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null) {
   const panels = await context.api.getActiveFivemHierarchyPanels().catch(() => []);
   const lookup = panelId?.trim().toLowerCase() ?? null;
@@ -240,6 +285,26 @@ export function collectHierarchyMembersForPanel(guild: Pick<Guild, "members">, p
   }
 
   return entries;
+}
+
+function configuredHierarchyRoleIds(panel: FivemHierarchyPanel) {
+  return new Set(panel.hierarchies
+    .filter((item) => item.active && item.roleId)
+    .map((item) => item.roleId));
+}
+
+function intersects(left: Set<string>, right: Set<string>) {
+  for (const value of left) {
+    if (right.has(value)) return true;
+  }
+  return false;
+}
+
+function memberHasAnyRole(member: GuildMember, roleIds: Set<string>) {
+  for (const roleId of roleIds) {
+    if (member.roles.cache.has(roleId)) return true;
+  }
+  return false;
 }
 
 async function findHierarchyPanel(guildId: string, context: BotContext, unitId: string | null) {
