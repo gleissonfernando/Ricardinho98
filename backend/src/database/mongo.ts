@@ -588,6 +588,7 @@ export type MongoFivemHierarchyPanel = {
   displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
   emptyText: string;
   enabled: boolean;
+  editorRoleIds: string[];
   footerEnabled: boolean;
   footerIconUrl: string | null;
   footerScope: "unit" | "global";

@@ -35,19 +35,29 @@ export const hierarchyCommand: BotCommand = {
   moduleId: "fivem-hierarchy",
   async execute(interaction: ChatInputCommandInteraction, context: BotContext) {
     if (!interaction.guild) return;
-    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
-      return;
-    }
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === "config" || subcommand === "configurar" || subcommand === "resetar") {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+        await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
+        return;
+      }
       await interaction.reply({ content: "Configure as hierarquias, cargos/patentes, ordem, imagens, texto, rodape e canal na aba **Hierarquia** da Dashboard.", ephemeral: true });
       return;
     }
     await interaction.deferReply({ ephemeral: true });
     const unit = interaction.options.getString("unidade")?.trim().toLowerCase() ?? null;
+    const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
+    if (syncAll && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      await interaction.editReply("Voce precisa de permissao para gerenciar o servidor.");
+      return;
+    }
+    const selectedPanel = syncAll ? null : await findHierarchyPanel(interaction.guild.id, context, unit);
+    if (!syncAll && (!selectedPanel || !canEditHierarchyPanel(interaction.member as GuildMember, selectedPanel, interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) === true))) {
+      await interaction.editReply("Voce nao possui permissao para editar esta hierarquia.");
+      return;
+    }
     if (subcommand === "preview") {
-      const panel = await findHierarchyPanel(interaction.guild.id, context, unit);
+      const panel = selectedPanel;
       if (!panel) {
         await interaction.editReply("Unidade de hierarquia nao encontrada ou desativada.");
         return;
@@ -56,7 +66,6 @@ export const hierarchyCommand: BotCommand = {
       await interaction.editReply(createHierarchyPayload(interaction.guild, panel, panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition, imageUrl: panel.imageUrl } : null, [], members));
       return;
     }
-    const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
     await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, {
       allowCreate: subcommand === "postar"
     });
@@ -363,6 +372,10 @@ function memberHasAnyRole(member: GuildMember, roleIds: Set<string>) {
     if (member.roles.cache.has(roleId)) return true;
   }
   return false;
+}
+
+function canEditHierarchyPanel(member: GuildMember, panel: FivemHierarchyPanel, hasManageGuild: boolean) {
+  return hasManageGuild || panel.editorRoleIds.some((roleId) => member.roles.cache.has(roleId));
 }
 
 async function findHierarchyPanel(guildId: string, context: BotContext, unitId: string | null) {

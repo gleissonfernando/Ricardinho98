@@ -3489,6 +3489,14 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   </select>
                 </label>
                 <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro" })} value={draft.emptyText} />
+                <FivemResourceMultiSelect
+                  disabled={!canManage}
+                  label="Cargos que podem editar este painel"
+                  onChange={(editorRoleIds) => patchDraft({ editorRoleIds })}
+                  options={roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }))}
+                  prefix="@"
+                  values={draft.editorRoleIds}
+                />
                 <label className="block text-xs font-medium text-zinc-400">Imagem do painel
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ imagePosition: event.target.value as FivemHierarchyPanelType["imagePosition"] })} value={draft.imagePosition}>
                     <option value="none">Sem imagem</option>
@@ -3614,6 +3622,7 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
     displayMode: "mention",
     emptyText: "Nenhum membro",
     enabled: true,
+    editorRoleIds: [],
     footerEnabled: true,
     footerIconUrl: null,
     footerScope: "unit",

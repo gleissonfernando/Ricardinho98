@@ -207,6 +207,7 @@ const hierarchyPanelSchema = z.object({
   displayMode: z.enum(["mention", "display_name", "nickname", "name_with_id"]).optional(),
   emptyText: z.string().max(80).optional(),
   enabled: z.boolean().optional(),
+  editorRoleIds: z.array(snowflakeSchema).max(100).optional(),
   footerEnabled: z.boolean().optional(),
   footerIconUrl: z.string().max(2048).nullable().optional(),
   footerScope: z.enum(["unit", "global"]).optional(),

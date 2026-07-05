@@ -26,6 +26,7 @@ export type FivemHierarchyPanelDto = {
   displayMode: "mention" | "display_name" | "nickname" | "name_with_id";
   emptyText: string;
   enabled: boolean;
+  editorRoleIds: string[];
   footerEnabled: boolean;
   footerIconUrl: string | null;
   footerScope: "unit" | "global";
@@ -211,6 +212,7 @@ function defaultPanelDto(guildId: string, botId: string | null, id: string, unit
     displayMode: "mention",
     emptyText: "Nenhum membro",
     enabled: false,
+    editorRoleIds: [],
     footerEnabled: true,
     footerIconUrl: null,
     footerScope: "unit",
@@ -252,6 +254,7 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     displayMode: normalizeDisplayMode(input.displayMode),
     emptyText: normalizeText(input.emptyText, 80) ?? "Nenhum membro",
     enabled: input.enabled === true,
+    editorRoleIds: [...new Set((input.editorRoleIds ?? []).filter(Boolean))],
     footerEnabled: input.footerEnabled !== false,
     footerIconUrl: normalizeText(input.footerIconUrl, 2048),
     footerScope: input.footerScope === "global" ? "global" : "unit",
@@ -303,6 +306,7 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     displayMode: normalizeDisplayMode(row.displayMode),
     emptyText: row.emptyText ?? "Nenhum membro",
     enabled: row.enabled === true,
+    editorRoleIds: row.editorRoleIds ?? [],
     footerEnabled: row.footerEnabled !== false,
     footerIconUrl: row.footerIconUrl ?? null,
     footerScope: row.footerScope === "global" || row.useGlobalFooter ? "global" : "unit",
