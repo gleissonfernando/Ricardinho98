@@ -10,7 +10,7 @@ import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRend
 const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
 const SUMMONS_TEAM_NAME = "Equipe IAB";
-const SUMMONS_WEBHOOK_NAME = "Equipe IAB";
+const SUMMONS_WEBHOOK_NAME = "Intimações Institucionais";
 const DISCORD_ROLE_SELECT_LIMIT = 25;
 const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
 const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
@@ -115,8 +115,10 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
   const settings = await context.api.getSummonsSettings(message.guildId).catch(() => null);
   if (!settings?.anonymityEnabled) return false;
 
+  const competence = recordCompetence(record);
+  const teamName = teamNameForCompetence(competence);
   const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-  if (!member || !hasRole(member, summonsTeamRoleIds(settings))) return false;
+  if (!member || !hasRole(member, roleIdsForCompetence(settings, competence))) return false;
 
   const content = message.content.trim();
   const attachments = [...message.attachments.values()].map((attachment) => attachment.url);
@@ -125,7 +127,7 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
   if (!proxiedContent && attachments.length === 0) return false;
 
   await message.delete().catch((error) => {
-    console.warn("[summons] falha ao apagar mensagem original da Equipe IAB", {
+    console.warn("[summons] falha ao apagar mensagem original da equipe competente", {
       channelId: message.channel.id,
       error: messageOf(error),
       guildId: message.guildId,
@@ -139,7 +141,7 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
     avatarURL: resolvePanelImageUrl(settings.teamAvatarUrl ?? settings.bannerUrl) ?? undefined,
     content: proxiedContent || undefined,
     files: attachments,
-    username: SUMMONS_WEBHOOK_NAME
+    username: teamName
   });
 
   await sendSummonsProxyLog(message, settings, record, proxiedContent, attachments.length);
@@ -424,11 +426,12 @@ async function createSummonsChannel(interaction: any, settings: SummonsSettings,
 async function closeSummons(interaction: any, context: BotContext, settings: SummonsSettings, id: string, action = "finalizada") {
   await interaction.deferUpdate();
   const record = await context.api.getSummons(id);
+  const teamName = teamNameForCompetence(recordCompetence(record));
   const channel = interaction.channel;
   const transcript = settings.transcriptEnabled && channel?.isTextBased() ? await makeTranscript(channel) : null;
   const deleteAt = new Date(Date.now() + settings.deleteDelaySeconds * 1000);
   const updated = await context.api.updateSummons(id, { status: "closing", transcript, closedAt: new Date().toISOString(), closedBy: interaction.user.id, deleteAt: deleteAt.toISOString() });
-  await channel?.send({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: `## Conversa ${action}\nA solicitação foi ${action} pela ${SUMMONS_TEAM_NAME}. Este canal será excluído em ${settings.deleteDelaySeconds} segundos.` }] }], flags: MessageFlags.IsComponentsV2 });
+  await channel?.send({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: `## Conversa ${action}\nA solicitação foi ${action} pela ${teamName}. Este canal será excluído em ${settings.deleteDelaySeconds} segundos.` }] }], flags: MessageFlags.IsComponentsV2 });
   await sendSummonsLog(interaction, settings, updated, action, transcript);
   setTimeout(() => void channel?.delete(`Intimação ${id} finalizada`).then(() => context.api.updateSummons(id, { status: "closed" })).catch(() => undefined), settings.deleteDelaySeconds * 1000).unref();
 }
@@ -510,6 +513,7 @@ export function createSummonsMessageModal(targetId: string) {
 }
 export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
   const competence = recordCompetence(record);
+  const teamName = teamNameForCompetence(competence);
   const deadline = snapshotString(record, "deadline");
   const redirected = snapshotString(record, "redirectReason");
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -519,14 +523,14 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
   return renderComponentsV2Panel({
     accentColor: color(settings.color),
     actions: [actions],
-    description: `Este canal é confidencial e destinado à conversa com a ${SUMMONS_TEAM_NAME}.`,
+    description: `Este canal é confidencial e destinado à conversa com ${teamName}.`,
     fields: [
       `**Intimado:** <@${record.targetId}>`,
       `**Órgão competente:** ${competenceLabel(competence)}`,
-      `**Responsável:** ${snapshotString(record, "responsibleDisplayName") ?? SUMMONS_TEAM_NAME}`,
+      `**Responsável:** ${snapshotString(record, "responsibleDisplayName") ?? teamName}`,
       `**Motivo:** ${record.reason}`,
       "**Status:** Aguardando resposta",
-      `**Criado por:** ${SUMMONS_TEAM_NAME}`,
+      `**Criado por:** ${teamName}`,
       `**Data de criação:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>`,
       `**Prazo:** ${deadline ?? "Não definido"}`,
       `**Redirecionamento:** ${redirected ?? "não aplicado"}`,
@@ -541,6 +545,7 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
 export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecord, guildId: string, channelId: string) {
   const channelUrl = `https://discord.com/channels/${guildId}/${channelId}`;
   const competence = recordCompetence(record);
+  const teamName = teamNameForCompetence(competence);
   const deadline = snapshotString(record, "deadline");
   const targetName = snapshotString(record, "targetDisplayName") ?? `<@${record.targetId}>`;
   const action = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -549,7 +554,7 @@ export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecor
   return renderComponentsV2Panel({
     accentColor: color(settings.color),
     actions: [action],
-    description: `A ${SUMMONS_TEAM_NAME} está solicitando sua presença para uma conversa.`,
+    description: `${teamName} está solicitando sua presença para uma conversa.`,
     fields: [
       `**Intimado:** ${targetName}`,
       `**Órgão responsável:** ${competenceLabel(competence)}`,
@@ -557,11 +562,11 @@ export function summonsDmPayload(settings: SummonsSettings, record: SummonsRecor
       `**Prazo:** ${deadline ?? "Não definido"}`,
       "**Canal:** Acesse o canal abaixo para continuar o atendimento.",
       `**Canal:** <#${channelId}>`,
-      `**Equipe:** ${SUMMONS_TEAM_NAME}`
+      `**Equipe:** ${teamName}`
     ],
     image: settings.bannerUrl ? { imageEnabled: true, imagePosition: "banner", imageUrl: resolvePanelImageUrl(settings.bannerUrl) } : null,
     moduleId: `${SUMMONS_PREFIX}-dm`,
-    title: `📨 Solicitação da ${SUMMONS_TEAM_NAME}`
+    title: `📨 Solicitação - ${teamName}`
   });
 }
 
@@ -760,6 +765,12 @@ function parseCompetence(value: string | undefined): SummonsCompetence | null {
 }
 function competenceLabel(value: SummonsCompetence) {
   return value === "iab" ? "IAB" : value === "conselho" ? "Conselho" : value === "hcmd" ? "High Command" : "Comissário";
+}
+function teamNameForCompetence(value: SummonsCompetence) {
+  if (value === "iab") return "Equipe IAB";
+  if (value === "conselho") return "Conselho";
+  if (value === "hcmd") return "High Command";
+  return "Comissário";
 }
 function roleIdsForCompetence(settings: SummonsSettings, competence: SummonsCompetence) {
   if (competence === "iab") return summonsTeamRoleIds(settings);

@@ -27,6 +27,7 @@ export function FivemResourceSelect({
 }) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => filterOptions(options, query, value ? [value] : []), [options, query, value]);
+  const manual = useMemo(() => manualOption(options, query, value ? [value] : []), [options, query, value]);
 
   return (
     <label className="grid gap-2 text-xs font-medium text-zinc-400">
@@ -35,6 +36,7 @@ export function FivemResourceSelect({
       <select className="h-11 w-full rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none transition focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value || null)} value={value ?? ""}>
         <option value="">{placeholder}</option>
         {filtered.map((option) => <option disabled={option.disabled} key={option.id} value={option.id}>{prefix}{option.name}</option>)}
+        {manual ? <option value={manual.id}>{manual.name}</option> : null}
       </select>
     </label>
   );
@@ -50,7 +52,9 @@ export function FivemResourceMultiSelect({ disabled, label, onChange, options, p
 }) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => filterOptions(options, query, values), [options, query, values]);
-  const availableIds = filtered.filter((option) => !option.disabled).map((option) => option.id);
+  const manual = useMemo(() => manualOption(options, query, values), [options, query, values]);
+  const visible = manual ? [...filtered, manual] : filtered;
+  const availableIds = visible.filter((option) => !option.disabled).map((option) => option.id);
   const allVisibleSelected = availableIds.length > 0 && availableIds.every((id) => values.includes(id));
 
   function toggle(id: string) {
@@ -71,7 +75,7 @@ export function FivemResourceMultiSelect({ disabled, label, onChange, options, p
       </div>
       <SearchInput disabled={disabled} onChange={setQuery} value={query} />
       <div className="discord-scrollbar mt-2 max-h-44 space-y-1 overflow-y-auto">
-        {filtered.length ? filtered.map((option) => (
+        {visible.length ? visible.map((option) => (
           <label className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-sm ${option.disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer text-zinc-300 hover:bg-zinc-900"}`} key={option.id}>
             <input checked={values.includes(option.id)} disabled={disabled || option.disabled} onChange={() => toggle(option.id)} type="checkbox" />
             {option.color !== undefined ? <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: option.color ? `#${option.color.toString(16).padStart(6, "0")}` : "#71717a" }} /> : null}
@@ -90,5 +94,12 @@ function SearchInput({ disabled, onChange, value }: { disabled: boolean; onChang
 function filterOptions(options: FivemResourceOption[], query: string, selectedIds: string[]) {
   const normalized = query.trim().toLocaleLowerCase("pt-BR");
   if (!normalized) return options;
-  return options.filter((option) => selectedIds.includes(option.id) || option.name.toLocaleLowerCase("pt-BR").includes(normalized));
+  return options.filter((option) => selectedIds.includes(option.id) || option.id.includes(normalized) || option.name.toLocaleLowerCase("pt-BR").includes(normalized));
+}
+
+function manualOption(options: FivemResourceOption[], query: string, selectedIds: string[]) {
+  const id = query.trim();
+  if (!/^\d{5,32}$/.test(id)) return null;
+  if (selectedIds.includes(id) || options.some((option) => option.id === id)) return null;
+  return { id, name: `ID manual: ${id}` };
 }
