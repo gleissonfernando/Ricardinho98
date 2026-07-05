@@ -259,6 +259,17 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
     return true;
   }
 
+  if (action === "config_save" && interaction.isButton()) {
+    if (!canManage(interaction.member as GuildMember, interaction.guild.ownerId, config)) {
+      await interaction.reply({ content: "Sem permissao.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferUpdate();
+    const courses = await context.api.listPoliceCourses(interaction.guildId);
+    await interaction.editReply(configPanel(config, courses, "Configuracao salva."));
+    return true;
+  }
+
   if (action === "config_select" && interaction.isStringSelectMenu()) {
     const selectedId = interaction.values[0];
     if (!selectedId || !canManage(interaction.member as GuildMember, interaction.guild.ownerId, config)) {
@@ -267,6 +278,17 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
     }
     const selected = await context.api.getPoliceCourse(interaction.guildId, selectedId);
     await interaction.update(configureCoursePanel(selected));
+    return true;
+  }
+
+  if (action === "config_back" && interaction.isButton()) {
+    if (!canManage(interaction.member as GuildMember, interaction.guild.ownerId, config)) {
+      await interaction.reply({ content: "Sem permissao.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferUpdate();
+    const courses = await context.api.listPoliceCourses(interaction.guildId);
+    await interaction.editReply(configPanel(config, courses));
     return true;
   }
 
@@ -300,6 +322,17 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
         : { panelChannelId: interaction.values[0] ?? null };
     const saved = await context.api.updatePoliceCourse(interaction.guildId, courseId, { ...patch, actorId: interaction.user.id });
     await interaction.editReply(configureCoursePanel(saved));
+    return true;
+  }
+
+  if (action === "course_save" && courseId && interaction.isButton()) {
+    if (!canManage(interaction.member as GuildMember, interaction.guild.ownerId, config)) {
+      await interaction.reply({ content: "Sem permissão.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferUpdate();
+    const saved = await context.api.getPoliceCourse(interaction.guildId, courseId);
+    await interaction.editReply(configureCoursePanel(saved, "Curso salvo."));
     return true;
   }
 
@@ -465,11 +498,12 @@ function coursePanel(course: PoliceCourse, config: PoliceCourseConfig) {
   });
 }
 
-function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[]) {
+function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[], notice?: string) {
   const managerRoles = new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:manager_roles`).setPlaceholder("Cargos que gerenciam cursos").setMinValues(0).setMaxValues(10);
   const finishRoles = new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:finish_roles`).setPlaceholder("Cargos que finalizam ou cancelam").setMinValues(0).setMaxValues(10);
   const managerUsers = new UserSelectMenuBuilder().setCustomId(`${PREFIX}:manager_users`).setPlaceholder("Administrador Geral da Unidade").setMinValues(0).setMaxValues(25);
   const create = new ButtonBuilder().setCustomId(`${PREFIX}:create`).setLabel("Cadastrar Curso").setEmoji("➕").setStyle(ButtonStyle.Primary);
+  const save = new ButtonBuilder().setCustomId(`${PREFIX}:config_save`).setLabel("Salvar Config").setEmoji("💾").setStyle(ButtonStyle.Success);
   const courseSelect = courses.length
     ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       new StringSelectMenuBuilder()
@@ -481,7 +515,8 @@ function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[]) {
   return {
     components: [{ type: 17, accent_color: color(config.accentColor), components: [
       { type: 10, content: "# Cursos / Treinamentos\nCadastre cursos e defina os cargos autorizados. Configuracoes avancadas e upload de banner ficam sincronizados pela dashboard." },
-      new ActionRowBuilder<ButtonBuilder>().addComponents(create).toJSON(),
+      ...(notice ? [{ type: 10, content: `✅ ${notice}` }] : []),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(create, save).toJSON(),
       ...(courseSelect ? [courseSelect] : []),
       new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(managerUsers).toJSON(),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(managerRoles).toJSON(),
@@ -490,7 +525,7 @@ function configPanel(config: PoliceCourseConfig, courses: PoliceCourse[]) {
   };
 }
 
-function configureCoursePanel(course: PoliceCourse) {
+function configureCoursePanel(course: PoliceCourse, notice?: string) {
   const roles = new RoleSelectMenuBuilder()
     .setCustomId(`${PREFIX}:course_roles:${course.id}`)
     .setPlaceholder("Cargos de instrutor")
@@ -507,12 +542,24 @@ function configureCoursePanel(course: PoliceCourse) {
     .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
     .setMinValues(0)
     .setMaxValues(1);
+  const save = new ButtonBuilder()
+    .setCustomId(`${PREFIX}:course_save:${course.id}`)
+    .setLabel("Salvar")
+    .setEmoji("💾")
+    .setStyle(ButtonStyle.Success);
+  const back = new ButtonBuilder()
+    .setCustomId(`${PREFIX}:config_back`)
+    .setLabel("Voltar")
+    .setEmoji("⬅️")
+    .setStyle(ButtonStyle.Secondary);
   return {
     components: [{ type: 17, accent_color: 0x2563eb, components: [
       { type: 10, content: `# Curso cadastrado\n**${escapeMarkdown(course.title)}**\nDefina os cargos, usuários instrutores e o canal do painel. O banner pode ser enviado pela dashboard.` },
+      ...(notice ? [{ type: 10, content: `✅ ${notice}` }] : []),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roles).toJSON(),
       new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(users).toJSON(),
-      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channel).toJSON()
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channel).toJSON(),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(save, back).toJSON()
     ] }],
     flags: MessageFlags.IsComponentsV2 as const
   };

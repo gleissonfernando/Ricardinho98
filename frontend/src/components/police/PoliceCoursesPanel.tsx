@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import {
   createPoliceCourse, deletePoliceCourse, getGuildLiveOptions, getPoliceCoursesDashboard,
   getGuildMemberOptions, publishPoliceCourse, savePoliceCourseConfig, updatePoliceCourse, uploadPoliceCourseBanner
@@ -24,6 +24,7 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editing, setEditing] = useState(false);
   const [banner, setBanner] = useState<File | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
   const [message, setMessage] = useState("");
 
   async function load() {
@@ -63,10 +64,23 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
     } catch (error: any) { setMessage(error?.response?.data?.message || "Nao foi possivel salvar o curso."); }
   }
 
-  async function patchConfig(patch: Partial<PoliceCourseConfig>) {
+  function patchConfig(patch: Partial<PoliceCourseConfig>) {
+    if (!config || !canManage) return;
+    setConfig({ ...config, ...patch });
+  }
+
+  async function saveConfig() {
     if (!botId || !config || !canManage) return;
-    const previous = config; setConfig({ ...config, ...patch });
-    try { setConfig(await savePoliceCourseConfig(guild.id, botId, patch)); } catch { setConfig(previous); }
+    setSavingConfig(true);
+    setMessage("");
+    try {
+      setConfig(await savePoliceCourseConfig(guild.id, botId, config));
+      setMessage("Configuracao geral salva.");
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message || "Nao foi possivel salvar a configuracao geral.");
+    } finally {
+      setSavingConfig(false);
+    }
   }
 
   if (!botId || !config) return <Card><CardContent className="p-6">Carregando cursos...</CardContent></Card>;
@@ -95,22 +109,40 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
         }} /></label>
         <label className="space-y-2 text-sm md:col-span-2"><span>Descricao</span><textarea className="min-h-24 w-full rounded-md border bg-background p-3" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
         {(banner || draft.bannerUrl) && draft.imagePosition !== "none" ? <div className={`border bg-[#313338] p-3 md:col-span-2 ${draft.imagePosition === "thumbnail" ? "grid grid-cols-[1fr_120px] gap-3" : ""}`}><div><strong>Prévia do painel</strong><p className="mt-2 text-sm">{draft.title || "Nome do curso"}</p><p className="text-xs text-zinc-400">Instrutor, horário, vagas, local e alunos serão preenchidos na abertura.</p></div><img className={draft.imagePosition === "thumbnail" ? "h-24 w-24 object-cover" : "max-h-64 w-full object-cover"} src={banner ? URL.createObjectURL(banner) : draft.bannerUrl || ""} alt="Prévia do banner" /></div> : null}
-        <div className="flex gap-2 md:col-span-2"><Button type="submit">Salvar</Button><Button type="button" variant="outline" onClick={() => setEditing(false)}>Cancelar</Button></div>
+        <div className="flex gap-2 md:col-span-2">
+          <Button type="submit"><Save className="mr-2 h-4 w-4" />Salvar</Button>
+          <Button type="button" variant="outline" onClick={() => { setDraft(emptyDraft); setBanner(null); setEditing(false); }}>
+            <ArrowLeft className="mr-2 h-4 w-4" />Voltar
+          </Button>
+        </div>
       </form>
     </CardContent></Card> : null}
-    <Card><CardHeader><CardTitle>Configuracao geral</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">
-      <Toggle label="Sistema ativo" value={config.enabled} change={(enabled) => void patchConfig({ enabled })} />
-      <Toggle label="DM ao finalizar" value={config.dmOnFinish} change={(dmOnFinish) => void patchConfig({ dmOnFinish })} />
-      <Toggle label="DM ao cancelar" value={config.dmOnCancel} change={(dmOnCancel) => void patchConfig({ dmOnCancel })} />
-      <Toggle label="Permitir entrar depois de iniciado" value={config.allowJoinAfterStart} change={(allowJoinAfterStart) => void patchConfig({ allowJoinAfterStart })} />
-      <Toggle label="Permitir sair depois de iniciado" value={config.allowLeaveAfterStart} change={(allowLeaveAfterStart) => void patchConfig({ allowLeaveAfterStart })} />
-      <Toggle label="Bloquear canal ao finalizar" value={config.lockChannelOnFinish} change={(lockChannelOnFinish) => void patchConfig({ lockChannelOnFinish })} />
-      <Toggle label="Bloquear canal ao cancelar" value={config.lockChannelOnCancel} change={(lockChannelOnCancel) => void patchConfig({ lockChannelOnCancel })} />
-      <Toggle label="Apagar painel ao cancelar" value={config.deletePanelOnCancel} change={(deletePanelOnCancel) => void patchConfig({ deletePanelOnCancel })} />
-      <Channel label="Canal de logs" channels={channels} value={config.logChannelId || ""} change={(logChannelId) => void patchConfig({ logChannelId: logChannelId || null })} />
-      <Channel label="Canal padrao" channels={channels} value={config.defaultPanelChannelId || ""} change={(defaultPanelChannelId) => void patchConfig({ defaultPanelChannelId: defaultPanelChannelId || null })} />
-      <MultiSelect label="Administrador Geral da Unidade" options={members.map((member) => ({ id: member.id, name: member.displayName }))} values={config.generalManagerUserIds} change={(generalManagerUserIds) => void patchConfig({ generalManagerUserIds })} />
-    </CardContent></Card>
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Configuracao geral</CardTitle>
+            <CardDescription>Altere os campos e clique em salvar para persistir no bot.</CardDescription>
+          </div>
+          <Button disabled={!canManage || savingConfig} onClick={() => void saveConfig()}>
+            <Save className="mr-2 h-4 w-4" />{savingConfig ? "Salvando..." : "Salvar configuracao"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2">
+        <Toggle label="Sistema ativo" value={config.enabled} change={(enabled) => patchConfig({ enabled })} />
+        <Toggle label="DM ao finalizar" value={config.dmOnFinish} change={(dmOnFinish) => patchConfig({ dmOnFinish })} />
+        <Toggle label="DM ao cancelar" value={config.dmOnCancel} change={(dmOnCancel) => patchConfig({ dmOnCancel })} />
+        <Toggle label="Permitir entrar depois de iniciado" value={config.allowJoinAfterStart} change={(allowJoinAfterStart) => patchConfig({ allowJoinAfterStart })} />
+        <Toggle label="Permitir sair depois de iniciado" value={config.allowLeaveAfterStart} change={(allowLeaveAfterStart) => patchConfig({ allowLeaveAfterStart })} />
+        <Toggle label="Bloquear canal ao finalizar" value={config.lockChannelOnFinish} change={(lockChannelOnFinish) => patchConfig({ lockChannelOnFinish })} />
+        <Toggle label="Bloquear canal ao cancelar" value={config.lockChannelOnCancel} change={(lockChannelOnCancel) => patchConfig({ lockChannelOnCancel })} />
+        <Toggle label="Apagar painel ao cancelar" value={config.deletePanelOnCancel} change={(deletePanelOnCancel) => patchConfig({ deletePanelOnCancel })} />
+        <Channel label="Canal de logs" channels={channels} value={config.logChannelId || ""} change={(logChannelId) => patchConfig({ logChannelId: logChannelId || null })} />
+        <Channel label="Canal padrao" channels={channels} value={config.defaultPanelChannelId || ""} change={(defaultPanelChannelId) => patchConfig({ defaultPanelChannelId: defaultPanelChannelId || null })} />
+        <MultiSelect label="Administrador Geral da Unidade" options={members.map((member) => ({ id: member.id, name: member.displayName }))} values={config.generalManagerUserIds} change={(generalManagerUserIds) => patchConfig({ generalManagerUserIds })} />
+      </CardContent>
+    </Card>
     <div className="grid gap-4 xl:grid-cols-2">{courses.map((course) => <Card key={course.id}>
       {course.bannerUrl ? <img className="h-44 w-full object-cover" src={course.bannerUrl} alt="" /> : null}
       <CardHeader><CardTitle>{course.courseNumber} - {course.title}</CardTitle><CardDescription>{course.status} • {course.participants.length}{course.maxSlots ? `/${course.maxSlots}` : ""} inscritos</CardDescription></CardHeader>
