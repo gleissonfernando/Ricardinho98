@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
+  AtSign,
   Boxes,
   BriefcaseBusiness,
   Building2,
@@ -12,6 +13,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Radio,
   ScrollText,
   Settings,
   Shield,
@@ -1092,7 +1094,10 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "police-actions": Activity,
     "police-patrol-reports": ShieldCheck,
     "patrol-reports": ShieldCheck,
-    "police-reports": ShieldAlert
+    "police-reports": ShieldAlert,
+    "police-flight": Radio,
+    "dm-system": AtSign,
+    "summons-system": ShieldAlert
   };
 
   return icons[moduleId] ?? Boxes;
@@ -1100,6 +1105,7 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
 
 function isPoliceModule(moduleId: string) {
   return moduleId === "fivem-hierarchy"
+    || moduleId === "fivem-absences"
     || moduleId === "police-actions"
     || moduleId === "police-patrol-reports"
     || moduleId === "patrol-reports"

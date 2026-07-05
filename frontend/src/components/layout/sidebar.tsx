@@ -185,6 +185,7 @@ const navItems: NavItem[] = [
 function navSectionForItem(item: NavItem): NavSectionId {
   if (
     item.id === "fivem-hierarchy"
+    || item.id === "fivem-absence"
     || item.id === "police-actions"
     || item.id === "police-patrol-reports"
     || item.id === "police-reports"

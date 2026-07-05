@@ -151,7 +151,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "fivem", label: "FiveM" },
   { id: "fivem-factions", label: "FiveM - Sistema de Faccao" },
   { id: "fivem-corporations", label: "FiveM - Sistema de Corporações" },
-  { id: "fivem-absences", label: "FiveM - Sistema de Ausencias" },
+  { id: "fivem-absences", label: "Policia - RH Ausencias e Adornos" },
   { id: "fivem-orders", label: "Sistema de Encomendas RP" },
   { id: "fivem-washing", label: "FiveM - Sistema de Lavagem" },
   { id: "fivem-drugs", label: "FiveM - Sistema de Drogas" },
@@ -163,6 +163,9 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "police-actions", label: "Policia - Acoes" },
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
   { id: "police-reports", label: "Policia - Denuncias IAB" },
+  { id: "police-flight", label: "Policia - Escalacao DAF" },
+  { id: "dm-system", label: "Policia - Sistema de DM" },
+  { id: "summons-system", label: "Policia - Sistema de Intimacao" },
   { id: "fivem-fac", label: "FiveM - FAC Ausencia" },
   { id: "avisos", label: "Mensagens e Personalização" }
 ];
@@ -420,9 +423,9 @@ const botMenuItems: BotMenuItem[] = [
       {
         id: "fivem-factions",
         label: "Faccoes",
-        description: "Faccoes e ausencias",
+        description: "Gestao de faccoes",
         icon: Users,
-        moduleIds: ["fivem-factions", "fivem-absences", "fivem-fac"]
+        moduleIds: ["fivem-factions"]
       },
       {
         id: "fivem-ammo",
@@ -506,9 +509,9 @@ const botMenuItems: BotMenuItem[] = [
   {
     id: "police-patrol-reports",
     label: "Policia",
-    description: "Hierarquia, acoes e relatorios policiais",
+    description: "RH, comunicacao, hierarquia, acoes e relatorios policiais",
     icon: ShieldCheck,
-    moduleIds: ["fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports"]
+    moduleIds: ["fivem-absences", "fivem-fac", "fivem-hierarchy", "police-actions", "police-patrol-reports", "patrol-reports", "police-reports", "police-flight", "dm-system", "summons-system"]
   },
   {
     id: "integrations",
@@ -4414,10 +4417,12 @@ function isFiveMModule(moduleId: string) {
 
 function isPoliceReleaseModule(moduleId: string) {
   return moduleId === "fivem-hierarchy"
+    || moduleId === "fivem-absences"
     || moduleId === "police-actions"
     || moduleId === "police-patrol-reports"
     || moduleId === "patrol-reports"
     || moduleId === "police-reports"
+    || moduleId === "police-flight"
     || moduleId === "dm-system"
     || moduleId === "summons-system";
 }

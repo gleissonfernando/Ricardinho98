@@ -32,10 +32,10 @@ export const BUILTIN_FIVEM_MODULES: FivemModuleDefinition[] = [
   },
   {
     builtIn: true,
-    description: "Fluxo de ausencias, aprovacoes e historico de justificativas.",
+    description: "Solicitacoes de RH policial, ausencias, aprovacoes e historico.",
     id: "fivem-absences",
-    permissions: "Admin FiveM, Lideranca",
-    title: "Sistema de Ausencias"
+    permissions: "Admin Policia, RH, Lideranca",
+    title: "RH - Ausencias e Adornos"
   },
   {
     builtIn: true,
@@ -99,6 +99,34 @@ export const BUILTIN_FIVEM_MODULES: FivemModuleDefinition[] = [
     id: "police-reports",
     permissions: "Admin Policia, IAB",
     title: "Sistema de Denuncias IAB"
+  },
+  {
+    builtIn: true,
+    description: "Relatorios de patrulhamento exclusivos para oficiais.",
+    id: "police-patrol-reports",
+    permissions: "Admin Policia, Oficial",
+    title: "Relatorios Policiais"
+  },
+  {
+    builtIn: true,
+    description: "Escalacao e organizacao operacional do departamento aereo.",
+    id: "police-flight",
+    permissions: "Admin Policia, DAF",
+    title: "Escalacao DAF"
+  },
+  {
+    builtIn: true,
+    description: "Envio de comunicados privados oficiais com permissoes e logs.",
+    id: "dm-system",
+    permissions: "Admin Policia, Corregedoria",
+    title: "Sistema de DM"
+  },
+  {
+    builtIn: true,
+    description: "Intimacoes policiais em canais privados temporarios com transcript e logs.",
+    id: "summons-system",
+    permissions: "Admin Policia, Corregedoria",
+    title: "Sistema de Intimacao"
   }
 ];
 
