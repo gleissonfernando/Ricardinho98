@@ -17,12 +17,13 @@ import {
 } from "discord.js";
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
-import { renderComponentsV2Panel } from "./panelVisualRenderer";
+import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRenderer";
 import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
 
 const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
 const PAGE_SIZE = 25;
+const IAB_WEBHOOK_NAME = "Equipe IAB";
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -299,6 +300,7 @@ async function createTemporaryProcedureChannel(
     PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.SendMessages,
     PermissionFlagsBits.ManageMessages,
+    PermissionFlagsBits.ManageWebhooks,
     PermissionFlagsBits.AttachFiles,
     PermissionFlagsBits.ReadMessageHistory,
     PermissionFlagsBits.EmbedLinks
@@ -318,7 +320,7 @@ async function createTemporaryProcedureChannel(
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
-        ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] }] : []),
+        ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageWebhooks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] }] : []),
         ...responsibleRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }))
       ],
       reason: `Denuncia IAB criada por ${interaction.user.tag}`
@@ -549,16 +551,44 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
 
   const files = message.attachments.map((attachment) => ({ attachment: attachment.url, name: attachment.name ?? undefined }));
   const content = [
-    isAuthor ? "**Denunciante Anonimo**" : "**Equipe IAB**",
+    isAuthor ? "**Denunciante Anonimo**" : "",
     message.content,
     ...message.stickers.map((sticker) => `[Sticker: ${sticker.name}]`)
   ].filter(Boolean).join("\n");
   const deleted = await message.delete().then(() => true).catch(() => false);
-  await message.channel.send({ allowedMentions: { parse: [] }, content: content || "*Anexo enviado*", files }).catch(async (error) => {
-    await writeLog(context, message.guild!.id, message.author.id, "police-reports.relay_failed", "Falha ao retransmitir mensagem protegida.", { anonymous: ticket.anonymous, channelId: message.channel.id, error: error instanceof Error ? error.message : String(error), isStaff });
-  });
+  if (isStaff) {
+    try {
+      const config = await loadConfig(message.guild.id, context);
+      const webhook = await getOrCreateIabWebhook(message);
+      await webhook.send({
+        allowedMentions: { parse: [] },
+        avatarURL: resolvePanelImageUrl(config?.channelVisual?.imageUrl ?? config?.panelVisual?.imageUrl ?? config?.footerVisual?.imageUrl ?? null) ?? undefined,
+        content: content || undefined,
+        files,
+        username: IAB_WEBHOOK_NAME
+      });
+    } catch (error) {
+      await writeLog(context, message.guild!.id, message.author.id, "police-reports.relay_failed", "Falha ao retransmitir mensagem protegida.", { anonymous: ticket.anonymous, channelId: message.channel.id, error: error instanceof Error ? error.message : String(error), isStaff });
+    }
+  } else {
+    await message.channel.send({ allowedMentions: { parse: [] }, content: content || "*Anexo enviado*", files }).catch(async (error) => {
+      await writeLog(context, message.guild!.id, message.author.id, "police-reports.relay_failed", "Falha ao retransmitir mensagem protegida.", { anonymous: ticket.anonymous, channelId: message.channel.id, error: error instanceof Error ? error.message : String(error), isStaff });
+    });
+  }
   await writeLog(context, message.guild.id, message.author.id, "police-reports.protected_message", "Mensagem retransmitida sem expor identidade no canal.", { anonymous: ticket.anonymous, attachmentCount: message.attachments.size, channelId: message.channel.id, deleted, isStaff, selectedType: ticket.selectedId });
   return true;
+}
+
+async function getOrCreateIabWebhook(message: Message) {
+  if (!("fetchWebhooks" in message.channel) || !("createWebhook" in message.channel)) {
+    throw new Error("Canal IAB nao suporta webhook anonimo.");
+  }
+  const webhooks = await message.channel.fetchWebhooks();
+  const existing = webhooks.find((webhook) => webhook.owner?.id === message.client.user.id && webhook.name === IAB_WEBHOOK_NAME);
+  return existing ?? await message.channel.createWebhook({
+    name: IAB_WEBHOOK_NAME,
+    reason: "Proxy anonimo da Equipe IAB"
+  });
 }
 
 function parsePoliceReportTopic(topic: string) {

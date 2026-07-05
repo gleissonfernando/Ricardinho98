@@ -67,11 +67,16 @@ export async function getSummonsSettings(botId: string, guildId: string) {
   const now = new Date();
   const value: MongoSummonsSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, categoryId: null, temporaryCategoryId: null,
-    authorizedRoleIds: [], moderatorRoleIds: [], logChannelId: null, bannerUrl: null, color: "#f59e0b",
-    publicResponsibleName: "Equipe AB", dmTitle: "📨 Solicitação da Equipe AB",
-    dmDescription: "A Equipe AB está solicitando sua presença para uma conversa.",
+    authorizedRoleIds: [], moderatorRoleIds: [], anonymityEnabled: true, teamRoleIds: [],
+    conselhoRoleIds: [], hcmdRoleIds: [], comissarioRoleIds: [], allowedCommandRoleIds: [],
+    iabCategoryId: null, conselhoCategoryId: null, hcmdCategoryId: null, comissarioCategoryId: null,
+    iabLogChannelId: null, conselhoLogChannelId: null, hcmdLogChannelId: null, comissarioLogChannelId: null,
+    panelBannerUrl: null, defaultDeadline: null, teamAvatarUrl: null,
+    privateLogChannelId: null, logChannelId: null, bannerUrl: null, color: "#f59e0b",
+    publicResponsibleName: "Equipe IAB", dmTitle: "📨 Solicitação da Equipe IAB",
+    dmDescription: "A Equipe IAB está solicitando sua presença para uma conversa.",
     dmButtonText: "🔗 Acessar conversa",
-    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe AB.", deleteDelaySeconds: 10,
+    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe IAB.", deleteDelaySeconds: 10,
     transcriptEnabled: true, createdAt: now, updatedAt: now, updatedBy: null
   };
   await summonsSettings.updateOne({ botId, guildId }, { $setOnInsert: value }, { upsert: true });
@@ -106,6 +111,12 @@ export async function updateSummons(botId: string, id: string, patch: Record<str
   return summonsDto(value);
 }
 
+export async function getSummonsByChannel(botId: string, channelId: string) {
+  const { summons } = await getMongoCollections();
+  const value = await summons.findOne({ botId, channelId, status: { $in: ["active", "closing"] } });
+  return value ? summonsDto(value) : null;
+}
+
 export async function getSummons(botId: string, id: string) {
   const { summons } = await getMongoCollections();
   const value = await summons.findOne({ _id: id, botId });
@@ -128,11 +139,29 @@ function dmSettingsDto(value: MongoDmSettings) {
 function summonsSettingsDto(value: MongoSummonsSettings) {
   return {
     ...value,
-    publicResponsibleName: "Equipe AB",
-    dmTitle: "📨 Solicitação da Equipe AB",
-    dmDescription: "A Equipe AB está solicitando sua presença para uma conversa.",
+    anonymityEnabled: value.anonymityEnabled ?? true,
+    teamRoleIds: value.teamRoleIds ?? [],
+    conselhoRoleIds: value.conselhoRoleIds ?? [],
+    hcmdRoleIds: value.hcmdRoleIds ?? [],
+    comissarioRoleIds: value.comissarioRoleIds ?? [],
+    allowedCommandRoleIds: value.allowedCommandRoleIds ?? value.authorizedRoleIds ?? [],
+    iabCategoryId: value.iabCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
+    conselhoCategoryId: value.conselhoCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
+    hcmdCategoryId: value.hcmdCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
+    comissarioCategoryId: value.comissarioCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
+    iabLogChannelId: value.iabLogChannelId ?? value.privateLogChannelId ?? value.logChannelId ?? null,
+    conselhoLogChannelId: value.conselhoLogChannelId ?? value.privateLogChannelId ?? value.logChannelId ?? null,
+    hcmdLogChannelId: value.hcmdLogChannelId ?? value.privateLogChannelId ?? value.logChannelId ?? null,
+    comissarioLogChannelId: value.comissarioLogChannelId ?? value.privateLogChannelId ?? value.logChannelId ?? null,
+    panelBannerUrl: value.panelBannerUrl ?? value.bannerUrl ?? null,
+    defaultDeadline: value.defaultDeadline ?? null,
+    teamAvatarUrl: value.teamAvatarUrl ?? null,
+    privateLogChannelId: value.privateLogChannelId ?? null,
+    publicResponsibleName: "Equipe IAB",
+    dmTitle: "📨 Solicitação da Equipe IAB",
+    dmDescription: "A Equipe IAB está solicitando sua presença para uma conversa.",
     dmButtonText: "🔗 Acessar conversa",
-    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe AB.",
+    defaultMessage: "Este canal é confidencial e destinado à conversa com a Equipe IAB.",
     id: value._id,
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString()

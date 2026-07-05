@@ -42,21 +42,39 @@ test("DM Components V2 mostra identidade da equipe sem expor o staff", () => {
 
 const summonsSettings: SummonsSettings = {
   authorizedRoleIds: ["111111"],
+  anonymityEnabled: true,
+  allowedCommandRoleIds: ["111111"],
   bannerUrl: null,
   botId: "bot",
   categoryId: null,
+  comissarioCategoryId: null,
+  comissarioLogChannelId: null,
+  comissarioRoleIds: [],
+  conselhoCategoryId: null,
+  conselhoLogChannelId: null,
+  conselhoRoleIds: [],
   color: "#f59e0b",
   defaultMessage: "Responda neste canal.",
+  defaultDeadline: null,
   deleteDelaySeconds: 10,
   dmButtonText: "Responder intimação",
   dmDescription: "Acesse o canal para responder.",
   dmTitle: "Você recebeu uma intimação",
   enabled: true,
   guildId: "guild",
+  hcmdCategoryId: null,
+  hcmdLogChannelId: null,
+  hcmdRoleIds: [],
+  iabCategoryId: null,
+  iabLogChannelId: null,
   id: "settings",
   logChannelId: null,
   moderatorRoleIds: ["222222"],
+  panelBannerUrl: null,
+  privateLogChannelId: null,
   publicResponsibleName: "Equipe NPD",
+  teamAvatarUrl: null,
+  teamRoleIds: ["222222"],
   temporaryCategoryId: null,
   transcriptEnabled: true
 };
@@ -73,12 +91,12 @@ test("painel e DM de intimação ocultam o criador real", () => {
   const dm = JSON.stringify(summonsDmPayload(summonsSettings, summons, summons.guildId, summons.channelId!));
   assert.doesNotMatch(panel, new RegExp(summons.requesterId));
   assert.doesNotMatch(dm, new RegExp(summons.requesterId));
-  assert.match(panel, /Equipe AB/);
+  assert.match(panel, /Equipe IAB/);
   assert.match(dm, /Acessar conversa/);
   assert.ok(dm.includes("discord.com/channels/333333/444444"));
 });
 
-test("modal da Equipe AB possui somente a descrição obrigatória", () => {
+test("modal da Equipe IAB possui somente a descrição obrigatória", () => {
   const modal = createSummonsMessageModal("888888").toJSON();
   const rows = modal.components as Array<{ components: Array<{ custom_id?: string; max_length?: number; required?: boolean }> }>;
   assert.equal(rows.length, 1);

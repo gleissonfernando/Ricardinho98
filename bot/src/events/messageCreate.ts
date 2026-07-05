@@ -12,11 +12,15 @@ import { isBotModuleEnabled } from "../config/env";
 import { canModerateMessage } from "../services/moderationChannelPolicy";
 import { capturePolicePatrolMessage } from "../services/policePatrolReportService";
 import { handlePoliceReportsMessage } from "../services/policeReportsService";
+import { handleSummonsAnonymousMessage } from "../services/communicationService";
 
 const MUSIC_PREFIX_COMMANDS = new Set(["music", "play", "artist", "pause", "resume", "skip", "stop", "queue", "clearqueue", "nowplaying", "volume", "loop", "shuffle"]);
 
 export async function handleMessageCreate(message: Message, context: BotContext) {
   if (await blockMessageIfMaintenance(message)) {
+    return;
+  }
+  if (await handleSummonsAnonymousMessage(message, context)) {
     return;
   }
   await capturePolicePatrolMessage(message, context).catch((error) => {

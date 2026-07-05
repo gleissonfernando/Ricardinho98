@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth, requireBot } from "../middleware/auth";
 import { canReadDevBotModule, canUseDevBotModule, getBotApiPermissions } from "../services/devBotService";
 import {
-  createSummons, DM_MODULE_ID, getDmDashboard, getDmSettings, getSummons, getSummonsDashboard,
+  createSummons, DM_MODULE_ID, getDmDashboard, getDmSettings, getSummons, getSummonsByChannel, getSummonsDashboard,
   getSummonsSettings, recordDm, saveDmSettings, saveSummonsSettings, SUMMONS_MODULE_ID, updateSummons
 } from "../services/communicationService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
@@ -23,6 +23,15 @@ const dmSettingsSchema = z.object({
 const summonsSettingsSchema = z.object({
   enabled: z.boolean().optional(), categoryId: snowflake.nullable().optional(), temporaryCategoryId: snowflake.nullable().optional(),
   authorizedRoleIds: z.array(snowflake).max(50).optional(), moderatorRoleIds: z.array(snowflake).max(50).optional(),
+  anonymityEnabled: z.boolean().optional(), teamRoleIds: z.array(snowflake).max(50).optional(),
+  conselhoRoleIds: z.array(snowflake).max(50).optional(), hcmdRoleIds: z.array(snowflake).max(50).optional(),
+  comissarioRoleIds: z.array(snowflake).max(50).optional(), allowedCommandRoleIds: z.array(snowflake).max(50).optional(),
+  iabCategoryId: snowflake.nullable().optional(), conselhoCategoryId: snowflake.nullable().optional(),
+  hcmdCategoryId: snowflake.nullable().optional(), comissarioCategoryId: snowflake.nullable().optional(),
+  iabLogChannelId: snowflake.nullable().optional(), conselhoLogChannelId: snowflake.nullable().optional(),
+  hcmdLogChannelId: snowflake.nullable().optional(), comissarioLogChannelId: snowflake.nullable().optional(),
+  panelBannerUrl: z.string().max(2048).nullable().optional(), defaultDeadline: z.string().max(120).nullable().optional(),
+  teamAvatarUrl: z.string().max(2048).nullable().optional(), privateLogChannelId: snowflake.nullable().optional(),
   logChannelId: snowflake.nullable().optional(), bannerUrl: z.string().max(2048).nullable().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(), defaultMessage: z.string().max(3000).optional(),
   deleteDelaySeconds: z.coerce.number().int().min(3).max(86400).optional(), transcriptEnabled: z.boolean().optional()
@@ -50,6 +59,7 @@ communicationRouter.post("/bot/summons", requireBot, async (req, res, next) => {
   res.status(201).json({ summons: await createSummons({ botId, ...input }) });
 } catch (error) { next(error); } });
 communicationRouter.get("/bot/summons/item/:id", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID); const value = await getSummons(botId, req.params.id!); if (!value) throw routeError("Intimação não encontrada.", 404); res.json({ summons: value }); } catch (error) { next(error); } });
+communicationRouter.get("/bot/summons/channel/:channelId", requireBot, async (req, res, next) => { try { const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID); res.json({ summons: await getSummonsByChannel(botId, snowflake.parse(req.params.channelId)) }); } catch (error) { next(error); } });
 communicationRouter.patch("/bot/summons/item/:id", requireBot, async (req, res, next) => { try {
   const botId = await botIdFor(req); await licensed(botId, SUMMONS_MODULE_ID);
   const patch = z.object({ channelId: snowflake.nullable().optional(), panelMessageId: snowflake.nullable().optional(), dmMessageId: snowflake.nullable().optional(), dmDeliveryStatus: z.enum(["pending", "sent", "failed"]).optional(), dmDeliveryError: z.string().max(1000).nullable().optional(), status: z.enum(["creating", "active", "closing", "closed", "failed"]).optional(), transcript: z.string().max(500000).nullable().optional(), closedAt: z.coerce.date().nullable().optional(), closedBy: snowflake.nullable().optional(), deleteAt: z.coerce.date().nullable().optional() }).parse(req.body);
