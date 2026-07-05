@@ -69,7 +69,7 @@ export async function runPoliceCourseCommand(interaction: ChatInputCommandIntera
   }
   const member = interaction.member as GuildMember;
   const courses = (await context.api.listPoliceCourses(interaction.guildId))
-    .filter((course) => course.status !== "open" && course.status !== "in_progress")
+    .filter(canStartCourse)
     .filter((course) => canTeach(member, interaction.guild!.ownerId, config, course));
   if (!courses.length) {
     await interaction.reply({ content: "Você não possui nenhum curso autorizado para iniciar.", ephemeral: true });
@@ -137,6 +137,10 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
     const selectedId = interaction.values[0];
     if (!selectedId) return true;
     const course = await context.api.getPoliceCourse(interaction.guildId, selectedId);
+    if (!canStartCourse(course)) {
+      await interaction.reply({ content: "Este curso ja possui uma turma ativa.", ephemeral: true });
+      return true;
+    }
     if (!canTeach(interaction.member as GuildMember, interaction.guild.ownerId, config, course)) {
       await interaction.reply({ content: "Você não possui permissão para iniciar este curso.", ephemeral: true });
       return true;
@@ -154,6 +158,10 @@ export async function handlePoliceCourseInteraction(interaction: Interaction, co
       return true;
     }
     const channelId = course.panelChannelId || config.defaultPanelChannelId;
+    if (!canStartCourse(course)) {
+      await interaction.editReply("Este curso ja possui uma turma ativa.");
+      return true;
+    }
     if (!channelId) {
       await interaction.editReply("Configure o canal do painel deste curso antes de iniciá-lo.");
       return true;
@@ -657,8 +665,15 @@ function canManage(member: GuildMember, ownerId: string, configOrRoleIds: Police
 }
 function canTeach(member: GuildMember, ownerId: string, config: PoliceCourseConfig, course: PoliceCourse) {
   return canManage(member, ownerId, config)
+    || course.createdBy === member.id
     || course.authorizedUserIds.includes(member.id)
     || course.authorizedRoleIds.some((roleId) => member.roles.cache.has(roleId));
+}
+function canStartCourse(course: PoliceCourse) {
+  return course.status === "draft"
+    || course.status === "finished"
+    || course.status === "canceled"
+    || (course.status === "open" && course.participants.length === 0);
 }
 function canControlCourse(member: GuildMember, ownerId: string, config: PoliceCourseConfig, course: PoliceCourse) {
   return member.id === course.instructorId

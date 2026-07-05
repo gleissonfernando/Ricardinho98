@@ -249,7 +249,15 @@ export async function startPoliceCourse(
 ) {
   const { policeCourses } = await getMongoCollections();
   const result = await policeCourses.findOneAndUpdate(
-    { _id: courseId, botId, guildId, status: { $in: ["draft", "finished", "canceled"] } },
+    {
+      _id: courseId,
+      botId,
+      guildId,
+      $or: [
+        { status: { $in: ["draft", "finished", "canceled"] } },
+        { status: "open", participants: { $size: 0 } }
+      ]
+    },
     {
       $set: {
         instructorId: input.instructorId,
