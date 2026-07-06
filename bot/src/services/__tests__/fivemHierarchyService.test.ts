@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectHierarchyMembersForPanel, getHierarchyPanelVisualIds } from '../fivemHierarchyService';
+import {
+  collectHierarchyMembersForPanel,
+  getHierarchyPanelVisualIds,
+  selectHierarchyPanelsForMemberUpdate
+} from '../fivemHierarchyService';
 
 test('gera ids de visual exclusivos para cada painel de hierarquia', () => {
   assert.deepStrictEqual(
@@ -74,6 +78,37 @@ test('remove apenas do painel cujo cargo foi perdido', () => {
   assert.equal(collectHierarchyMembersForPanel(fakeGuild([before]) as any, dafPanel as any).length, 1);
   assert.equal(collectHierarchyMembersForPanel(fakeGuild([after]) as any, dafPanel as any).length, 0);
   assert.equal(collectHierarchyMembersForPanel(fakeGuild([after]) as any, swatPanel as any).length, 1);
+});
+
+test('atualiza somente os paineis afetados pela mudanca de cargo', () => {
+  const panels = [
+    fakePanel('panel-daf', 'daf', 'role-daf'),
+    fakePanel('panel-swat', 'swat', 'role-swat'),
+    fakePanel('panel-traffic', 'traffic', 'role-traffic')
+  ];
+
+  const affected = selectHierarchyPanelsForMemberUpdate(
+    panels as any,
+    new Set(['role-daf', 'role-swat']),
+    new Set()
+  );
+
+  assert.deepStrictEqual(affected.map((panel) => panel.id), ['panel-daf', 'panel-swat']);
+});
+
+test('alteracao de nome atualiza apenas paineis onde o membro aparece', () => {
+  const panels = [
+    fakePanel('panel-daf', 'daf', 'role-daf'),
+    fakePanel('panel-swat', 'swat', 'role-swat')
+  ];
+
+  const affected = selectHierarchyPanelsForMemberUpdate(
+    panels as any,
+    new Set(),
+    new Set(['role-swat'])
+  );
+
+  assert.deepStrictEqual(affected.map((panel) => panel.id), ['panel-swat']);
 });
 
 test('deduplica apenas dentro do mesmo bloco do mesmo painel', () => {
