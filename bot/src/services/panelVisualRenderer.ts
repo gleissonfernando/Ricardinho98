@@ -63,7 +63,7 @@ export function renderComponentsV2Panel(input: {
   const extraFooterIconUrl = extraMedia.find((item) => item.position === "footer")?.url ?? null;
   if (input.footerText) {
     components.push({ type: 14, divider: true, spacing: 1 });
-    components.push(compactSection(input.footerText, footerIconUrl ?? extraFooterIconUrl));
+    components.push(footerSection(input.footerText, footerIconUrl ?? extraFooterIconUrl));
   }
   components.push(...actions);
 
@@ -90,6 +90,10 @@ function compactSection(content: string, iconUrl: string | null) {
   return iconUrl
     ? { type: 9, components: [{ type: 10, content }], accessory: { type: 11, media: { url: iconUrl }, description: content.replace(/[*_#]/g, "").slice(0, 100) } }
     : { type: 10, content };
+}
+function footerSection(content: string, _iconUrl: string | null) {
+  void _iconUrl;
+  return { type: 10, content: content.trim().startsWith("-#") ? content : `-# ${content}` };
 }
 function normalizePosition(position: PanelVisualPosition | undefined): PanelVisualPosition { return position && position !== "none" ? position : "none"; }
 

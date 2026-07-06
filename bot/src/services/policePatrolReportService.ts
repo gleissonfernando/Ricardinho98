@@ -247,17 +247,33 @@ async function sendLog(interaction: ButtonInteraction | ModalSubmitInteraction, 
   if (!logChannelId || !interaction.guild) return;
   const channel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
-  await channel.send(pendingLogPayload(report, messages));
+  const visuals = await getPanelVisualSlots(context, interaction.guild.id, "police-patrol-reports");
+  await channel.send(pendingLogPayload(interaction.guild.name, report, messages, visuals[0] ?? null));
 }
 
-function pendingLogPayload(report: PolicePatrolReport, messages: PolicePatrolMessage[]) {
+function pendingLogPayload(guildName: string, report: PolicePatrolReport, messages: PolicePatrolMessage[], image: PanelVisualConfig | null) {
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${PREFIX}:approve:${report.id}`).setLabel("Aprovar relatorio").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`${PREFIX}:reject:${report.id}`).setLabel("Reprovar relatorio").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(`${PREFIX}:view:${report.id}`).setLabel("Ver completo").setStyle(ButtonStyle.Secondary)
   );
-  const details = `${reportText(report, messages)}\n\n**Solicitado por:** <@${report.authorId}>\n**Canal de origem:** ${report.channelId ? `<#${report.channelId}>` : "-"}\n**Status:** Pendente de avaliacao`;
-  return { components: [{ type: 17, accent_color: 0xf59e0b, components: [{ type: 10, content: details.slice(0, 3900) }, actions] }], flags: MessageFlags.IsComponentsV2 as const };
+  return renderComponentsV2Panel({
+    accentColor: 0xf59e0b,
+    actions: [actions],
+    description: "",
+    fields: [
+      `**Usuario**\n<@${report.authorId}>\nID do Usuário: ${report.authorId}`,
+      `**Registro**\nRelatório finalizado para avaliação`,
+      `**Policial**\n<@${report.officerId}> | ${report.officerId}`,
+      `**Resumo**\nMensagens: ${report.messageCount}\nAnexos: ${report.attachmentCount}\nTempo: ${duration(report.durationMinutes)}\nStatus: Pendente de avaliação`,
+      `**Canal**\n${report.channelId ? `<#${report.channelId}>` : "Canal não informado"}\nServerId: ${guildName}`,
+      `**Descrição**\n${reportText(report, messages).slice(0, 1200)}`
+    ],
+    footerText: `-# ID do registro: ${report.id} - ${formatLogDate(new Date())}`,
+    image,
+    moduleId: "police-patrol-reports",
+    title: "Registro de Relatório"
+  });
 }
 
 function evaluationLogPayload(report: PolicePatrolReport) {
@@ -428,6 +444,7 @@ async function canViewReport(interaction: ButtonInteraction | StringSelectMenuIn
 function hasRoleOrAdmin(member: GuildMember, roleIds: string[]) { return member.permissions.has(PermissionFlagsBits.Administrator) || member.permissions.has(PermissionFlagsBits.ManageGuild) || member.roles.cache.some((role) => roleIds.includes(role.id)); }
 function ids(values: string[] | undefined, fallback: string | null | undefined) { return [...new Set([...(values ?? []), fallback].filter((value): value is string => typeof value === "string" && value.length > 0))]; }
 function formatMentions(values: string[], fallback: string) { return values.length ? values.map((id) => `<#${id}>`).join(", ") : fallback; }
+function formatLogDate(value: Date) { return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", hour: "2-digit", hour12: false, minute: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo", year: "numeric" }).format(value).replace(",", ""); }
 function duration(minutes: number | null) { if (minutes === null) return "-"; return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`; }
 function slug(value: string) { return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 35) || "policial"; }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!)); }

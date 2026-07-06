@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireBot } from "../middleware/auth";
+import { devBotRealtimeRoom, emitRealtimeToRoom } from "../realtime/events";
 import { authorizeBotCommand } from "../services/botCommandAuthorizationService";
 import { authorizeBotRuntimeModule, getBotGuildConfig, getBotApiPermissions, updateBotGuildModuleConfig, updateBotGuildModuleRuntimeStatus } from "../services/devBotService";
 import { getMaintenanceState } from "../services/maintenanceService";
@@ -34,6 +35,19 @@ const policeReportsPanelStateSchema = z.object({
 });
 const policeRhPanelStateSchema = z.object({
   messageId: z.string().regex(/^\d{5,32}$/).nullable()
+});
+const snowflake = z.string().regex(/^\d{5,32}$/);
+const policeRhRuntimeConfigSchema = z.object({
+  absenceApproverRoleIds: z.array(snowflake).max(100).optional(),
+  absenceLogChannelId: snowflake.nullable().optional(),
+  absencePanelChannelId: snowflake.nullable().optional(),
+  absenceRoleId: snowflake.nullable().optional(),
+  adornoLogChannelId: snowflake.nullable().optional(),
+  adornoPanelChannelId: snowflake.nullable().optional(),
+  enabled: z.boolean().optional(),
+  panelChannelId: snowflake.nullable().optional(),
+  rhLogChannelId: snowflake.nullable().optional(),
+  rhPanelChannelId: snowflake.nullable().optional()
 });
 const policeFlightStateSchema = z.object({
   panelMessageId: z.string().regex(/^\d{5,32}$/).nullable().optional(),
@@ -177,6 +191,50 @@ botDevApiRouter.post("/runtime/guilds/:guildId/police-rh/panel-state", async (re
       config: { ...currentConfig, panelMessageId: input.messageId }
     });
     return res.json({ module });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.post("/runtime/guilds/:guildId/police-rh/config", async (req, res, next) => {
+  try {
+    const botId = await resolveRequestBotId(req);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const input = policeRhRuntimeConfigSchema.parse(req.body ?? {});
+    const authorization = await authorizeBotRuntimeModule({ botId, guildId, moduleId: "police-rh" });
+    if (!authorization.allowed || !botId) return res.status(403).json({ message: authorization.reason });
+    const current = await getBotGuildConfig(botId, guildId);
+    const modules = current.modules as Record<string, Record<string, unknown>>;
+    const currentConfig = modules["police-rh"] ?? {};
+    const nextConfig = {
+      ...currentConfig,
+      ...input,
+      ...(input.panelChannelId ? { rhPanelChannelId: input.rhPanelChannelId ?? input.panelChannelId } : {}),
+      ...(input.absencePanelChannelId ? { panelChannelId: currentConfig.panelChannelId ?? input.absencePanelChannelId } : {}),
+      ...(input.adornoPanelChannelId ? { panelChannelId: currentConfig.panelChannelId ?? input.adornoPanelChannelId } : {})
+    };
+    const module = await updateBotGuildModuleConfig({
+      botId,
+      guildId,
+      guildName: current.guildName,
+      moduleId: "police-rh",
+      config: nextConfig
+    });
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "update", botId, guildId });
+    return res.json({ module });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.post("/runtime/guilds/:guildId/police-rh/publish", async (req, res, next) => {
+  try {
+    const botId = await resolveRequestBotId(req);
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const authorization = await authorizeBotRuntimeModule({ botId, guildId, moduleId: "police-rh" });
+    if (!authorization.allowed || !botId) return res.status(403).json({ message: authorization.reason });
+    emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-rh:panel_update", { action: "publish", botId, guildId });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }

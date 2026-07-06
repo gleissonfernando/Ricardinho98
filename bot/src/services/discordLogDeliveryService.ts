@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, type Guild, type TextBasedChannel } from "discord.js";
 import { currentRuntimeBotId, env, isBotModuleEnabled } from "../config/env";
 import type { BotContext, LogCategory } from "../types";
 import type { DiscordLogDispatchEvent } from "../websocket/socketClient";
@@ -63,44 +63,7 @@ async function deliverDiscordLog(context: BotContext, log: DiscordLogDispatchEve
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(colorForType(log.type, category))
-    .setTitle(logTitle(log))
-    .setDescription(limitText(log.message, 2_000))
-    .addFields(
-      {
-        name: "Categoria",
-        value: CATEGORY_LABELS[category],
-        inline: true
-      },
-      {
-        name: "Tipo",
-        value: `\`${limitText(log.type, 240)}\``,
-        inline: true
-      },
-      {
-        name: "Data e hora",
-        value: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium", timeZone: "America/Sao_Paulo" }).format(new Date(log.createdAt)),
-        inline: false
-      }
-    )
-    .setFooter({
-      text: `${guild.client.user.username} • Log ID ${log.id}`
-    })
-    .setTimestamp(new Date(log.createdAt));
-
-  if (log.userId) {
-    embed.addFields({
-      name: "Usuario",
-      value: `<@${log.userId}> (\`${log.userId}\`)`
-    });
-    const user = await guild.client.users.fetch(log.userId).catch(() => null);
-    if (user) embed.setThumbnail(user.displayAvatarURL({ size: 128 }));
-  }
-
-  for (const field of metadataFields(log.metadata)) {
-    embed.addFields(field);
-  }
+  const embed = await buildStandardLogEmbed(guild, channel, log, category);
 
   await channel.send({
     allowedMentions: {
@@ -110,6 +73,49 @@ async function deliverDiscordLog(context: BotContext, log: DiscordLogDispatchEve
   }).catch((error) => {
     console.warn("[logs] falha ao enviar log no Discord:", error instanceof Error ? error.message : error);
   });
+}
+
+async function buildStandardLogEmbed(guild: Guild, deliveryChannel: TextBasedChannel, log: DiscordLogDispatchEvent, category: LogCategory) {
+  const metadata = objectMetadata(log.metadata);
+  const isCommand = log.type.toLowerCase().startsWith("commands.") || metadata.kind === "command";
+  const embed = new EmbedBuilder()
+    .setColor(isCommand ? 0x2b2d31 : colorForType(log.type, category))
+    .setTitle(isCommand ? "Registro de Comando" : `Registro de ${logTitle(log)}`)
+    .setFooter({ text: footerText(log, metadata) })
+    .setTimestamp(new Date(log.createdAt));
+
+  const actorId = stringValue(metadata.userId) ?? log.userId ?? null;
+
+  if (actorId) {
+    const member = await guild.members.fetch(actorId).catch(() => null);
+    const user = member?.user ?? await guild.client.users.fetch(actorId).catch(() => null);
+    embed.addFields({
+      name: "Usuario",
+      value: `${user ? `<@${actorId}> | ${displayName(user.username)}` : `<@${actorId}>`}\nID do Usuário: ${actorId}`,
+      inline: false
+    });
+  }
+
+  if (isCommand) {
+    embed.addFields(
+      { name: "Comando", value: `/${stringValue(metadata.commandName) ?? commandNameFromType(log.type) ?? "desconhecido"}`, inline: false },
+      { name: "Opções", value: optionsText(metadata), inline: false },
+      { name: "Canal", value: channelText(guild, stringValue(metadata.channelId), deliveryChannel), inline: false }
+    );
+    return embed;
+  }
+
+  embed.addFields(
+    { name: "Evento", value: limitText(log.message, 1_000), inline: false },
+    { name: "Tipo", value: `\`${limitText(log.type, 240)}\``, inline: false },
+    { name: "Canal", value: channelText(guild, stringValue(metadata.channelId), deliveryChannel), inline: false }
+  );
+
+  for (const field of metadataFields(metadata)) {
+    embed.addFields(field);
+  }
+
+  return embed;
 }
 
 function belongsToRuntime(botId: string | null) {
@@ -154,7 +160,9 @@ function logTitle(log: DiscordLogDispatchEvent) {
     "voice.move": "🔁 Movimentação em Call",
     "voice.temporary_call": "🎧 Call Temporária",
     "roles.update": "Cargos atualizados",
-    "dashboard.settings.updated": "Configuracao atualizada"
+    "dashboard.settings.updated": "Configuracao atualizada",
+    "commands.executed": "Comando",
+    "commands.failed": "Comando"
   };
 
   return titles[log.type] ?? CATEGORY_LABELS[logCategoryForType(log.type)];
@@ -171,12 +179,7 @@ function colorForType(type: string, category: LogCategory) {
   return CATEGORY_COLORS[category];
 }
 
-function metadataFields(metadata: unknown) {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return [];
-  }
-
-  const record = metadata as Record<string, unknown>;
+function metadataFields(record: Record<string, unknown>) {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
 
   addMetadataField(fields, "Conteudo", record.content);
@@ -191,7 +194,7 @@ function metadataFields(metadata: unknown) {
   addMetadataField(fields, "ID da mensagem", record.messageId);
   addMetadataField(fields, "Tempo na call (segundos)", record.durationSeconds);
 
-  return fields.slice(0, 4);
+  return fields.slice(0, 3);
 }
 
 function addMetadataField(
@@ -221,6 +224,70 @@ function formatMetadataValue(value: unknown) {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
 
   return "";
+}
+
+function objectMetadata(metadata: unknown) {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function displayName(username: string) {
+  return username.replace(/[`*_~|]/g, "");
+}
+
+function commandNameFromType(type: string) {
+  const match = /^commands\.([^.]+)/i.exec(type.trim());
+  return match?.[1] && !["executed", "failed"].includes(match[1]) ? match[1] : null;
+}
+
+function optionsText(metadata: Record<string, unknown>) {
+  const options = metadata.options;
+
+  if (options && typeof options === "object" && !Array.isArray(options)) {
+    const lines = Object.entries(options as Record<string, unknown>)
+      .map(([key, value]) => `${key}: ${formatOptionValue(value)}`)
+      .filter((line) => !line.endsWith(": "));
+
+    if (lines.length) return limitText(lines.join("\n"), 1_000);
+  }
+
+  return "Sem opções.";
+}
+
+function formatOptionValue(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(formatOptionValue).filter(Boolean).join(", ");
+  return "";
+}
+
+function channelText(guild: Guild, channelId: string | null, deliveryChannel: TextBasedChannel) {
+  const id = channelId ?? ("id" in deliveryChannel ? deliveryChannel.id : null);
+  const mention = id ? `<#${id}>` : "Canal não informado";
+  return `${mention}\nServerId: ${guild.name}`;
+}
+
+function footerText(log: DiscordLogDispatchEvent, metadata: Record<string, unknown>) {
+  const interactionId = stringValue(metadata.interactionId);
+  const label = interactionId ? `ID da interação: ${interactionId}` : `ID do registro: ${log.id}`;
+  return `${label} - ${formatFooterDate(log.createdAt)}`;
+}
+
+function formatFooterDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Sao_Paulo",
+    year: "numeric"
+  }).format(new Date(value));
 }
 
 function limitText(value: string, maxLength: number) {

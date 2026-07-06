@@ -9,6 +9,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
+  type ChatInputCommandInteraction,
   type Client,
   type Guild,
   type Interaction,
@@ -17,6 +18,7 @@ import {
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
 import { renderComponentsV2Panel, type PanelVisualConfig, type PanelVisualPosition } from "./panelVisualRenderer";
+import { sendPoliceLog } from "./policeLogService";
 
 const MODULE_ID = "police-rh";
 const PREFIX = "police_rh";
@@ -37,6 +39,7 @@ type PoliceRhConfig = {
   panelFooterImageUrl: string;
   absenceEnabled: boolean;
   absenceCategoryId: string | null;
+  absencePanelChannelId: string | null;
   absenceLogChannelId: string | null;
   absenceRoleId: string | null;
   absenceApproverRoleIds: string[];
@@ -73,6 +76,80 @@ export function startPoliceRhService(client: Client<true>, context: BotContext) 
       console.warn("[police-rh] falha ao publicar painel:", error instanceof Error ? error.message : error);
     });
   });
+}
+
+export async function showPoliceRhConfigPanel(interaction: ChatInputCommandInteraction, context: BotContext) {
+  if (!interaction.guildId || !interaction.guild) {
+    await interaction.reply({ content: "Use este comando dentro de um servidor.", ephemeral: true });
+    return;
+  }
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) && interaction.guild.ownerId !== interaction.user.id) {
+    await interaction.reply({ content: "Voce precisa ser administrador para configurar o RH.", ephemeral: true });
+    return;
+  }
+  const botId = currentRuntimeBotId();
+  if (!botId) {
+    await interaction.reply({ content: "Bot runtime nao identificado para sincronizar com a dashboard.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const patch: Record<string, unknown> = {};
+  const panelChannel = interaction.options.getChannel("canal_painel", false, [ChannelType.GuildText]);
+  const absenceChannel = interaction.options.getChannel("canal_ausencia", false, [ChannelType.GuildText]);
+  const adornmentChannel = interaction.options.getChannel("canal_adorno", false, [ChannelType.GuildText]);
+  const rhLogChannel = interaction.options.getChannel("logs_rh", false, [ChannelType.GuildText]);
+  const absenceLogChannel = interaction.options.getChannel("logs_ausencia", false, [ChannelType.GuildText]);
+  const adornmentLogChannel = interaction.options.getChannel("logs_adorno", false, [ChannelType.GuildText]);
+  const absenceRole = interaction.options.getRole("cargo_ausencia", false);
+  const approverRole = interaction.options.getRole("cargo_aprovador", false);
+  const enabled = interaction.options.getBoolean("ativo");
+  const publish = interaction.options.getBoolean("publicar_painel") ?? false;
+
+  if (panelChannel) Object.assign(patch, { panelChannelId: panelChannel.id, rhPanelChannelId: panelChannel.id });
+  if (absenceChannel) patch.absencePanelChannelId = absenceChannel.id;
+  if (adornmentChannel) patch.adornoPanelChannelId = adornmentChannel.id;
+  if (rhLogChannel) patch.rhLogChannelId = rhLogChannel.id;
+  if (absenceLogChannel) patch.absenceLogChannelId = absenceLogChannel.id;
+  if (adornmentLogChannel) patch.adornoLogChannelId = adornmentLogChannel.id;
+  if (absenceRole) patch.absenceRoleId = absenceRole.id;
+  if (enabled !== null) patch.enabled = enabled;
+
+  if (approverRole) {
+    const current = await context.api.getBotGuildConfig(botId, interaction.guildId);
+    const currentConfig = current.modules[MODULE_ID] ?? {};
+    const currentRoles = Array.isArray(currentConfig.absenceApproverRoleIds)
+      ? currentConfig.absenceApproverRoleIds.filter((item): item is string => typeof item === "string")
+      : [];
+    patch.absenceApproverRoleIds = [...new Set([...currentRoles, approverRole.id])];
+  }
+
+  const saved = Object.keys(patch).length
+    ? await context.api.savePoliceRhRuntimeConfig(interaction.guildId, patch)
+    : { config: (await context.api.getBotGuildConfig(botId, interaction.guildId)).modules[MODULE_ID] ?? {} };
+
+  if (publish) {
+    await context.api.requestPoliceRhPanelPublish(interaction.guildId).catch(() => null);
+  }
+
+  const config = await loadConfig(interaction.guildId, context);
+  await interaction.editReply([
+    "Configuração do RH policial sincronizada com a dashboard.",
+    "",
+    `Status: ${config?.enabled ? "ativo" : "inativo"}`,
+    `Painel principal: ${config?.panelChannelId ? `<#${config.panelChannelId}>` : "não configurado"}`,
+    `Solicitações de ausência: ${config?.absencePanelChannelId ? `<#${config.absencePanelChannelId}>` : "não configurado"}`,
+    `Solicitações de adorno: ${config?.adornoPanelChannelId ? `<#${config.adornoPanelChannelId}>` : "não configurado"}`,
+    `Logs RH: ${config?.rhLogChannelId ? `<#${config.rhLogChannelId}>` : "não configurado"}`,
+    `Logs ausência: ${config?.absenceLogChannelId ? `<#${config.absenceLogChannelId}>` : "não configurado"}`,
+    `Logs adorno: ${config?.adornoLogChannelId ? `<#${config.adornoLogChannelId}>` : "não configurado"}`,
+    `Cargo de ausência: ${config?.absenceRoleId ? `<@&${config.absenceRoleId}>` : "não configurado"}`,
+    `Aprovadores: ${config?.absenceApproverRoleIds.length ? config.absenceApproverRoleIds.map((roleId) => `<@&${roleId}>`).join(", ") : "não configurado"}`,
+    "",
+    publish ? "Publicação do painel solicitada." : "Use publicar_painel:true para publicar/atualizar o painel."
+  ].join("\n"));
+  void saved;
 }
 
 export async function handlePoliceRhInteraction(interaction: Interaction, context: BotContext) {
@@ -163,7 +240,7 @@ function adornoModal() {
     .setTitle("🎖️ Solicitar Adorno")
     .addComponents(
       inputRow("adornmentNumber", "Número do Adorno", "Ex: 61"),
-      inputRow("imageUrl", "Link da foto do adorno", "https://...")
+      inputRow("imageUrl", "Link do comprovante do adorno", "https://...")
     );
 }
 
@@ -174,34 +251,20 @@ function inputRow(id: string, label: string, placeholder: string, style: TextInp
 }
 
 async function createAbsenceRequestChannel(interaction: ModalSubmitInteraction, context: BotContext, config: PoliceRhConfig) {
-  const categoryId = config.absenceCategoryId;
   const approverRoleIds = config.absenceApproverRoleIds;
-  if (!categoryId) {
-    await interaction.reply({ content: "📂 Categoria temporária não configurada.", ephemeral: true });
+  const channelId = config.absencePanelChannelId;
+  if (!channelId) {
+    await interaction.reply({ content: "📢 Canal de solicitações de ausência não configurado.", ephemeral: true });
     return;
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guild = interaction.guild!;
-  const category = await guild.channels.fetch(categoryId).catch(() => null);
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    await interaction.editReply("❌ Categoria temporária inválida ou removida.");
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) {
+    await interaction.editReply("❌ Canal de solicitações de ausência inválido ou removido.");
     return;
   }
-  const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
   const returnDate = interaction.fields.getTextInputValue("returnDate");
-  const channel = await guild.channels.create({
-    name: safeChannelName(`absence-${interaction.user.username}`),
-    parent: category.id,
-    topic: `${PREFIX}|absence|${interaction.user.id}|${Date.now()}|${encodeURIComponent(returnDate)}`.slice(0, 1024),
-    type: ChannelType.GuildText,
-    permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
-      ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] }] : []),
-      ...approverRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
-    ],
-    reason: `Solicitacao RH criada por ${interaction.user.tag}`
-  });
   const fields = [
     `**👤 Solicitante:** <@${interaction.user.id}>`,
     `**📅 Início:** ${interaction.fields.getTextInputValue("startDate")}`,
@@ -213,9 +276,9 @@ async function createAbsenceRequestChannel(interaction: ModalSubmitInteraction, 
     allowedMentions: { roles: approverRoleIds, users: [interaction.user.id] },
     content: [`<@${interaction.user.id}>`, ...approverRoleIds.map((roleId) => `<@&${roleId}>`)].join(" ")
   }).catch(() => null);
-  await channel.send(absenceRequestPanelPayload(config, fields));
+  await channel.send(absenceRequestPanelPayload(config, fields, interaction.user.id, returnDate));
   await writeLog(context, guild.id, interaction.user.id, "police-rh.absence.created", "📋 Solicitação de ausência criada.", { channelId: channel.id, fields });
-  await interaction.editReply(`✅ Solicitação criada: <#${channel.id}>`);
+  await interaction.editReply(`✅ Solicitação enviada para <#${channel.id}>.`);
 }
 
 async function publishAdornmentRequest(interaction: ModalSubmitInteraction, context: BotContext, config: PoliceRhConfig) {
@@ -224,7 +287,7 @@ async function publishAdornmentRequest(interaction: ModalSubmitInteraction, cont
     return;
   }
   const imageUrl = interaction.fields.getTextInputValue("imageUrl").trim();
-  if (!validHttpUrl(imageUrl)) {
+  if (!validLinkUrl(imageUrl)) {
     await interaction.reply({ content: "Você precisa informar um link válido do adorno.", ephemeral: true });
     return;
   }
@@ -261,7 +324,7 @@ function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber:
     `**ID**\n${input.userId}`,
     `**Número do Adorno**\n${input.adornmentNumber}`,
     `**Solicitante**\n<@${input.userId}>`,
-    `**Link da foto do adorno**\n[Clique aqui para visualizar a imagem](${input.imageUrl})`
+    `**Link do comprovante do adorno**\n[Clique aqui para abrir](${input.imageUrl})`
   ];
   const components: any[] = [
     logoUrl
@@ -279,12 +342,13 @@ function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber:
   };
 }
 
-function absenceRequestPanelPayload(config: PoliceRhConfig, fields: string[], status = "⏳ Pendente") {
+function absenceRequestPanelPayload(config: PoliceRhConfig, fields: string[], userId: string, returnDate: string | null, status = "⏳ Pendente") {
   const imageUrl = config.absenceImageUrl || config.absenceBannerUrl;
+  const token = absenceActionToken(userId, returnDate);
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setEmoji("✅").setLabel("Aprovar Ausência").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${PREFIX}:reject`).setEmoji("❌").setLabel("Recusar Ausência").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`${PREFIX}:close`).setEmoji("🔒").setLabel("Fechar Canal").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve:${token}`).setEmoji("✅").setLabel("Aprovar Ausência").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject:${token}`).setEmoji("❌").setLabel("Recusar Ausência").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PREFIX}:close:${token}`).setEmoji("🔒").setLabel("Fechar Solicitação").setStyle(ButtonStyle.Secondary)
   );
   return renderComponentsV2Panel({
     accentColor: 0xf59e0b,
@@ -298,14 +362,24 @@ function absenceRequestPanelPayload(config: PoliceRhConfig, fields: string[], st
   });
 }
 
+function absenceReviewedPanel(config: PoliceRhConfig, status: string) {
+  const imageUrl = config.absenceImageUrl || config.absenceBannerUrl;
+  return renderComponentsV2Panel({
+    accentColor: status.includes("✅") ? 0x22c55e : status.includes("❌") ? 0xef4444 : 0x71717a,
+    description: status,
+    fields: [],
+    footerIcon: visual(config.absenceFooterImageUrl, "footer"),
+    image: visual(imageUrl, config.absenceImagePosition),
+    moduleId: MODULE_ID,
+    title: "📋 Solicitação de Ausência"
+  });
+}
+
 async function handleReviewAction(interaction: ButtonInteraction, context: BotContext, config: PoliceRhConfig, action: "approve" | "reject" | "close") {
-  if (!interaction.guild || !interaction.channel || !("topic" in interaction.channel)) return;
-  const topic = parseTopic(String(interaction.channel.topic ?? ""));
+  if (!interaction.guild || !interaction.channel) return;
+  const token = interaction.customId.split(":")[2] ?? "";
+  const topic = parseAbsenceActionToken(token);
   if (!topic) return;
-  if (topic.type !== "absence") {
-    await interaction.reply({ content: "Este fluxo antigo de adorno não aceita mais aprovação ou reprovação.", ephemeral: true });
-    return;
-  }
   const allowedRoles = config.absenceApproverRoleIds;
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || allowedRoles.some((roleId) => member?.roles.cache.has(roleId)));
@@ -314,9 +388,8 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
     return;
   }
   if (action === "close") {
-    await interaction.reply({ content: "🔒 Canal será fechado.", ephemeral: true });
-    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "🔒 Canal RH fechado.", { channelId: interaction.channel.id, requesterId: topic.userId, type: topic.type });
-    setTimeout(() => void interaction.channel?.delete("Canal RH fechado").catch(() => null), 1500);
+    await interaction.update(absenceReviewedPanel(config, interaction.message.components.length ? "🔒 Solicitação fechada" : "🔒 Fechada"));
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "🔒 Solicitação de ausência fechada.", { channelId: interaction.channel.id, requesterId: topic.userId, type: "absence" });
     return;
   }
   const approved = action === "approve";
@@ -328,7 +401,7 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
   const dmMessage = approved ? config.absenceDmApprovedMessage : config.absenceDmRejectedMessage;
   await sendDm(interaction, topic.userId, approved ? "✅ Solicitação aprovada" : "❌ Solicitação recusada", dmMessage, approved ? 0x22c55e : 0xef4444);
   await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.absence.${approved ? "approved" : "rejected"}`, `${approved ? "✅" : "❌"} Solicitação de ausência ${approved ? "aprovada" : "recusada"}.`, { channelId: interaction.channel.id, requesterId: topic.userId });
-  await interaction.reply({ content: `${approved ? "✅" : "❌"} Solicitação ${approved ? "aprovada" : "recusada"}.`, ephemeral: true });
+  await interaction.update(absenceReviewedPanel(config, `${approved ? "✅" : "❌"} Solicitação ${approved ? "aprovada" : "recusada"}.`));
 }
 
 async function loadConfig(guildId: string, context: BotContext): Promise<PoliceRhConfig | null> {
@@ -357,6 +430,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelFooterImageUrl: readString(raw.panelFooterImageUrl) ?? "",
     absenceEnabled: raw.absenceEnabled !== false,
     absenceCategoryId: readString(raw.absenceCategoryId),
+    absencePanelChannelId: readString(raw.absencePanelChannelId),
     absenceLogChannelId: readString(raw.absenceLogChannelId),
     absenceRoleId: readString(raw.absenceRoleId),
     absenceApproverRoleIds: idList(raw.absenceApproverRoleIds),
@@ -395,6 +469,16 @@ function parseTopic(topic: string) {
   const [prefix, type, userId, , encodedReturnDate] = topic.split("|");
   if (prefix !== PREFIX || (type !== "absence" && type !== "adorno") || !/^\d{5,32}$/.test(userId ?? "")) return null;
   return { returnDate: encodedReturnDate ? decodeURIComponent(encodedReturnDate) : null, type, userId: userId as string };
+}
+
+function absenceActionToken(userId: string, returnDate: string | null) {
+  return `${userId}|${encodeURIComponent(returnDate ?? "")}`;
+}
+
+function parseAbsenceActionToken(value: string) {
+  const [userId, encodedReturnDate] = value.split("|");
+  if (!/^\d{5,32}$/.test(userId ?? "")) return null;
+  return { returnDate: encodedReturnDate ? decodeURIComponent(encodedReturnDate) : null, userId: userId as string };
 }
 
 function scheduleAbsenceRoleRemoval(guild: Guild, context: BotContext, config: PoliceRhConfig, userId: string, returnDate: string | null) {
@@ -446,7 +530,7 @@ function readImagePosition(value: unknown, fallback: PanelVisualPosition = "side
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : fallback;
 }
 function colorToInt(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x7c3aed; }
-function validHttpUrl(value: string) {
+function validLinkUrl(value: string) {
   try {
     const url = new URL(value);
     return ["http:", "https:"].includes(url.protocol);
@@ -468,4 +552,44 @@ function formatAdornmentDate(value: Date) {
 function safeChannelName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 90) || "rh"; }
 async function writeLog(context: BotContext, guildId: string, userId: string | null, type: string, message: string, metadata?: unknown) {
   await context.api.postLog({ guildId, userId, type, message, metadata }).catch(() => undefined);
+  const guild = context.client.guilds.cache.get(guildId);
+  if (!guild) return;
+  const config = await loadConfig(guildId, context).catch(() => null);
+  if (!config) return;
+  const record = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata as Record<string, unknown> : {};
+  const isAdornment = type.includes("adorno");
+  const isAbsence = type.includes("absence");
+  const channelId = isAdornment
+    ? config.adornoLogChannelId ?? config.rhLogChannelId
+    : isAbsence
+      ? config.absenceLogChannelId ?? config.rhLogChannelId
+      : config.rhLogChannelId;
+  const imageUrl = typeof record.imageUrl === "string" && validLinkUrl(record.imageUrl)
+    ? record.imageUrl
+    : isAdornment
+      ? config.adornoImageUrl || config.adornoBannerUrl
+      : config.absenceImageUrl || config.absenceBannerUrl;
+
+  await sendPoliceLog(guild, [channelId], {
+    action: message,
+    actorId: userId,
+    channelId: typeof record.channelId === "string" ? record.channelId : null,
+    color: isAdornment ? 0x22c55e : isAbsence ? 0xf59e0b : 0x7c3aed,
+    fields: [
+      { name: "Sistema", value: isAdornment ? "RH - Adorno" : isAbsence ? "RH - Ausência" : "RH" },
+      { name: "Solicitante", value: typeof record.requesterId === "string" ? `<@${record.requesterId}> | ${record.requesterId}` : userId ? `<@${userId}> | ${userId}` : null },
+      { name: "Detalhes", value: formatRecordDetails(record) }
+    ],
+    image: imageUrl ? visual(imageUrl, isAdornment ? config.adornoImagePosition : config.absenceImagePosition) : null,
+    title: "RH"
+  });
+}
+
+function formatRecordDetails(record: Record<string, unknown>) {
+  const ignored = new Set(["channelId", "imageUrl"]);
+  const lines = Object.entries(record)
+    .filter(([key, value]) => !ignored.has(key) && value !== null && value !== undefined && value !== "")
+    .slice(0, 6)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`);
+  return lines.length ? lines.join("\n") : "-";
 }

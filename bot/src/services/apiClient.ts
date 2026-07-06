@@ -1409,6 +1409,24 @@ export class ApiClient {
     return data.module;
   }
 
+  async savePoliceRhRuntimeConfig(guildId: string, input: Record<string, unknown>) {
+    const { data } = await this.http.post<{ module: { config: Record<string, unknown> } }>(
+      `/bot/runtime/guilds/${encodeURIComponent(guildId)}/police-rh/config`,
+      input,
+      { timeout: 8_000 }
+    );
+    return data.module;
+  }
+
+  async requestPoliceRhPanelPublish(guildId: string) {
+    const { data } = await this.http.post<{ ok: boolean }>(
+      `/bot/runtime/guilds/${encodeURIComponent(guildId)}/police-rh/publish`,
+      {},
+      { timeout: 8_000 }
+    );
+    return data;
+  }
+
   async updatePoliceFlightState(guildId: string, patch: Record<string, unknown>) {
     try {
       const { data } = await this.http.post<{ module: { config: Record<string, unknown> } }>(

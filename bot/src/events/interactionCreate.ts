@@ -28,6 +28,7 @@ import { handlePoliceFlightInteraction } from "../services/policeFlightService";
 import { handleCommunicationInteraction } from "../services/communicationService";
 import { handleOpenPointInteraction } from "../services/openPointNotificationService";
 import { handlePoliceCourseInteraction } from "../services/policeCourseService";
+import { logCommandExecution } from "../services/logService";
 
 export async function handleInteractionCreate(interaction: Interaction, context: BotContext) {
   try {
@@ -170,8 +171,10 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
 
   try {
     await command.execute(interaction, context);
+    logCommandExecution(context, interaction, "executed");
   } catch (error) {
     console.error("[command]", error);
+    logCommandExecution(context, interaction, "failed", error);
 
     const payload = {
       content: "Não foi possível executar esse comando.",

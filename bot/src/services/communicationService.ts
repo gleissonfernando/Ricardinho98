@@ -6,6 +6,7 @@ import {
 import type { BotContext } from "../types";
 import type { DmSettings, SummonsCompetence, SummonsRecord, SummonsSettings } from "./apiClient";
 import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRenderer";
+import { sendPoliceLog } from "./policeLogService";
 
 const DM_PREFIX = "dm_system";
 const SUMMONS_PREFIX = "summons";
@@ -627,13 +628,24 @@ async function sendSummonsLog(interaction: any, settings: SummonsSettings, recor
     });
     return;
   }
-  await channel.send({
-    components: [{
-      type: 17,
-      accent_color: color(settings.color),
-      components: [{ type: 10, content: `# Intimação ${action}\n**ID:** ${record.id}\n**Competência:** ${competenceLabel(competence)}\n**Intimado:** <@${record.targetId}>\n**Remetente:** ${teamNameForCompetence(competence, settings)}\n**Motivo:** ${record.reason}\n**Canal:** ${record.channelId ? `<#${record.channelId}>` : "não criado"}\n**Data:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>\n**Status:** ${record.status}\n**DM:** ${record.dmDeliveryStatus}${record.dmDeliveryError ? ` — ${record.dmDeliveryError}` : ""}${error ? `\n**Erro:** ${error}` : ""}${transcript ? `\n\n**Transcript:**\n${transcript.slice(0, 2500)}` : ""}` }]
-    }],
-    flags: MessageFlags.IsComponentsV2
+  await sendPoliceLog(interaction.guild, [channel.id], {
+    action: `Intimação ${action}`,
+    actorId: interaction.user?.id ?? record.requesterId,
+    channelId: record.channelId,
+    color: color(settings.color),
+    fields: [
+      { name: "Competência", value: competenceLabel(competence) },
+      { name: "Intimado", value: `<@${record.targetId}> | ${record.targetId}` },
+      { name: "Remetente", value: teamNameForCompetence(competence, settings) },
+      { name: "Motivo", value: record.reason },
+      { name: "Status", value: record.status },
+      { name: "DM", value: `${record.dmDeliveryStatus}${record.dmDeliveryError ? ` - ${record.dmDeliveryError}` : ""}` },
+      { name: "Erro", value: error },
+      { name: "Transcript", value: transcript ? transcript.slice(0, 1200) : null }
+    ],
+    id: record.id,
+    image: summonsLogImage(settings),
+    title: "Intimação"
   }).catch((logError: unknown) => console.error("[summons] falha ao enviar log privado", {
     error: messageOf(logError),
     guildId: interaction.guildId,
@@ -653,28 +665,21 @@ async function sendSummonsProxyLog(message: Message, settings: SummonsSettings, 
     });
     return;
   }
-  await channel.send({
-    allowedMentions: { parse: [] },
-    components: [{
-      type: 17,
-      accent_color: color(settings.color),
-      components: [{
-        type: 10,
-        content: [
-          `# Mensagem anônima - ${ANONYMOUS_TEAM_NAME}`,
-          `**Intimação:** ${record.id}`,
-          `**Remetente:** ${teamNameForCompetence(recordCompetence(record), settings)}`,
-          `**Canal temporário:** <#${message.channel.id}>`,
-          `**Intimado:** <@${record.targetId}> (${record.targetId})`,
-          `**Data:** <t:${Math.floor(Date.now() / 1000)}:f>`,
-          `**Anexos:** ${attachmentCount}`,
-          "",
-          "**Conteúdo:**",
-          content || "(sem texto)"
-        ].join("\n").slice(0, 3900)
-      }]
-    }],
-    flags: MessageFlags.IsComponentsV2
+  await sendPoliceLog(message.guild, [channel.id], {
+    action: "Mensagem anônima encaminhada",
+    actorId: message.author.id,
+    channelId: message.channel.id,
+    color: color(settings.color),
+    fields: [
+      { name: "Intimação", value: record.id },
+      { name: "Remetente", value: teamNameForCompetence(recordCompetence(record), settings) },
+      { name: "Intimado", value: `<@${record.targetId}> | ${record.targetId}` },
+      { name: "Anexos", value: attachmentCount },
+      { name: "Conteúdo", value: content || "(sem texto)" }
+    ],
+    id: record.id,
+    image: summonsLogImage(settings),
+    title: "Intimação"
   }).catch((error: unknown) => console.error("[summons] falha ao enviar log privado de anonimato", {
     error: messageOf(error),
     guildId: message.guildId,
@@ -775,6 +780,10 @@ function logChannelIdForCompetence(settings: SummonsSettings, competence: Summon
   if (competence === "hcmd") return settings.hcmdLogChannelId ?? settings.privateLogChannelId ?? settings.logChannelId;
   if (competence === "comissario") return settings.comissarioLogChannelId ?? settings.privateLogChannelId ?? settings.logChannelId;
   return settings.privateLogChannelId ?? settings.logChannelId;
+}
+function summonsLogImage(settings: SummonsSettings) {
+  const imageUrl = settings.panelBannerUrl ?? settings.bannerUrl;
+  return imageUrl ? { imageEnabled: true as const, imagePosition: "banner" as const, imageUrl: resolvePanelImageUrl(imageUrl) } : null;
 }
 function resolveFinalCompetence(settings: SummonsSettings, target: GuildMember, selectedCompetence: SummonsCompetence) {
   if (hasRole(target, settings.hcmdRoleIds)) return { finalCompetence: "comissario" as const, redirectReason: "Usuário intimado possui cargo High Command." };

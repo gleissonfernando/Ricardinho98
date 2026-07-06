@@ -19,6 +19,7 @@ import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
 import { renderComponentsV2Panel } from "./panelVisualRenderer";
 import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
+import { sendPoliceLog } from "./policeLogService";
 
 const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
@@ -638,6 +639,34 @@ async function writeLog(context: BotContext, guildId: string, userId: string | n
   await context.api.postLog({ guildId, userId, type, message, metadata }).catch((error) => {
     console.warn("[police-reports] falha ao registrar log:", error instanceof Error ? error.message : error);
   });
+  const guild = context.client.guilds.cache.get(guildId);
+  if (!guild) return;
+  const config = await loadConfig(guildId, context).catch(() => null);
+  if (!config) return;
+  const record = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata as Record<string, unknown> : {};
+  await sendPoliceLog(guild, config.logChannelIds.length ? config.logChannelIds : [config.logChannelId], {
+    action: message,
+    actorId: userId,
+    channelId: typeof record.channelId === "string" ? record.channelId : null,
+    color: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
+    fields: [
+      { name: "Sistema", value: "Denúncias IAB" },
+      { name: "Tipo", value: typeof record.selectedType === "string" ? record.selectedType : typeof record.typeName === "string" ? record.typeName : "Denúncia" },
+      { name: "Denunciante", value: record.anonymous === true ? "Denúncia anônima" : typeof record.requesterId === "string" ? `<@${record.requesterId}> | ${record.requesterId}` : typeof record.authorId === "string" ? `<@${record.authorId}> | ${record.authorId}` : null },
+      { name: "Detalhes", value: formatPoliceReportDetails(record) }
+    ],
+    image: config.channelVisual ?? config.panelVisual,
+    title: "Denúncia"
+  });
+}
+
+function formatPoliceReportDetails(record: Record<string, unknown>) {
+  const ignored = new Set(["anonymous", "authorId", "channelId", "requesterId", "selectedType", "typeName"]);
+  const lines = Object.entries(record)
+    .filter(([key, value]) => !ignored.has(key) && value !== null && value !== undefined && value !== "")
+    .slice(0, 6)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`);
+  return lines.length ? lines.join("\n") : "-";
 }
 function scheduleChannelExpiry(channelId: string, guildId: string, minutes: number, context: BotContext) {
   const delay = Math.min(Math.max(1, minutes) * 60_000, 2_147_000_000);

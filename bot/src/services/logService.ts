@@ -1,6 +1,16 @@
-import type { GuildMember, Message, PartialGuildMember, PartialMessage, ReadonlyCollection, Snowflake, User } from "discord.js";
+import type { ChatInputCommandInteraction, GuildMember, Message, PartialGuildMember, PartialMessage, ReadonlyCollection, Snowflake, User } from "discord.js";
 import { currentRuntimeBotId } from "../config/env";
 import type { BotContext } from "../types";
+
+type CommandOptionData = {
+  attachment?: { url: string };
+  channel?: { id: string };
+  name: string;
+  options?: CommandOptionData[];
+  role?: { id: string };
+  user?: { id: string };
+  value?: unknown;
+};
 
 export async function logMemberJoin(context: BotContext, member: GuildMember) {
   await sendLog(context, {
@@ -91,6 +101,32 @@ export async function logModeration(context: BotContext, guildId: string, user: 
   });
 }
 
+export function logCommandExecution(context: BotContext, interaction: ChatInputCommandInteraction, status: "executed" | "failed", error?: unknown) {
+  if (!interaction.guildId) return;
+
+  const commandName = interaction.commandName;
+  const options = commandOptions(interaction);
+  const message = status === "executed"
+    ? `Comando /${commandName} executado.`
+    : `Comando /${commandName} falhou.`;
+
+  void sendLog(context, {
+    guildId: interaction.guildId,
+    userId: interaction.user.id,
+    type: `commands.${status}`,
+    message,
+    metadata: {
+      channelId: interaction.channelId,
+      commandName,
+      error: error instanceof Error ? error.message : undefined,
+      interactionId: interaction.id,
+      kind: "command",
+      options,
+      userId: interaction.user.id
+    }
+  });
+}
+
 async function sendLog(context: BotContext, payload: { guildId: string; type: string; message: string; userId?: string | null; metadata?: unknown }) {
   const scopedPayload = {
     ...payload,
@@ -117,4 +153,33 @@ function isAuthorizationFailure(error: unknown) {
 
   const response = (error as { response?: { status?: unknown } }).response;
   return response?.status === 401 || response?.status === 403 || response?.status === 404;
+}
+
+function commandOptions(interaction: ChatInputCommandInteraction) {
+  const entries: Record<string, string> = {};
+
+  for (const option of interaction.options.data) {
+    readOption(option.name, option as CommandOptionData, entries);
+  }
+
+  return entries;
+}
+
+function readOption(name: string, option: CommandOptionData, entries: Record<string, string>) {
+  if (option.options?.length) {
+    for (const child of option.options) {
+      readOption(child.name, child, entries);
+    }
+    return;
+  }
+
+  const value = option.user?.id
+    ?? option.role?.id
+    ?? option.channel?.id
+    ?? option.attachment?.url
+    ?? option.value;
+
+  if (value !== undefined && value !== null) {
+    entries[name] = String(value);
+  }
 }

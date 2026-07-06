@@ -9205,10 +9205,9 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
 
               {tab === "absence" ? (
                 <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Solicitação com modal: início, retorno e motivo. Aprovação em canal temporário com botões Component V2.">
+                  <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Solicitação com modal: início, retorno e motivo. Aprovação direto no canal configurado com botões Component V2.">
                     <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de ausência ativo</span><Switch checked={config.absenceEnabled} disabled={disabled} onCheckedChange={(absenceEnabled) => patch({ absenceEnabled })} /></label>
-                    <FivemResourceSelect disabled={disabled} label="Canal do painel de ausência" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Categoria temporária" onChange={(absenceCategoryId) => patch({ absenceCategoryId })} options={categoryOptions} value={config.absenceCategoryId} />
+                    <FivemResourceSelect disabled={disabled} label="Canal que recebe solicitações de ausência" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
                     <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
                     <FivemResourceSelect disabled={disabled} label="Cargo de ausência" onChange={(absenceRoleId) => patch({ absenceRoleId })} options={roleOptions} prefix="@" value={config.absenceRoleId} />
                     <FivemResourceMultiSelect disabled={disabled} label="Cargos aprovadores" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />

@@ -22,6 +22,7 @@ import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
 import type { PoliceCourse, PoliceCourseConfig } from "./apiClient";
 import { resolvePanelImageUrl } from "./panelVisualRenderer";
+import { sendPoliceLog } from "./policeLogService";
 
 const MODULE_ID = "police-courses";
 const PREFIX = "police_course";
@@ -641,14 +642,24 @@ function courseSessionModal(action: "start_submit" | "edit_submit", courseId: st
 
 async function sendCourseLog(guild: Interaction["guild"] & {}, config: PoliceCourseConfig, course: PoliceCourse, action: string, actorId: string | null) {
   if (!config.logChannelId) return;
-  const channel = await guild.channels.fetch(config.logChannelId).catch(() => null);
-  if (!channel?.isTextBased() || channel.isDMBased()) return;
-  await channel.send({
-    components: [{ type: 17, accent_color: color(config.accentColor), components: [{ type: 10, content:
-      `# LOG DO SISTEMA DE CURSOS\n**Acao:** ${action}\n**Curso:** ${escapeMarkdown(course.title)}\n**ID do Curso:** ${escapeMarkdown(course.courseNumber)}\n**Executado por:** ${actorId ? `<@${actorId}>` : "Sistema"}\n**Instrutor:** ${course.instructorId ? `<@${course.instructorId}>` : "Não definido"}\n**Canal do Painel:** ${course.panelChannelId ? `<#${course.panelChannelId}>` : "Nao publicado"}\n**Horário:** <t:${Math.floor(Date.now() / 1000)}:f>`
-    }] }],
-    flags: MessageFlags.IsComponentsV2
-  }).catch(() => undefined);
+  await sendPoliceLog(guild, [config.logChannelId], {
+    action,
+    actorId,
+    channelId: course.panelChannelId,
+    color: color(course.color || config.accentColor),
+    fields: [
+      { name: "Curso", value: escapeMarkdown(course.title) },
+      { name: "ID do Curso", value: escapeMarkdown(course.courseNumber) },
+      { name: "Instrutor", value: course.instructorId ? `<@${course.instructorId}> | ${course.instructorId}` : "Não definido" },
+      { name: "Status", value: course.status },
+      { name: "Participantes", value: `${course.participants.length}${course.maxSlots ? `/${course.maxSlots}` : ""}` }
+    ],
+    id: course.id,
+    image: course.bannerUrl && course.imagePosition !== "none"
+      ? { imageEnabled: true, imagePosition: course.imagePosition, imageUrl: resolvePanelImageUrl(course.bannerUrl) }
+      : null,
+    title: "Curso"
+  });
 }
 
 function canManage(member: GuildMember, ownerId: string, configOrRoleIds: PoliceCourseConfig | string[]) {
