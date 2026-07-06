@@ -25,6 +25,7 @@ const hierarchyPanelMessages = new Map<string, Message<true>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
 const HIERARCHY_VISUAL_CACHE_MS = 60_000;
 const HIERARCHY_AUTO_REFRESH_SECONDS = 5;
+const HIERARCHY_MEMBER_FETCH_TIMEOUT_MS = 4_500;
 let hierarchyRuntime: { client: Client<true>; context: BotContext } | null = null;
 
 type HierarchyRefreshOptions = {
@@ -518,15 +519,20 @@ type HierarchyMemberSource = Pick<Guild, "members"> | HierarchyMemberCache;
 async function fetchHierarchyMembers(guild: Guild): Promise<HierarchyMemberCache | null> {
   try {
     await guild.roles.fetch();
-    const members = await guild.members.fetch();
+    const members = await guild.members.fetch({ time: HIERARCHY_MEMBER_FETCH_TIMEOUT_MS });
     if (!isHierarchyMemberCacheComplete(members.size, guild.memberCount)) {
-      console.error(`[HIERARQUIA] Consulta incompleta no servidor ${guild.id}: ${members.size}/${guild.memberCount} membros. Painel preservado.`);
-      return null;
+      console.warn(`[HIERARQUIA] Consulta incompleta no servidor ${guild.id}: ${members.size}/${guild.memberCount} membros. Usando merge com snapshot local.`);
+      return rememberHierarchyMembers(guild.id, mergeHierarchyMemberCaches(getSnapshotHierarchyMembers(guild.id), members));
     }
     return rememberHierarchyMembers(guild.id, members);
   } catch (error) {
+    const snapshot = getSnapshotHierarchyMembers(guild.id);
+    if (snapshot) {
+      console.warn(`[HIERARQUIA] Falha ao buscar membros atualizados do servidor ${guild.id}. Usando snapshot local.`, error instanceof Error ? error.message : error);
+      return snapshot;
+    }
     console.error(`[HIERARQUIA] Falha ao buscar membros atualizados do servidor ${guild.id}. Verifique SERVER MEMBERS INTENT no Developer Portal.`, error);
-    return null;
+    return rememberHierarchyMembers(guild.id, guild.members.cache);
   }
 }
 
@@ -569,12 +575,30 @@ function getSnapshotHierarchyMember(guildId: string, userId: string) {
   return hierarchyMemberSnapshots.get(guildId)?.get(userId) ?? null;
 }
 
+function getSnapshotHierarchyMembers(guildId: string) {
+  const snapshot = hierarchyMemberSnapshots.get(guildId);
+  return snapshot ? createHierarchyMemberCache(new Map(snapshot)) : null;
+}
+
 function rememberHierarchyMembers(guildId: string, members: HierarchyMemberCache) {
   const snapshot = new Map<string, GuildMember>();
   for (const member of members.filter(() => true).values()) {
     snapshot.set(member.id, member);
   }
   hierarchyMemberSnapshots.set(guildId, snapshot);
+  return createHierarchyMemberCache(snapshot);
+}
+
+function mergeHierarchyMemberCaches(base: HierarchyMemberCache | null, next: HierarchyMemberCache) {
+  const snapshot = new Map<string, GuildMember>();
+  if (base) {
+    for (const member of base.filter(() => true).values()) {
+      snapshot.set(member.id, member);
+    }
+  }
+  for (const member of next.filter(() => true).values()) {
+    snapshot.set(member.id, member);
+  }
   return createHierarchyMemberCache(snapshot);
 }
 
