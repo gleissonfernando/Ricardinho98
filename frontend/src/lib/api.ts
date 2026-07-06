@@ -1603,6 +1603,13 @@ export async function saveFivemHierarchyPanel(guildId: string, payload: Partial<
   return data.panel;
 }
 
+export async function registerDefaultFivemHierarchyPanels(guildId: string, botId?: string | null) {
+  const { data } = await api.post<{ created: number; panels: FivemHierarchyPanel[] }>(`/fivem/${guildId}/hierarchy/defaults`, undefined, {
+    params: botId ? { botId } : undefined
+  });
+  return data;
+}
+
 export async function deleteFivemHierarchyPanel(guildId: string, panelId: string, botId?: string | null) {
   const { data } = await api.delete<{ panel: FivemHierarchyPanel }>(`/fivem/${guildId}/hierarchy/panels/${encodeURIComponent(panelId)}`, {
     params: botId ? { botId } : undefined

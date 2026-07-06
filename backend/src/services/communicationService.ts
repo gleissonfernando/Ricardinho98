@@ -86,7 +86,7 @@ export async function getSummonsSettings(botId: string, guildId: string) {
 export async function saveSummonsSettings(botId: string, guildId: string, input: Partial<Omit<MongoSummonsSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>, actorId: string | null) {
   await getSummonsSettings(botId, guildId);
   const { summonsSettings } = await getMongoCollections();
-  await summonsSettings.updateOne({ botId, guildId }, { $set: { ...input, updatedAt: new Date(), updatedBy: actorId } });
+  await summonsSettings.updateOne({ botId, guildId }, { $set: { ...normalizeSummonsSettingsInput(input), updatedAt: new Date(), updatedBy: actorId } });
   return summonsSettingsDto((await summonsSettings.findOne({ botId, guildId }))!);
 }
 
@@ -192,6 +192,14 @@ function normalizeDmSettingsInput(input: Partial<Omit<MongoDmSettings, "_id" | "
   return next;
 }
 
+function normalizeSummonsSettingsInput(input: Partial<Omit<MongoSummonsSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>) {
+  const next: typeof input = { ...input };
+  if ("bannerUrl" in next) next.bannerUrl = normalizeImageUrl(next.bannerUrl);
+  if ("panelBannerUrl" in next) next.panelBannerUrl = normalizeImageUrl(next.panelBannerUrl);
+  if ("teamAvatarUrl" in next) next.teamAvatarUrl = normalizeImageUrl(next.teamAvatarUrl);
+  return next;
+}
+
 function normalizeText(value: string | null | undefined, fallback: string, maxLength: number) {
   const trimmed = value?.trim();
   return trimmed ? trimmed.slice(0, maxLength) : fallback;
@@ -200,8 +208,11 @@ function normalizeText(value: string | null | undefined, fallback: string, maxLe
 function normalizeImageUrl(value: string | null | undefined) {
   const trimmed = value?.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith("/") || trimmed.startsWith("https://")) return trimmed;
-  throw Object.assign(new Error("Use uma URL HTTPS válida ou uma imagem enviada pelo upload."), { statusCode: 400 });
+  if (trimmed.startsWith("/uploads/")) return trimmed;
+  if (trimmed.startsWith("/")) throw Object.assign(new Error("Use uma imagem enviada pelo upload ou uma URL HTTPS pública."), { statusCode: 400 });
+  const parsed = parsePublicHttpsImageUrl(trimmed);
+  if (parsed) return parsed;
+  throw Object.assign(new Error("Use uma URL HTTPS pública terminando em png, jpg, jpeg, gif ou webp."), { statusCode: 400 });
 }
 
 function normalizeHttpsUrl(value: string | null | undefined) {
@@ -209,4 +220,24 @@ function normalizeHttpsUrl(value: string | null | undefined) {
   if (!trimmed) return null;
   if (!trimmed.startsWith("https://")) throw Object.assign(new Error("Use uma URL HTTPS válida para imagens e botões."), { statusCode: 400 });
   return trimmed;
+}
+
+function parsePublicHttpsImageUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || isLocalHostname(url.hostname)) return null;
+    if (!/\.(png|jpe?g|gif|webp)$/i.test(url.pathname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isLocalHostname(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost"
+    || normalized === "0.0.0.0"
+    || normalized === "127.0.0.1"
+    || normalized === "::1"
+    || normalized.endsWith(".local");
 }

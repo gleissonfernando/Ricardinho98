@@ -15,6 +15,11 @@ const DISCORD_ROLE_SELECT_LIMIT = 25;
 const dmSelectionSettings = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null; settings: DmSettings }>();
 const dmMessageDrafts = new Map<string, { expiresAt: number; imageUrlOverride: string | null; imageWarning: string | null }>();
 const summonsDrafts = new Map<string, { expiresAt: number; finalCompetence?: SummonsCompetence; redirectReason?: string | null; selectedCompetence?: SummonsCompetence; targetId?: string }>();
+const summonsChannelCache = new Map<string, { expiresAt: number; record: SummonsRecord; settings: SummonsSettings }>();
+const summonsProxyMessageIds = new Map<string, number>();
+const summonsProxySignatures = new Map<string, number>();
+const SUMMONS_CACHE_TTL_MS = 30_000;
+const SUMMONS_PROXY_DEDUPE_MS = 5_000;
 
 export async function showDmModal(interaction: ChatInputCommandInteraction, context: BotContext) {
   const settings = await context.api.getDmSettings(interaction.guildId!);
@@ -109,30 +114,34 @@ export async function handleSummonsAnonymousMessage(message: Message, context: B
   if (!message.guild || !message.guildId || message.author.bot || message.webhookId) return false;
   if (!message.channel.isTextBased() || message.channel.isDMBased()) return false;
 
-  const record = await context.api.getSummonsByChannel(message.channel.id).catch(() => null);
-  if (!record || record.status !== "active") return false;
-
-  const settings = await context.api.getSummonsSettings(message.guildId).catch(() => null);
-  if (!settings?.anonymityEnabled) return false;
+  const cached = await getSummonsChannelContext(message, context);
+  if (!cached) return false;
+  const { record, settings } = cached;
+  if (isSummonsMessageAlreadyProcessing(message.id)) return true;
 
   const competence = recordCompetence(record);
   const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-  if (!member || !hasRole(member, roleIdsForCompetence(settings, competence))) return false;
+  if (!member || !hasRole(member, roleIdsForCompetence(settings, competence))) {
+    releaseSummonsMessageProcessing(message.id);
+    return false;
+  }
 
   const content = message.content.trim();
   const attachments = [...message.attachments.values()].map((attachment) => attachment.url);
   const stickerText = message.stickers.size ? [...message.stickers.values()].map((sticker) => `[Sticker: ${sticker.name}]`).join("\n") : "";
   const proxiedContent = [content, stickerText].filter(Boolean).join("\n").slice(0, 2000);
-  if (!proxiedContent && attachments.length === 0) return false;
+  if (!proxiedContent && attachments.length === 0) {
+    releaseSummonsMessageProcessing(message.id);
+    return false;
+  }
 
-  await message.delete().catch((error) => {
-    console.warn("[summons] falha ao apagar mensagem original da equipe competente", {
-      channelId: message.channel.id,
-      error: messageOf(error),
-      guildId: message.guildId,
-      userId: message.author.id
-    });
-  });
+  const signature = summonsProxySignature(message, proxiedContent, attachments);
+  if (isRecentSummonsProxySignature(signature)) {
+    await deleteSummonsOriginalMessage(message);
+    return true;
+  }
+
+  await deleteSummonsOriginalMessage(message);
 
   const webhook = await getOrCreateSummonsWebhook(message);
   await webhook.send({
@@ -396,11 +405,14 @@ async function handleSummons(interaction: any, context: BotContext) {
 async function createSummonsChannel(interaction: any, settings: SummonsSettings, record: SummonsRecord) {
   const target = await interaction.guild.members.fetch(record.targetId);
   const competence = recordCompetence(record);
+  const categoryId = await resolveSummonsCategoryId(interaction, settings, competence);
   const slug = target.displayName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || record.targetId;
   const staffRoleIds = roleIdsForCompetence(settings, competence);
   const responsibleId = recordResponsibleId(record);
   return interaction.guild.channels.create({
-    name: `intimacao-${slug}`, type: ChannelType.GuildText, parent: categoryIdForCompetence(settings, competence) ?? undefined,
+    name: `intimacao-${competence}-${slug}`,
+    type: ChannelType.GuildText,
+    parent: categoryId ?? undefined,
     permissionOverwrites: [
       { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: record.targetId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
@@ -464,7 +476,7 @@ function validateImageUrl(value: string | null | undefined): { ok: true; url: st
   if (trimmed.startsWith("/")) return { ok: true, url: trimmed, warning: null };
   try {
     const parsed = new URL(trimmed);
-    if (!["http:", "https:"].includes(parsed.protocol)) return { ok: false, url: null, warning: "use uma URL http/https válida." };
+    if (parsed.protocol !== "https:") return { ok: false, url: null, warning: "use uma URL HTTPS pública." };
     const path = parsed.pathname.toLowerCase();
     if (!/\.(png|jpe?g|gif|webp)$/i.test(path)) return { ok: false, url: null, warning: "a URL precisa terminar em png, jpg, jpeg, gif ou webp." };
     return { ok: true, url: trimmed, warning: null };
@@ -735,6 +747,28 @@ function categoryIdForCompetence(settings: SummonsSettings, competence: SummonsC
   if (competence === "hcmd") return settings.hcmdCategoryId ?? settings.temporaryCategoryId ?? settings.categoryId;
   return settings.comissarioCategoryId ?? settings.temporaryCategoryId ?? settings.categoryId;
 }
+function specificCategoryIdForCompetence(settings: SummonsSettings, competence: SummonsCompetence) {
+  if (competence === "iab") return settings.iabCategoryId;
+  if (competence === "conselho") return settings.conselhoCategoryId;
+  if (competence === "hcmd") return settings.hcmdCategoryId;
+  return settings.comissarioCategoryId;
+}
+async function resolveSummonsCategoryId(interaction: any, settings: SummonsSettings, competence: SummonsCompetence) {
+  const specificCategoryId = specificCategoryIdForCompetence(settings, competence);
+  const fallbackCategoryId = settings.temporaryCategoryId ?? settings.categoryId ?? null;
+  const categoryId = specificCategoryId ?? fallbackCategoryId;
+  if (!categoryId) return null;
+
+  const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+  if (category?.type === ChannelType.GuildCategory) return categoryId;
+
+  if (specificCategoryId && fallbackCategoryId && specificCategoryId !== fallbackCategoryId) {
+    const fallback = await interaction.guild.channels.fetch(fallbackCategoryId).catch(() => null);
+    if (fallback?.type === ChannelType.GuildCategory) return fallbackCategoryId;
+  }
+
+  throw new Error(`Categoria de ${competenceLabel(competence)} não encontrada ou não é uma categoria.`);
+}
 function logChannelIdForCompetence(settings: SummonsSettings, competence: SummonsCompetence | null) {
   if (competence === "iab") return settings.iabLogChannelId ?? settings.privateLogChannelId ?? settings.logChannelId;
   if (competence === "conselho") return settings.conselhoLogChannelId ?? settings.privateLogChannelId ?? settings.logChannelId;
@@ -754,6 +788,68 @@ function validSummonsDraft(interaction: { guildId: string; user: { id: string } 
   const draft = summonsDrafts.get(summonsDraftKey(interaction));
   if (!draft || draft.expiresAt <= Date.now()) return null;
   return draft;
+}
+async function getSummonsChannelContext(message: Message, context: BotContext) {
+  const cached = summonsChannelCache.get(message.channel.id);
+  if (cached && cached.expiresAt > Date.now() && cached.record.status === "active" && cached.settings.anonymityEnabled) {
+    return { record: cached.record, settings: cached.settings };
+  }
+
+  const record = await context.api.getSummonsByChannel(message.channel.id).catch(() => null);
+  if (!record || record.status !== "active") {
+    summonsChannelCache.delete(message.channel.id);
+    return null;
+  }
+
+  const settings = await context.api.getSummonsSettings(message.guildId!).catch(() => null);
+  if (!settings?.anonymityEnabled) {
+    summonsChannelCache.delete(message.channel.id);
+    return null;
+  }
+
+  summonsChannelCache.set(message.channel.id, {
+    expiresAt: Date.now() + SUMMONS_CACHE_TTL_MS,
+    record,
+    settings
+  });
+  return { record, settings };
+}
+function isSummonsMessageAlreadyProcessing(messageId: string) {
+  pruneExpiringMap(summonsProxyMessageIds);
+  if (summonsProxyMessageIds.has(messageId)) return true;
+  summonsProxyMessageIds.set(messageId, Date.now() + SUMMONS_PROXY_DEDUPE_MS);
+  return false;
+}
+function releaseSummonsMessageProcessing(messageId: string) {
+  summonsProxyMessageIds.delete(messageId);
+}
+function summonsProxySignature(message: Message, content: string, attachments: string[]) {
+  const attachmentKey = attachments.join("|");
+  return `${message.channel.id}:${message.author.id}:${content}:${attachmentKey}`;
+}
+function isRecentSummonsProxySignature(signature: string) {
+  pruneExpiringMap(summonsProxySignatures);
+  if (summonsProxySignatures.has(signature)) return true;
+  summonsProxySignatures.set(signature, Date.now() + SUMMONS_PROXY_DEDUPE_MS);
+  return false;
+}
+async function deleteSummonsOriginalMessage(message: Message) {
+  await message.delete().catch((error) => {
+    const text = messageOf(error);
+    if (/unknown message|10008/i.test(text)) return;
+    console.warn("[summons] falha ao apagar mensagem original da equipe competente", {
+      channelId: message.channel.id,
+      error: text,
+      guildId: message.guildId,
+      userId: message.author.id
+    });
+  });
+}
+function pruneExpiringMap(map: Map<string, number>) {
+  const now = Date.now();
+  for (const [key, expiresAt] of map) {
+    if (expiresAt <= now) map.delete(key);
+  }
 }
 function configPayload(title: string, lines: string[], rows: any[]) { return { components: [{ type: 17, accent_color: 0x5865f2, components: [{ type: 10, content: `# ${title}\n${lines.join("\n")}` }, ...rows] }], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }; }
 function input(id: string, label: string, placeholder: string, required: boolean, paragraph = false, maxLength = paragraph ? 4000 : 1000) { return new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(placeholder.slice(0, 100)).setRequired(required).setMaxLength(maxLength).setStyle(paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short)); }

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ensureGuild, getMongoCollections, type MongoFivemHierarchyEntry, type MongoFivemHierarchyLog, type MongoFivemHierarchyPanel } from "../database/mongo";
 import { devBotRealtimeRoom, emitRealtime, emitRealtimeToRoom } from "../realtime/events";
 
@@ -67,6 +67,26 @@ export async function getFivemHierarchyDashboard(guildId: string, botId?: string
   return {
     logs: await listFivemHierarchyLogs(guildId, botId),
     panels: await listFivemHierarchyPanels(guildId, botId)
+  };
+}
+
+export async function registerDefaultFivemHierarchyPanels(guildId: string, botId: string | null, actorId: string | null) {
+  const normalizedBotId = normalizeBotId(botId);
+  const createdPanels = await ensureDefaultHierarchyPanels(guildId, normalizedBotId);
+  if (createdPanels.length) {
+    await Promise.all(createdPanels.map((panel) => writeFivemHierarchyLog({
+      action: "panel.default_registered",
+      botId: normalizedBotId,
+      details: { title: panel.title, unitId: panel.unitId },
+      guildId,
+      panelId: panel._id,
+      userId: actorId
+    })));
+    emitRealtimeToRoom(devBotRealtimeRoom(normalizedBotId ?? ""), "fivem:hierarchy:panel_update", { action: "defaults", botId: normalizedBotId, guildId });
+  }
+  return {
+    created: createdPanels.length,
+    panels: await listFivemHierarchyPanels(guildId, normalizedBotId)
   };
 }
 
@@ -231,22 +251,28 @@ async function ensureDefaultHierarchyPanels(guildId: string, botId: string | nul
   const existing = await fivemHierarchyPanels.find(scopeQuery(guildId, botId)).project<{ unitId?: string }>({ unitId: 1 }).toArray();
   const existingUnitIds = new Set(existing.map((item) => item.unitId).filter(Boolean));
   const now = new Date();
-  const rows = DEFAULT_HIERARCHY_UNITS
-    .filter((unit) => !existingUnitIds.has(unit.unitId))
-    .map((unit): MongoFivemHierarchyPanel => {
-      const panelId = `hierarchy-${unit.unitId}`;
-      return {
-        ...normalizePanelInput(defaultPanelDto(guildId, botId, panelId, unit), guildId, botId),
-        _id: panelId,
-        botId,
-        createdAt: now,
-        guildId,
-        panelMessageId: null,
-        updatedAt: now,
-        updatedBy: null
-      };
-    });
-  if (rows.length) await fivemHierarchyPanels.insertMany(rows, { ordered: false }).catch(() => null);
+  const rows: MongoFivemHierarchyPanel[] = [];
+  for (const unit of DEFAULT_HIERARCHY_UNITS) {
+    if (existingUnitIds.has(unit.unitId)) continue;
+    const panelId = defaultHierarchyPanelId(guildId, botId, unit.unitId);
+    const row: MongoFivemHierarchyPanel = {
+      ...normalizePanelInput(defaultPanelDto(guildId, botId, panelId, unit), guildId, botId),
+      _id: panelId,
+      botId,
+      createdAt: now,
+      guildId,
+      panelMessageId: null,
+      updatedAt: now,
+      updatedBy: null
+    };
+    const result = await fivemHierarchyPanels.updateOne(
+      { _id: panelId, ...scopeQuery(guildId, botId) },
+      { $setOnInsert: row },
+      { upsert: true }
+    ).catch(() => null);
+    if (result?.upsertedCount) rows.push(row);
+  }
+  return rows;
 }
 
 function defaultPanelDto(guildId: string, botId: string | null, id: string, unit: typeof DEFAULT_HIERARCHY_UNITS[number]): Partial<FivemHierarchyPanelDto> {
@@ -314,7 +340,7 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     imagePosition: input.imagePosition === "top" || input.imagePosition === "bottom" || input.imagePosition === "thumbnail" ? input.imagePosition : "none",
     imageUrl: normalizeText(input.imageUrl, 2048),
     linkedToFivem: input.linkedToFivem !== false,
-    name: normalizeText(input.name, 100) ?? "Hierarquia FAQ",
+    name: normalizeText(input.name, 100) ?? "Hierarquia Policial",
     panelChannelId: normalizeSnowflake(input.panelChannelId),
     title: normalizeText(input.title, 120) ?? "Hierarquia Policial",
     unitId: normalizeText(input.unitId, 40)?.toLowerCase() ?? "custom",
@@ -419,6 +445,11 @@ function normalizeAutoUpdateInterval(value: unknown) {
 
 function slugId(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 80) || randomUUID();
+}
+
+function defaultHierarchyPanelId(guildId: string, botId: string | null, unitId: string) {
+  const hash = createHash("sha1").update(`${botId ?? "global"}:${guildId}`).digest("hex").slice(0, 10);
+  return `hierarchy-${hash}-${unitId}`;
 }
 
 function defaultHierarchyEmoji(index: number) {

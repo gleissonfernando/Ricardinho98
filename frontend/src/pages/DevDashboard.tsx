@@ -804,7 +804,7 @@ function DevFiveMManager({
   };
   const copy = scope === "police"
     ? {
-      title: "Policia Manager",
+      title: "Polícia Manager",
       description: "Gerencie sistemas policiais separados dos modulos FiveM.",
       cardTitle: "Modulos de Policia",
       cardDescription: "Sistemas policiais independentes das configuracoes gerais de RP.",
@@ -1107,7 +1107,8 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "police-rh": CalendarClock,
     "police-courses": CalendarClock,
     "dm-system": AtSign,
-    "summons-system": ShieldAlert
+    "summons-system": ShieldAlert,
+    "open-point-notification": Bell
   };
 
   return icons[moduleId] ?? Boxes;
@@ -1119,10 +1120,12 @@ function isPoliceModule(moduleId: string) {
     || moduleId === "police-patrol-reports"
     || moduleId === "patrol-reports"
     || moduleId === "police-reports"
+    || moduleId === "police-flight"
     || moduleId === "police-rh"
     || moduleId === "police-courses"
     || moduleId === "dm-system"
-    || moduleId === "summons-system";
+    || moduleId === "summons-system"
+    || moduleId === "open-point-notification";
 }
 
 function isFiveMManagerModule(moduleId: string) {

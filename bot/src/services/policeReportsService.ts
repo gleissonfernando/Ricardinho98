@@ -251,10 +251,8 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
     fields: [],
     footerIcon: config.footerVisual,
     footerText: `**NPD - IAB** · Selecione o tipo abaixo · <t:${Math.floor(Date.now() / 1000)}:f>`,
-    headerIcon: config.footerVisual,
     headerText: "**North Police Department - Corregedoria**",
     image: config.panelVisual,
-    extraImages: [config.channelVisual],
     moduleId: MODULE_ID,
     title: config.panelTitle
   });
@@ -484,7 +482,8 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
       config.procedureText
     ],
     image: config.channelVisual ?? config.panelVisual,
-    extraImages: [config.footerVisual],
+    footerIcon: config.footerVisual,
+    footerText: `**NPD - IAB** · Procedimento aberto · <t:${createdAt}:f>`,
     moduleId: MODULE_ID,
     title: "Procedimento IAB"
   });
@@ -523,10 +522,8 @@ async function createArchivePanel(
     ],
     footerIcon: config.footerVisual,
     footerText: `**NPD - Contra Oficial** · denuncia arquivada · <t:${createdAt}:f>`,
-    headerIcon: config.footerVisual,
     headerText: "**🏛️ North Police Department - Contra Oficial**",
     image: config.channelVisual ?? config.panelVisual,
-    extraImages: [config.footerVisual],
     moduleId: MODULE_ID,
     title: `Denuncia - ${selected.name}`
   });

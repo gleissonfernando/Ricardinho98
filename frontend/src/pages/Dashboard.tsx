@@ -127,6 +127,7 @@ import {
   publishManualRegistrationPanel,
   publishRulesPanel,
   refreshApplicationEmojis,
+  registerDefaultFivemHierarchyPanels,
   removeAllApplicationEmojis,
   resendEmojiFromLibrary,
   saveAdvancedModuleConfig,
@@ -521,6 +522,20 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "fivem-goals"
   },
   {
+    id: "fivem-hierarchy",
+    title: "Hierarquia Policial",
+    description: "Painel automatico de hierarquia por cargos, com publicacao e atualizacao no Discord.",
+    icon: Users,
+    view: "fivem-hierarchy"
+  },
+  {
+    id: "police-actions",
+    title: "Acoes Policiais",
+    description: "Controle de acoes policiais com configuracao propria para a arquitetura da policia.",
+    icon: Activity,
+    view: "police-actions"
+  },
+  {
     id: "police-patrol-reports",
     title: "Relatorios Policiais",
     description: "Sistema de relatorios de patrulhamento da Policia com canais temporarios e exportacao.",
@@ -528,11 +543,53 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "police-patrol-reports"
   },
   {
+    id: "police-reports",
+    title: "Denuncias IAB",
+    description: "Painel de denuncias internas com tipos configuraveis, canal temporario e auditoria.",
+    icon: ShieldAlert,
+    view: "police-reports"
+  },
+  {
+    id: "police-flight",
+    title: "Escalacao DAF",
+    description: "Painel policial em Components V2 para escala de piloto e atirador.",
+    icon: Radio,
+    view: "police-flight"
+  },
+  {
+    id: "police-rh",
+    title: "RH - Ausencias e Adornos",
+    description: "Gerencia ausencias, adornos, aprovacoes e imagens do RH policial.",
+    icon: CalendarClock,
+    view: "rh-ausencias-adornos"
+  },
+  {
     id: "police-courses",
     title: "Cursos / Treinamentos",
     description: "Cadastro, publicacao e controle de participantes em cursos policiais.",
     icon: ListChecks,
     view: "police-courses"
+  },
+  {
+    id: "dm-system",
+    title: "Sistema de DM",
+    description: "Envio e gerenciamento de comunicacoes diretas pelo sistema policial.",
+    icon: AtSign,
+    view: "dm-system"
+  },
+  {
+    id: "summons-system",
+    title: "Intimacoes",
+    description: "Cria e acompanha intimacoes policiais com historico e controle de entrega.",
+    icon: ShieldAlert,
+    view: "summons-system"
+  },
+  {
+    id: "open-point-notification",
+    title: "Ponto Aberto",
+    description: "Notifica ponto aberto e centraliza avisos operacionais da policia.",
+    icon: Bell,
+    view: "open-point-notification"
   },
   {
     id: "verification",
@@ -3339,7 +3396,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
         if (!active) return;
       })
       .catch(() => {
-        if (active) setError("Nao foi possivel carregar Hierarquia FAQ.");
+        if (active) setError("Nao foi possivel carregar a hierarquia policial.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -3413,7 +3470,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const saved = await saveFivemHierarchyPanel(guild.id, draft, botId);
       setPanels((current) => [saved, ...current.filter((panel) => panel.id !== saved.id)]);
       setDraft(saved);
-      setMessage("Hierarquia FAQ salva.");
+      setMessage("Hierarquia policial salva.");
     } catch {
       setError("Nao foi possivel salvar o painel de hierarquia.");
     } finally {
@@ -3443,16 +3500,33 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
 
   async function removePanel() {
     if (!guild || !draft || draft.id === "new") return;
-    if (!window.confirm("Excluir este painel de Hierarquia FAQ?")) return;
+    if (!window.confirm("Excluir este painel de hierarquia policial?")) return;
     setSaving(true);
     try {
       await deleteFivemHierarchyPanel(guild.id, draft.id, botId);
       const next = panels.filter((panel) => panel.id !== draft.id);
       setPanels(next);
       setDraft(next[0] ?? createEmptyHierarchyPanel(guild.id, botId));
-      setMessage("Painel FAQ excluido.");
+      setMessage("Painel de hierarquia excluido.");
     } catch {
       setError("Nao foi possivel excluir o painel.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function registerDefaultPanels() {
+    if (!guild) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await registerDefaultFivemHierarchyPanels(guild.id, botId);
+      setPanels(result.panels);
+      setDraft((current) => current ? result.panels.find((panel) => panel.id === current.id) ?? result.panels[0] ?? current : result.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId));
+      setMessage(result.created ? `${result.created} hierarquia(s) padrao cadastrada(s).` : "As hierarquias padrao ja estavam cadastradas.");
+    } catch {
+      setError("Nao foi possivel cadastrar as hierarquias padrao.");
     } finally {
       setSaving(false);
     }
@@ -3486,6 +3560,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
           </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={!canManage || !guild} onClick={() => setDraft(createEmptyHierarchyPanel(guild?.id ?? "", botId))} size="sm" type="button" variant="outline">Novo painel</Button>
+            <Button disabled={!canManage || !guild || saving} onClick={() => void registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={resetDraftToTemplate} size="sm" type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Resetar modelo</Button>
@@ -4349,6 +4424,7 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "police-reports",
       "police-flight",
       "police-rh",
+      "police-courses",
       "dm-system",
       "summons-system",
       "open-point-notification",

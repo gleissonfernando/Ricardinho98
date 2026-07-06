@@ -475,7 +475,7 @@ const botMenuItems: BotMenuItem[] = [
       },
       {
         id: "fivem-hierarchy",
-        label: "Hierarquia FAQ",
+        label: "Hierarquia Policial",
         description: "Painel de cargos e hierarquia",
         icon: Users,
         moduleIds: ["fivem-hierarchy"]

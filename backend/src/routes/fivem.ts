@@ -30,6 +30,7 @@ import {
   FIVEM_HIERARCHY_MODULE_ID,
   getFivemHierarchyDashboard,
   listActiveFivemHierarchyPanels,
+  registerDefaultFivemHierarchyPanels,
   requestFivemHierarchyPanelPublish,
   recordFivemHierarchySync,
   saveFivemHierarchyPanel,
@@ -314,9 +315,21 @@ fivemRouter.get("/:guildId/hierarchy", requireAuth, async (req, res, next) => {
   try {
     const guildId = guildIdSchema.parse(req.params.guildId);
     const botId = await resolveRequestBotId(req);
-    if (!botId) throw createRouteError("Selecione um bot DEV para acessar Hierarquia FAQ.", 400);
+    if (!botId) throw createRouteError("Selecione um bot DEV para acessar a hierarquia policial.", 400);
     await assertCanReadFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     return res.json(await getFivemHierarchyDashboard(guildId, botId));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.post("/:guildId/hierarchy/defaults", requireAuth, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const botId = await resolveRequestBotId(req);
+    if (!botId) throw createRouteError("Selecione um bot DEV para cadastrar a hierarquia policial.", 400);
+    await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
+    return res.json(await registerDefaultFivemHierarchyPanels(guildId, botId, res.locals.dashboardAuth.user.discordId));
   } catch (error) {
     return next(error);
   }
@@ -326,7 +339,7 @@ fivemRouter.post("/:guildId/hierarchy/panels", requireAuth, async (req, res, nex
   try {
     const guildId = guildIdSchema.parse(req.params.guildId);
     const botId = await resolveRequestBotId(req);
-    if (!botId) throw createRouteError("Selecione um bot DEV para criar Hierarquia FAQ.", 400);
+    if (!botId) throw createRouteError("Selecione um bot DEV para criar a hierarquia policial.", 400);
     await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     const input = hierarchyPanelSchema.parse(req.body);
     await validateHierarchyResources(guildId, botId, input);
@@ -341,7 +354,7 @@ fivemRouter.patch("/:guildId/hierarchy/panels/:panelId", requireAuth, async (req
     const guildId = guildIdSchema.parse(req.params.guildId);
     const panelId = z.string().min(1).max(80).parse(req.params.panelId);
     const botId = await resolveRequestBotId(req);
-    if (!botId) throw createRouteError("Selecione um bot DEV para editar Hierarquia FAQ.", 400);
+    if (!botId) throw createRouteError("Selecione um bot DEV para editar a hierarquia policial.", 400);
     await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     const input = hierarchyPanelSchema.partial().parse(req.body);
     await validateHierarchyResources(guildId, botId, input);
@@ -356,7 +369,7 @@ fivemRouter.delete("/:guildId/hierarchy/panels/:panelId", requireAuth, async (re
     const guildId = guildIdSchema.parse(req.params.guildId);
     const panelId = z.string().min(1).max(80).parse(req.params.panelId);
     const botId = await resolveRequestBotId(req);
-    if (!botId) throw createRouteError("Selecione um bot DEV para excluir Hierarquia FAQ.", 400);
+    if (!botId) throw createRouteError("Selecione um bot DEV para excluir a hierarquia policial.", 400);
     await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     const panel = await deleteFivemHierarchyPanel(guildId, botId, panelId, res.locals.dashboardAuth.user.discordId);
     if (!panel) throw createRouteError("Painel de hierarquia nao encontrado.", 404);
@@ -371,7 +384,7 @@ fivemRouter.post("/:guildId/hierarchy/panels/:panelId/publish", requireAuth, asy
     const guildId = guildIdSchema.parse(req.params.guildId);
     const panelId = z.string().min(1).max(80).parse(req.params.panelId);
     const botId = await resolveRequestBotId(req);
-    if (!botId) throw createRouteError("Selecione um bot DEV para publicar Hierarquia FAQ.", 400);
+    if (!botId) throw createRouteError("Selecione um bot DEV para publicar a hierarquia policial.", 400);
     await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     return res.json({ panel: await requestFivemHierarchyPanelPublish(guildId, botId, panelId, res.locals.dashboardAuth.user.discordId) });
   } catch (error) {
@@ -1025,7 +1038,7 @@ async function assertCanReadFivemHierarchy(user: AuthSessionUser, guildId: strin
     return;
   }
 
-  throw createRouteError("Voce nao tem permissao para acessar Hierarquia FAQ deste bot.", 403);
+  throw createRouteError("Voce nao tem permissao para acessar a hierarquia policial deste bot.", 403);
 }
 
 async function assertCanManageFivemHierarchy(user: AuthSessionUser, guildId: string, botId: string) {
@@ -1035,7 +1048,7 @@ async function assertCanManageFivemHierarchy(user: AuthSessionUser, guildId: str
     return;
   }
 
-  throw createRouteError("Voce nao tem permissao para configurar Hierarquia FAQ deste bot.", 403);
+  throw createRouteError("Voce nao tem permissao para configurar a hierarquia policial deste bot.", 403);
 }
 
 async function assertBotFivemGoalsLicense(botId: string) {
@@ -1058,7 +1071,7 @@ async function assertBotFivemHierarchyLicense(botId: string) {
   }
 
   if (!permissions.enabledModules.includes(FIVEM_HIERARCHY_MODULE_ID)) {
-    throw createRouteError("O sistema Hierarquia FAQ FiveM nao foi liberado para este cliente.", 403);
+    throw createRouteError("O sistema de hierarquia policial nao foi liberado para este cliente.", 403);
   }
 }
 
