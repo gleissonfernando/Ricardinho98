@@ -3,26 +3,18 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
-  ContainerBuilder,
   EmbedBuilder,
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
   MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
-  SectionBuilder,
   TextInputBuilder,
   TextInputStyle,
-  TextDisplayBuilder,
-  ThumbnailBuilder,
   type ButtonInteraction,
   type Client,
   type Guild,
   type GuildMember,
   type Interaction,
-  type ModalSubmitInteraction,
-  type TextBasedChannel
+  type ModalSubmitInteraction
 } from "discord.js";
 import { env, isBotModuleEnabled } from "../config/env";
 import type { BotContext } from "../types";
@@ -39,8 +31,8 @@ const REJECT_MODAL_PREFIX = `${FAC_PREFIX}:reject_modal`;
 const APPROVE_PREFIX = `${FAC_PREFIX}:approve`;
 const REJECT_PREFIX = `${FAC_PREFIX}:reject`;
 const CLOSE_PREFIX = `${FAC_PREFIX}:close`;
-const FAC_CHECK_INTERVAL_MS = 60_000;
-const FAC_PANEL_REQUEST_CHECK_INTERVAL_MS = 15_000;
+const FAC_CHECK_INTERVAL_MS = 5_000;
+const FAC_PANEL_REQUEST_CHECK_INTERVAL_MS = 5_000;
 const PENDING_REQUEST_TTL_MS = 10 * 60_000;
 
 type PendingAbsenceRequest = {
@@ -233,10 +225,19 @@ async function showRequestModal(interaction: ButtonInteraction) {
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
+        .setCustomId("startDate")
+        .setLabel("📅 Data de início")
+        .setMaxLength(10)
+        .setPlaceholder("Exemplo: 12/06 ou 12/06/2026")
+        .setRequired(false)
+        .setStyle(TextInputStyle.Short)
+    ),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
         .setCustomId("returnDate")
         .setLabel("📅 Data de Retorno")
-        .setMaxLength(5)
-        .setPlaceholder("Exemplo: 12/06")
+        .setMaxLength(10)
+        .setPlaceholder("Exemplo: 12/07 ou 12/07/2026")
         .setRequired(true)
         .setStyle(TextInputStyle.Short)
     ),
@@ -285,12 +286,24 @@ async function submitAbsenceRequest(interaction: ModalSubmitInteraction, context
     return;
   }
 
-  const startDate = currentDateKey();
-  const endDate = normalizeReturnDateInput(interaction.fields.getTextInputValue("returnDate"), startDate);
+  const today = currentDateKey();
+  const startDateInput = interaction.fields.getTextInputValue("startDate").trim();
+  const startDate = startDateInput ? normalizeBrazilianDateInput(startDateInput, today) : today;
+  const endDate = startDate ? normalizeBrazilianDateInput(interaction.fields.getTextInputValue("returnDate"), startDate) : null;
   const reason = interaction.fields.getTextInputValue("reason").trim();
 
+  if (!startDate) {
+    await interaction.editReply("Use a data de inicio no formato DD/MM ou DD/MM/AAAA. Exemplo: 12/06.");
+    return;
+  }
+
   if (!endDate) {
-    await interaction.editReply("Use a data de retorno no formato DD/MM. Exemplo: 12/06.");
+    await interaction.editReply("Use a data de retorno no formato DD/MM ou DD/MM/AAAA. Exemplo: 12/07.");
+    return;
+  }
+
+  if (endDate < startDate) {
+    await interaction.editReply("A data de retorno nao pode ser menor que a data de inicio.");
     return;
   }
 
@@ -378,7 +391,7 @@ async function confirmAbsenceRequest(interaction: ButtonInteraction, context: Bo
       userId: pending.userId,
       username: pending.username
     });
-    const channelResult = await createAbsenceChannel(guild, settings, absence);
+    const channelResult = await sendAbsenceRequestPanel(guild, settings, absence);
 
     if (channelResult.channel && channelResult.messageId) {
       await context.api.updateFivemFacAbsenceChannel(absence.id, {
@@ -391,8 +404,8 @@ async function confirmAbsenceRequest(interaction: ButtonInteraction, context: Bo
     await interaction.editReply({
       components: [],
       content: channelResult.channel
-        ? `${settings.messages.requestCreated}\nCanal de aprovacao: <#${channelResult.channel.id}>`
-        : `${settings.messages.requestCreated}\nA solicitacao foi salva, mas nao consegui criar o canal de aprovacao. Avise a equipe.`,
+        ? `${settings.messages.requestCreated}\nCanal de analise: <#${channelResult.channel.id}>`
+        : `${settings.messages.requestCreated}\nA solicitacao foi salva, mas nao consegui enviar o painel para o canal configurado. Avise a equipe.`,
       embeds: []
     });
   } catch (error) {
@@ -479,7 +492,10 @@ async function approveAbsence(interaction: ButtonInteraction, context: BotContex
 
     await updateAbsenceMessage(interaction, settings, absence);
     await sendFacLog(guild, settings, "Solicitacao aprovada", absence, interaction.user.id);
-    await notifyAbsenceUser(guild, absence, `${settings.messages.approved}${roleResult.ok ? "\n\nCargo de ausencia aplicado automaticamente." : `\n\nNao foi possivel aplicar o cargo de ausencia: ${roleResult.reason ?? "motivo nao informado"}.`}`);
+    const dmSent = await notifyApprovalUser(guild, settings, absence, interaction.user.id, roleResult);
+    if (!dmSent) {
+      await sendFacLog(guild, settings, "Erro ao enviar DM", absence, interaction.user.id, "DM fechada ou indisponivel.");
+    }
     await interaction.editReply("Ausencia aprovada.");
   } catch (error) {
     await interaction.editReply(readRequestErrorMessage(error) ?? "Nao foi possivel aprovar essa ausencia.");
@@ -515,7 +531,10 @@ async function rejectAbsence(interaction: ModalSubmitInteraction, context: BotCo
 
     await updateAbsenceMessage(interaction, settings, absence);
     await sendFacLog(guild, settings, "Solicitacao reprovada", absence, interaction.user.id, reason);
-    await notifyAbsenceUser(guild, absence, `${settings.messages.rejected}\nMotivo: ${reason}`);
+    const dmSent = await notifyRejectionUser(guild, absence, interaction.user.id, reason);
+    if (!dmSent) {
+      await sendFacLog(guild, settings, "Erro ao enviar DM", absence, interaction.user.id, "DM fechada ou indisponivel.");
+    }
     await interaction.editReply("Ausencia reprovada.");
   } catch (error) {
     await interaction.editReply(readRequestErrorMessage(error) ?? "Nao foi possivel reprovar essa ausencia.");
@@ -552,7 +571,10 @@ async function closeAbsence(interaction: ButtonInteraction, context: BotContext,
 
     await updateAbsenceMessage(interaction, settings, absence);
     await sendFacLog(guild, settings, roleResult.ok ? "Cargo removido" : "Ausencia encerrada sem remover cargo", absence, interaction.user.id, roleResult.reason);
-    await notifyAbsenceUser(guild, absence, "Sua ausencia foi encerrada pela equipe.");
+    const dmSent = await notifyAbsenceUser(guild, absence, "Sua ausencia foi encerrada pela equipe.");
+    if (!dmSent) {
+      await sendFacLog(guild, settings, "Erro ao enviar DM", absence, interaction.user.id, "DM fechada ou indisponivel.");
+    }
     await interaction.editReply("Ausencia encerrada.");
   } catch (error) {
     await interaction.editReply(readRequestErrorMessage(error) ?? "Nao foi possivel encerrar essa ausencia.");
@@ -627,36 +649,16 @@ async function publishFivemFacPanel(client: Client, context: BotContext, guildId
   return saved;
 }
 
-async function createAbsenceChannel(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence) {
-  const panelChannel = settings.panelChannelId
+async function sendAbsenceRequestPanel(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence) {
+  const channel = settings.panelChannelId
     ? await guild.channels.fetch(settings.panelChannelId).catch(() => null)
     : null;
-  const parent = panelChannel && "parentId" in panelChannel ? panelChannel.parentId : null;
-  const allowedRoleIds = unique([...settings.viewerRoleIds, ...settings.approverRoleIds]).filter((roleId) => roleId !== guild.id);
-  const channel = await guild.channels.create({
-    name: `ausencia-${sanitizeChannelName(absence.username ?? absence.userId)}`,
-    parent: parent ?? undefined,
-    permissionOverwrites: [
-      {
-        id: guild.id,
-        deny: [PermissionFlagsBits.ViewChannel]
-      },
-      {
-        id: absence.userId,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
-      },
-      ...allowedRoleIds.map((roleId) => ({
-        id: roleId,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
-      }))
-    ],
-    reason: "Canal privado para solicitacao de ausencia FAC",
-    type: ChannelType.GuildText
-  });
-  const message = await channel.send({
-    embeds: [buildAbsenceEmbed(absence)],
-    components: buildAbsenceComponents(absence)
-  });
+
+  if (!channel?.isTextBased()) {
+    return { channel: null, messageId: null };
+  }
+
+  const message = await channel.send(buildAbsenceMessagePayload(absence));
 
   return {
     channel,
@@ -730,7 +732,10 @@ async function processDueAbsence(client: Client, context: BotContext, absence: F
     await sendFacLog(guild, settings, roleResult.ok ? "Cargo adicionado" : "Falha ao adicionar cargo", current, null, roleResult.reason);
     await sendFacLog(guild, settings, roleResult.ok ? "Ausencia iniciada com cargo" : "Ausencia iniciada sem cargo", current, null, roleResult.reason);
     await sendFacLog(guild, settings, "Ausencia iniciada", current, null);
-    await notifyAbsenceUser(guild, current, settings.messages.started);
+    const dmSent = await notifyAbsenceUser(guild, current, settings.messages.started);
+    if (!dmSent) {
+      await sendFacLog(guild, settings, "Erro ao enviar DM", current, null, "DM fechada ou indisponivel.");
+    }
     await updateStoredAbsenceMessage(guild, current);
   }
 
@@ -741,7 +746,10 @@ async function processDueAbsence(client: Client, context: BotContext, absence: F
     current = await context.api.markFivemFacAbsenceFinished(current.id, roleResult.ok);
     await sendFacLog(guild, settings, roleResult.ok ? "Cargo removido" : "Ausencia finalizada sem remover cargo", current, null, roleResult.reason);
     await sendFacLog(guild, settings, "Ausencia finalizada", current, null);
-    await notifyAbsenceFinishedUser(guild, current, roleResult.ok, roleResult.reason);
+    const dmSent = await notifyAbsenceFinishedUser(guild, current, roleResult.ok, roleResult.reason);
+    if (!dmSent) {
+      await sendFacLog(guild, settings, "Erro ao enviar DM", current, null, "DM fechada ou indisponivel.");
+    }
     await updateStoredAbsenceMessage(guild, current);
   }
 }
@@ -806,10 +814,7 @@ async function removeAbsenceRole(guild: Guild, settings: FivemFacSettings, absen
 
 async function updateAbsenceMessage(interaction: ButtonInteraction | ModalSubmitInteraction, settings: FivemFacSettings, absence: FivemFacAbsence) {
   if (interaction.isMessageComponent() && interaction.message.editable) {
-    await interaction.message.edit({
-      embeds: [buildAbsenceEmbed(absence)],
-      components: buildAbsenceComponents(absence)
-    }).catch(() => null);
+    await interaction.message.edit(buildAbsenceMessagePayload(absence)).catch(() => null);
     return;
   }
 
@@ -830,10 +835,7 @@ async function updateStoredAbsenceMessage(guild: Guild, absence: FivemFacAbsence
   }
 
   const message = await channel.messages.fetch(absence.requestMessageId).catch(() => null);
-  await message?.edit({
-    embeds: [buildAbsenceEmbed(absence)],
-    components: buildAbsenceComponents(absence)
-  }).catch(() => null);
+  await message?.edit(buildAbsenceMessagePayload(absence)).catch(() => null);
 }
 
 async function updateFivemFacAbsenceMessage(client: Client, absence: FivemFacAbsence) {
@@ -893,11 +895,14 @@ async function sendFacLog(
 
 async function notifyAbsenceUser(guild: Guild, absence: FivemFacAbsence, message: string) {
   const user = await guild.client.users.fetch(absence.userId).catch(() => null);
+  let dmSent = false;
 
-  await user?.send(buildAbsenceDmPayload("📅 Ausencia", message, statusLabel(absence.status), 0x2b2d31)).catch(() => null);
+  if (user) {
+    dmSent = await user.send(buildAbsenceDmPayload("📅 Ausencia", message, statusLabel(absence.status), 0x2b2d31)).then(() => true).catch(() => false);
+  }
 
   if (!absence.privateChannelId) {
-    return;
+    return dmSent;
   }
 
   const channel = await guild.channels.fetch(absence.privateChannelId).catch(() => null);
@@ -905,6 +910,8 @@ async function notifyAbsenceUser(guild: Guild, absence: FivemFacAbsence, message
   if (channel?.isTextBased()) {
     await channel.send(`<@${absence.userId}> ${message}`).catch(() => null);
   }
+
+  return dmSent;
 }
 
 async function notifyAbsenceFinishedUser(guild: Guild, absence: FivemFacAbsence, roleRemoved: boolean, reason?: string | null) {
@@ -925,7 +932,19 @@ async function notifyAbsenceFinishedUser(guild: Guild, absence: FivemFacAbsence,
         ""
       ].filter(Boolean).join("\n");
 
-  await user?.send(buildAbsenceDmPayload("📅 Ausencia Finalizada", message, "✅ Retorno liberado", roleRemoved ? 0x22c55e : 0xf59e0b)).catch(() => null);
+  let dmSent = false;
+
+  if (user) {
+    dmSent = await user.send(buildAbsenceDmPayload("🔔 Ausência Finalizada", [
+      "Sua ausência chegou ao fim e o cargo de ausência foi removido automaticamente.",
+      "",
+      `👤 **Usuário:** <@${absence.userId}>`,
+      `📆 **Data de retorno:** ${formatDateOnly(absence.endDate)}`,
+      `🎖️ **Cargo removido:** ${roleRemoved ? "Sim" : "Nao"}`,
+      `🕒 **Finalizado automaticamente em:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+      reason && !roleRemoved ? `📝 **Detalhe:** ${reason}` : null
+    ].filter(Boolean).join("\n"), "Finalizada", roleRemoved ? 0x22c55e : 0xf59e0b)).then(() => true).catch(() => false);
+  }
 
   if (!absence.privateChannelId) {
     return;
@@ -936,6 +955,44 @@ async function notifyAbsenceFinishedUser(guild: Guild, absence: FivemFacAbsence,
   if (channel?.isTextBased()) {
     await channel.send(`<@${absence.userId}> ${message}`).catch(() => null);
   }
+
+  return dmSent;
+}
+
+async function notifyApprovalUser(guild: Guild, settings: FivemFacSettings, absence: FivemFacAbsence, moderatorId: string, roleResult: RoleChangeResult) {
+  const roleLabel = settings.absenceRoleId ? `<@&${settings.absenceRoleId}>` : "Cargo nao configurado";
+  const detail = roleResult.ok ? roleLabel : `${roleLabel} (falha: ${roleResult.reason ?? "motivo nao informado"})`;
+  const user = await guild.client.users.fetch(absence.userId).catch(() => null);
+
+  if (!user) return false;
+
+  return user.send(buildAbsenceDmPayload("✅ Ausência Aprovada", [
+    "Sua solicitação de ausência foi aprovada com sucesso.",
+    "",
+    `👤 **Usuário:** <@${absence.userId}>`,
+    `📅 **Início da ausência:** ${formatDateOnly(absence.startDate)}`,
+    `📆 **Retorno previsto:** ${formatDateOnly(absence.endDate)}`,
+    `🎖️ **Cargo recebido:** ${detail}`,
+    `👮 **Aprovado por:** <@${moderatorId}>`,
+    `🕒 **Data da aprovação:** <t:${Math.floor(Date.now() / 1000)}:F>`
+  ].join("\n"), "Aprovada", 0x22c55e)).then(() => true).catch(() => false);
+}
+
+async function notifyRejectionUser(guild: Guild, absence: FivemFacAbsence, moderatorId: string, reason: string) {
+  const user = await guild.client.users.fetch(absence.userId).catch(() => null);
+
+  if (!user) return false;
+
+  return user.send(buildAbsenceDmPayload("❌ Ausência Recusada", [
+    "Sua solicitação de ausência foi recusada.",
+    "",
+    `👤 **Usuário:** <@${absence.userId}>`,
+    `📅 **Início solicitado:** ${formatDateOnly(absence.startDate)}`,
+    `📆 **Retorno solicitado:** ${formatDateOnly(absence.endDate)}`,
+    `👮 **Recusado por:** <@${moderatorId}>`,
+    `🕒 **Data da recusa:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+    `📝 **Motivo:** ${truncate(reason, 800)}`
+  ].join("\n"), "Recusada", 0xef4444)).then(() => true).catch(() => false);
 }
 
 function buildAbsenceDmPayload(title: string, message: string, status: string, accentColor: number) {
@@ -954,6 +1011,37 @@ function buildAbsenceDmPayload(title: string, message: string, status: string, a
         ].join("\n")
       }]
     }],
+    flags: MessageFlags.IsComponentsV2 as const
+  };
+}
+
+function buildAbsenceMessagePayload(absence: FivemFacAbsence) {
+  return {
+    allowedMentions: { parse: [] as never[] },
+    components: [
+      {
+        type: 17,
+        accent_color: statusColor(absence.status),
+        components: [{
+          type: 10,
+          content: [
+            "# 📋 Solicitação de Ausência",
+            "",
+            `👤 **Solicitante:** <@${absence.userId}>`,
+            `🆔 **ID do Discord:** ${absence.userId}`,
+            `📅 **Data de início:** ${formatDateOnly(absence.startDate)}`,
+            `📆 **Data de retorno:** ${formatDateOnly(absence.endDate)}`,
+            `📝 **Motivo:** ${truncate(absence.reason, 900)}`,
+            `⏰ **Solicitado em:** <t:${Math.floor(new Date(absence.createdAt).getTime() / 1000)}:F>`,
+            `📌 **Status atual:** ${statusLabel(absence.status)}`,
+            absence.moderatorId ? `👮 **Responsável:** <@${absence.moderatorId}>` : null,
+            absence.rejectionReason ? `❌ **Motivo da recusa:** ${truncate(absence.rejectionReason, 800)}` : null
+          ].filter(Boolean).join("\n")
+        }]
+      },
+      ...buildAbsenceComponents(absence)
+    ],
+    embeds: [],
     flags: MessageFlags.IsComponentsV2 as const
   };
 }
@@ -1049,6 +1137,10 @@ function buildAbsenceComponents(absence: FivemFacAbsence) {
 }
 
 function hasApproverRole(interaction: ButtonInteraction | ModalSubmitInteraction, settings: FivemFacSettings) {
+  if (interaction.guild?.ownerId === interaction.user.id || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+    return true;
+  }
+
   const allowed = new Set(settings.approverRoleIds);
   return interactionRoleIds(interaction).some((roleId) => allowed.has(roleId));
 }
@@ -1137,9 +1229,9 @@ function interactionRoleIds(interaction: ButtonInteraction | ModalSubmitInteract
   return [...roleIds];
 }
 
-function normalizeReturnDateInput(value: string, today: string) {
+function normalizeBrazilianDateInput(value: string, today: string) {
   const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})$/);
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
 
   if (!match) {
     return null;
@@ -1147,14 +1239,15 @@ function normalizeReturnDateInput(value: string, today: string) {
 
   const day = Number(match[1]);
   const month = Number(match[2]);
+  const explicitYear = match[3] ? Number(match[3]) : null;
   const currentYear = Number(today.slice(0, 4));
-  let dateKey = dateKeyFromParts(currentYear, month, day);
+  let dateKey = dateKeyFromParts(explicitYear ?? currentYear, month, day);
 
   if (!dateKey) {
     return null;
   }
 
-  if (dateKey < today) {
+  if (!explicitYear && dateKey < today) {
     dateKey = dateKeyFromParts(currentYear + 1, month, day);
   }
 

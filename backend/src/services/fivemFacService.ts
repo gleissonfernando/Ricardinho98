@@ -505,7 +505,7 @@ export async function approveFivemFacAbsence(input: ModerateFivemFacAbsenceInput
 
   ensureApprover(settings, input.moderatorRoleIds);
 
-  if (absence.status !== "pending" && absence.status !== "approved") {
+  if (absence.status !== "pending") {
     throw createFacError("Apenas solicitacoes pendentes podem ser aprovadas.", 409);
   }
 
@@ -560,7 +560,7 @@ export async function rejectFivemFacAbsence(input: ModerateFivemFacAbsenceInput)
 
   ensureApprover(settings, input.moderatorRoleIds);
 
-  if (absence.status !== "pending" && absence.status !== "approved") {
+  if (absence.status !== "pending") {
     throw createFacError("Esta solicitacao nao pode mais ser reprovada.", 409);
   }
 

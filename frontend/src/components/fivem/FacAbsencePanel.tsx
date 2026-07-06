@@ -54,6 +54,20 @@ const defaultMessages: FivemFacMessages = {
   finished: "Sua ausência foi finalizada e o cargo configurado foi removido."
 };
 
+const defaultPanelVisual = {
+  panelColor: "#2b2d31",
+  imageUrl: null,
+  imagePosition: "none" as const,
+  buttonsPosition: "inside_panel" as const,
+  buttons: [],
+  componentsOrder: ["image", "text", "buttons"] as Array<"image" | "text" | "buttons">,
+  enabledSections: {
+    buttons: true,
+    description: true,
+    image: false
+  }
+};
+
 const emptySettings: FivemFacSettings = {
   id: "",
   botId: "",
@@ -68,6 +82,7 @@ const emptySettings: FivemFacSettings = {
   memberRoleIds: [],
   logChannelId: null,
   messages: defaultMessages,
+  panelVisual: defaultPanelVisual,
   lastPanelRequestedAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
@@ -93,14 +108,16 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
   useEffect(() => {
     let mounted = true;
 
-    async function load() {
+    async function load(initial: boolean) {
       if (!botId || !guild) {
         setLoading(false);
         return;
       }
 
-      setLoading(true);
-      setMessage(null);
+      if (initial) {
+        setLoading(true);
+        setMessage(null);
+      }
 
       const [fac, options] = await Promise.all([
         getFivemFac(guild.id, botId),
@@ -115,7 +132,7 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
       setRoles(options.roles);
     }
 
-    load()
+    load(true)
       .catch((error) => {
         if (mounted) {
           setMessage(readRequestMessage(error) ?? "Não foi possível carregar o FAC.");
@@ -127,8 +144,20 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
         }
       });
 
+    const interval = window.setInterval(() => {
+      if (!botId || !guild) return;
+      getFivemFac(guild.id, botId)
+        .then((fac) => {
+          if (!mounted) return;
+          setSettings(fac.settings);
+          setAbsences(fac.absences);
+        })
+        .catch(() => undefined);
+    }, 5_000);
+
     return () => {
       mounted = false;
+      window.clearInterval(interval);
     };
   }, [botId, guild?.id]);
 
@@ -240,7 +269,7 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
     return (
       <Card>
         <CardContent className="flex min-h-40 items-center justify-center p-6 text-sm text-zinc-500">
-          Selecione um bot e um servidor para configurar o FiveM FAC.
+          Selecione um bot e um servidor para configurar RH - Ausências.
         </CardContent>
       </Card>
     );
@@ -271,9 +300,9 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-zinc-300" />
-                  FiveM FAC
+                  RH - Ausências
                 </CardTitle>
-                <CardDescription>Ausências para facções e organizações.</CardDescription>
+                <CardDescription>Solicitações, aprovação, logs e retorno automático.</CardDescription>
               </div>
               <Switch
                 checked={settings.enabled}
@@ -378,7 +407,7 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="h-5 w-5 text-zinc-300" />
-              Ausencias
+              Ausências
             </CardTitle>
             <CardDescription>{absences.length} registro(s) recentes.</CardDescription>
           </CardHeader>

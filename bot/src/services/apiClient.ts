@@ -2224,8 +2224,18 @@ export class ApiClient {
     return data.settings;
   }
 
+  async saveFivemFacSettings(guildId: string, input: Partial<Pick<FivemFacSettings, "enabled" | "panelChannelId" | "absenceRoleId" | "autoRemoveAbsenceRole" | "viewerRoleIds" | "approverRoleIds" | "memberRoleIds" | "logChannelId" | "messages" | "panelVisual">>) {
+    const { data } = await this.http.patch<{ settings: FivemFacSettings }>(`/fivem/bot/fac/${guildId}`, input);
+    return data.settings;
+  }
+
   async updateFivemFacPanelState(input: { guildId: string; messageId?: string | null }) {
     const { data } = await this.http.post<{ settings: FivemFacSettings }>("/fivem/bot/fac/panel-state", input);
+    return data.settings;
+  }
+
+  async requestFivemFacPanelPublish(guildId: string) {
+    const { data } = await this.http.post<{ settings: FivemFacSettings }>("/fivem/bot/fac/panel", { guildId });
     return data.settings;
   }
 

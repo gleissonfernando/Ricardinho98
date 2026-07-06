@@ -224,8 +224,8 @@ async function publishAdornmentRequest(interaction: ModalSubmitInteraction, cont
     return;
   }
   const imageUrl = interaction.fields.getTextInputValue("imageUrl").trim();
-  if (!validImageUrl(imageUrl)) {
-    await interaction.reply({ content: "Você precisa informar uma imagem válida do adorno.", ephemeral: true });
+  if (!validHttpUrl(imageUrl)) {
+    await interaction.reply({ content: "Você precisa informar um link válido do adorno.", ephemeral: true });
     return;
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -237,13 +237,14 @@ async function publishAdornmentRequest(interaction: ModalSubmitInteraction, cont
   const member = await interaction.guild!.members.fetch(interaction.user.id).catch(() => null);
   const displayName = member?.displayName || interaction.user.username;
   const adornmentNumber = interaction.fields.getTextInputValue("adornmentNumber").trim();
-  await channel.send(adornmentPanelPayload(config, {
+  const panelInput = {
     adornmentNumber,
     displayName,
     imageUrl,
     requestedAt: new Date(),
     userId: interaction.user.id
-  }));
+  };
+  await channel.send(adornmentPanelPayload(config, panelInput, true)).catch(() => channel.send(adornmentPanelPayload(config, panelInput, false)));
   await writeLog(context, interaction.guild!.id, interaction.user.id, "police-rh.adorno.created", "🏅 Solicitação de adorno publicada.", {
     adornmentNumber,
     channelId: channel.id,
@@ -252,7 +253,7 @@ async function publishAdornmentRequest(interaction: ModalSubmitInteraction, cont
   await interaction.editReply("✅ Solicitação de adorno enviada.");
 }
 
-function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber: string; displayName: string; imageUrl: string; requestedAt: Date; userId: string }) {
+function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber: string; displayName: string; imageUrl: string; requestedAt: Date; userId: string }, includePreview: boolean) {
   const logoUrl = config.adornoImageUrl || config.adornoBannerUrl || config.adornoFooterImageUrl;
   const header = `**${config.adornoTitle || "North Police Department"}**`;
   const fields = [
@@ -267,7 +268,7 @@ function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber:
       ? { type: 9, components: [{ type: 10, content: `${header}\n# 🏅 Solicitação de Adorno` }], accessory: { type: 11, media: { url: logoUrl }, description: "Logo" } }
       : { type: 10, content: `${header}\n# 🏅 Solicitação de Adorno` },
     ...fields.map((content) => ({ type: 10, content })),
-    { type: 12, items: [{ media: { url: input.imageUrl }, description: `Adorno ${input.adornmentNumber}` }] },
+    ...(includePreview ? [{ type: 12, items: [{ media: { url: input.imageUrl }, description: `Adorno ${input.adornmentNumber}` }] }] : []),
     { type: 14, divider: true, spacing: 1 },
     { type: 10, content: `-# 🏅 ${config.adornoFooterText || "Solicitação enviada ao HCMD"} • ${formatAdornmentDate(input.requestedAt)}` }
   ];
@@ -445,10 +446,10 @@ function readImagePosition(value: unknown, fallback: PanelVisualPosition = "side
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : fallback;
 }
 function colorToInt(value: string) { return Number.parseInt(value.replace("#", ""), 16) || 0x7c3aed; }
-function validImageUrl(value: string) {
+function validHttpUrl(value: string) {
   try {
     const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol) && /\.(png|jpe?g|gif|webp)$/i.test(url.pathname);
+    return ["http:", "https:"].includes(url.protocol);
   } catch {
     return false;
   }

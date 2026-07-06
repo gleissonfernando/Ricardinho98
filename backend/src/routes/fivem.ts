@@ -744,6 +744,22 @@ fivemRouter.post("/bot/fac/panel-state", requireBot, async (req, res, next) => {
   }
 });
 
+fivemRouter.post("/bot/fac/panel", requireBot, async (req, res, next) => {
+  try {
+    const input = z.object({
+      guildId: guildIdSchema
+    }).parse(req.body);
+    const botId = await readRequiredBotId(req);
+    await assertBotFacLicense(botId);
+
+    return res.json({
+      settings: await requestFivemFacPanelPublish(input.guildId, botId, botId)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 fivemRouter.get("/bot/fac/:guildId", requireBot, async (req, res, next) => {
   try {
     const guildId = guildIdSchema.parse(req.params.guildId);
@@ -752,6 +768,22 @@ fivemRouter.get("/bot/fac/:guildId", requireBot, async (req, res, next) => {
 
     return res.json({
       settings: await getFivemFacSettings(guildId, botId)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.patch("/bot/fac/:guildId", requireBot, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const botId = await readRequiredBotId(req);
+    await assertBotFacLicense(botId);
+    const input = facSettingsSchema.parse(req.body);
+    await validateFacResources(guildId, botId, input);
+
+    return res.json({
+      settings: await saveFivemFacSettings(guildId, botId, normalizeFacSettingsInput(input), botId)
     });
   } catch (error) {
     return next(error);

@@ -1,6 +1,7 @@
 import { Collection } from "discord.js";
 import { banCommand } from "./ban";
 import { advertirCommand } from "./advertir";
+import { ausenciaCommand, rhCommand } from "./ausencia";
 import { clearCommand } from "./clear";
 import { configCommand } from "./config";
 import { deleteServeCommand } from "./deleteServe";
@@ -31,6 +32,7 @@ export function createCommandCollection() {
   [
     pingCommand,
     advertirCommand,
+    ausenciaCommand,
     banCommand,
     clearCommand,
     configCommand,
@@ -58,6 +60,7 @@ export function createCommandCollection() {
     notifyOpenPointResetCommand,
     notifyOpenPointConfigCommand,
     removeCommand,
+    rhCommand,
     serverClonerCommand,
     serverGeneratorCommand
   ].forEach((command) => {
