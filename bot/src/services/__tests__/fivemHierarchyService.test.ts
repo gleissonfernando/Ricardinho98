@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   collectHierarchyMembersForPanel,
   getHierarchyPanelVisualIds,
-  isHierarchyMemberFetchComplete,
+  isHierarchyMemberCacheComplete,
   selectHierarchyPanelsForMemberUpdate
 } from '../fivemHierarchyService';
 
@@ -112,10 +112,10 @@ test('alteracao de nome atualiza apenas paineis onde o membro aparece', () => {
   assert.deepStrictEqual(affected.map((panel) => panel.id), ['panel-swat']);
 });
 
-test('considera completa somente uma consulta que retornou todos os membros', () => {
-  assert.equal(isHierarchyMemberFetchComplete(100, 100), true);
-  assert.equal(isHierarchyMemberFetchComplete(101, 100), true);
-  assert.equal(isHierarchyMemberFetchComplete(99, 100), false);
+test('usa o caminho rapido somente quando o cache contem todos os membros', () => {
+  assert.equal(isHierarchyMemberCacheComplete(100, 100), true);
+  assert.equal(isHierarchyMemberCacheComplete(101, 100), true);
+  assert.equal(isHierarchyMemberCacheComplete(99, 100), false);
 });
 
 test('deduplica apenas dentro do mesmo bloco do mesmo painel', () => {
@@ -143,7 +143,8 @@ function fakeMember(id: string, roleIds: string[]) {
 }
 
 function fakeGuild(members: Array<ReturnType<typeof fakeMember>>) {
-  return fakeMemberCollection(members);
+  const cache = fakeMemberCollection(members);
+  return { members: { cache } };
 }
 
 function fakeMemberCollection(members: Array<ReturnType<typeof fakeMember>>) {
