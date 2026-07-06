@@ -23,7 +23,6 @@ const needsAntiBan = isBotModuleEnabled("anti-ban") || managedRuntimeBot;
 const needsMemberEvents = ["welcome", "leave", "roles", "logs", "fivem-fac", "fivem-hierarchy", "account-age-security", "anti-ban", "tag-verification"].some(isBotModuleEnabled)
   || isSelfBotModuleEnabled()
   || managedRuntimeBot;
-const needsHierarchyMemberCache = managedRuntimeBot || isBotModuleEnabled("fivem-hierarchy");
 const selfBotModuleEnabled = isSelfBotModuleEnabled();
 const needsLegacyMessageModeration = !selfBotModuleEnabled && (isBotModuleEnabled("image-anti-spam") || isLinkAntiSpamEnabled());
 const needsMessageLogs = managedRuntimeBot || isBotModuleEnabled("logs") || env.BOT_MESSAGE_LOGS_ENABLED;
@@ -75,7 +74,7 @@ const client = new Client({
     ...Options.DefaultMakeCacheSettings,
     GuildInviteManager: 0,
     GuildMemberManager: {
-      maxSize: needsHierarchyMemberCache ? Math.max(env.BOT_CACHE_MEMBERS_MAX, 10_000) : env.BOT_CACHE_MEMBERS_MAX,
+      maxSize: env.BOT_CACHE_MEMBERS_MAX,
       keepOverLimit: (member) => Boolean(member.client.user && member.id === member.client.user.id)
     },
     DMMessageManager: 0,

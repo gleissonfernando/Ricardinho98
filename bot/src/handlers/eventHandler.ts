@@ -23,7 +23,7 @@ import { handleVoiceLogStateUpdate } from "../services/voiceLogService";
 import type { BotContext } from "../types";
 import { handleAntiBanDetection, recoverDeletedProtectedRole, recoverMemberProtectedRoles, recoverUpdatedProtectedRole } from "../services/antiBanService";
 import { BoundedTaskQueue } from "../services/boundedTaskQueue";
-import { forgetHierarchyMember, scheduleHierarchyRefresh } from "../services/fivemHierarchyService";
+import { scheduleHierarchyRefresh } from "../services/fivemHierarchyService";
 
 const eventQueue = new BoundedTaskQueue(env.BOT_EVENT_CONCURRENCY, env.BOT_EVENT_QUEUE_MAX, (name, error) => {
   console.error(JSON.stringify({
@@ -91,7 +91,6 @@ export function registerEvents(client: Client, context: BotContext) {
       runEvent("guildMemberRemove", async () => {
         await handleGuildMemberRemove(member, context);
         if (isBotModuleEnabled("fivem-hierarchy")) {
-          forgetHierarchyMember(member.guild.id, member.id);
           scheduleHierarchyRefresh(member.guild, context);
         }
         if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {

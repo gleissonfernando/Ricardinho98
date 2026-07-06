@@ -30,6 +30,7 @@ import {
   FIVEM_HIERARCHY_MODULE_ID,
   getFivemHierarchyDashboard,
   listActiveFivemHierarchyPanels,
+  listActiveFivemHierarchyVersions,
   requestFivemHierarchyPanelPublish,
   recordFivemHierarchySync,
   saveFivemHierarchyPanel,
@@ -502,6 +503,16 @@ fivemRouter.get("/bot/hierarchy/configs", requireBot, async (req, res, next) => 
     const botId = await readRequiredBotId(req);
     await assertBotFivemHierarchyLicense(botId);
     return res.json({ panels: await listActiveFivemHierarchyPanels(botId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.get("/bot/hierarchy/versions", requireBot, async (req, res, next) => {
+  try {
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    return res.json({ versions: await listActiveFivemHierarchyVersions(botId) });
   } catch (error) {
     return next(error);
   }

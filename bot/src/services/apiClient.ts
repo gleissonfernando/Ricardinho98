@@ -304,6 +304,12 @@ export type FivemHierarchyPanel = {
   useGlobalFooter: boolean;
 };
 
+export type FivemHierarchyVersion = {
+  guildId: string;
+  panelId: string;
+  updatedAt: string;
+};
+
 export type SafeBotMessageState = {
   botId: string | null;
   guildId: string;
@@ -1707,6 +1713,11 @@ export class ApiClient {
   async getActiveFivemHierarchyPanels() {
     const { data } = await this.http.get<{ panels: FivemHierarchyPanel[] }>("/fivem/bot/hierarchy/configs");
     return data.panels;
+  }
+
+  async getActiveFivemHierarchyVersions() {
+    const { data } = await this.http.get<{ versions: FivemHierarchyVersion[] }>("/fivem/bot/hierarchy/versions");
+    return data.versions;
   }
 
   async updateFivemHierarchyPanelState(input: { expectedMessageId?: string | null; guildId: string; messageId?: string | null; panelId: string }) {
