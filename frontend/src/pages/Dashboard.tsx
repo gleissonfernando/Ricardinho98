@@ -3526,7 +3526,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   <Switch checked={draft.autoUpdateEnabled !== false} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ autoUpdateEnabled: checked })} />
                 </label>
                 <label className="block text-xs font-medium text-zinc-400">Intervalo automatico (segundos)
-                  <input className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} min={30} onChange={(event) => patchDraft({ autoUpdateIntervalSeconds: Math.max(30, Number(event.target.value) || 300) })} type="number" value={draft.autoUpdateIntervalSeconds ?? 300} />
+                  <input className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} min={5} onChange={(event) => patchDraft({ autoUpdateIntervalSeconds: Math.max(5, Number(event.target.value) || 5) })} type="number" value={draft.autoUpdateIntervalSeconds ?? 5} />
                 </label>
                 <label className="block text-xs font-medium text-zinc-400">Formato dos membros
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ displayMode: event.target.value as FivemHierarchyPanelType["displayMode"] })} value={draft.displayMode}>
@@ -3677,7 +3677,7 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
   const now = new Date().toISOString();
   return {
     autoUpdateEnabled: true,
-    autoUpdateIntervalSeconds: 300,
+    autoUpdateIntervalSeconds: 5,
     botId: botId ?? null,
     color: template.color,
     createdAt: now,

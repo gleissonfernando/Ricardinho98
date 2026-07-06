@@ -24,6 +24,7 @@ const hierarchyPanelVisuals = new Map<string, { expiresAt: number; visuals: Pane
 const hierarchyPanelMessages = new Map<string, Message<true>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
 const HIERARCHY_VISUAL_CACHE_MS = 60_000;
+const HIERARCHY_AUTO_REFRESH_SECONDS = 5;
 let hierarchyRuntime: { client: Client<true>; context: BotContext } | null = null;
 
 type HierarchyRefreshOptions = {
@@ -688,7 +689,7 @@ async function reconcileHierarchyAutoRefreshTimers(client: Client<true>, context
       continue;
     }
 
-    const intervalMs = normalizeAutoUpdateIntervalSeconds(panel.autoUpdateIntervalSeconds) * 1000;
+    const intervalMs = HIERARCHY_AUTO_REFRESH_SECONDS * 1000;
     clearHierarchyAutoRefreshTimer(key);
     const timer = setInterval(() => {
       void refreshHierarchyPanelsForGuild(guild, context, panel.id, { allowCreate: false });
@@ -710,11 +711,6 @@ function clearHierarchyAutoRefreshTimer(key: string) {
   if (!timer) return;
   clearInterval(timer);
   autoRefreshTimers.delete(key);
-}
-
-function normalizeAutoUpdateIntervalSeconds(value: number | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 300;
-  return Math.max(30, Math.min(86_400, Math.trunc(value)));
 }
 
 function formatHierarchyMember(member: GuildMember, mode: FivemHierarchyPanel["displayMode"]) {

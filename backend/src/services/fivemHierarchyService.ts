@@ -252,7 +252,7 @@ async function ensureDefaultHierarchyPanels(guildId: string, botId: string | nul
 function defaultPanelDto(guildId: string, botId: string | null, id: string, unit: typeof DEFAULT_HIERARCHY_UNITS[number]): Partial<FivemHierarchyPanelDto> {
   return {
     autoUpdateEnabled: true,
-    autoUpdateIntervalSeconds: 300,
+    autoUpdateIntervalSeconds: 5,
     botId,
     color: unit.color,
     description: unit.description,
@@ -413,8 +413,8 @@ function normalizeDisplayMode(value: unknown): FivemHierarchyPanelDto["displayMo
 }
 
 function normalizeAutoUpdateInterval(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 300;
-  return Math.max(30, Math.min(86_400, Math.trunc(value)));
+  if (typeof value !== "number" || !Number.isFinite(value)) return 5;
+  return Math.max(5, Math.min(86_400, Math.trunc(value)));
 }
 
 function slugId(value: string) {
