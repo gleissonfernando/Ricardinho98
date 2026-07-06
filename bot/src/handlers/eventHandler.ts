@@ -104,11 +104,8 @@ export function registerEvents(client: Client, context: BotContext) {
       runEvent("guildMemberUpdate", async () => {
         const oldMemberWasPartial = oldMember.partial;
         const [oldResolved, newResolved] = await Promise.all([resolveMember(oldMember), resolveMember(newMember)]);
-        if (oldMemberWasPartial && newResolved && isBotModuleEnabled("fivem-hierarchy")) {
-          scheduleHierarchyRefresh(newResolved.guild, context);
-        }
         if (oldResolved && newResolved) {
-          await handleGuildMemberUpdate(oldResolved, newResolved, context);
+          await handleGuildMemberUpdate(oldResolved, newResolved, context, { diffReliable: !oldMemberWasPartial });
           if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {
             const removedRoleIds = oldResolved.roles.cache.filter((role) => !newResolved.roles.cache.has(role.id)).map((role) => role.id);
             const addedRoleIds = newResolved.roles.cache.filter((role) => !oldResolved.roles.cache.has(role.id)).map((role) => role.id);

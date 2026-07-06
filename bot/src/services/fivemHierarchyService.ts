@@ -32,6 +32,10 @@ type HierarchyRefreshOptions = {
   automatic?: boolean;
 };
 
+type HierarchyMemberUpdateOptions = {
+  diffReliable?: boolean;
+};
+
 export const hierarchyCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName("hierarquia")
@@ -148,10 +152,10 @@ export function scheduleHierarchyRefresh(guild: Guild, context: BotContext, pane
   scheduledGuilds.set(key, timeout);
 }
 
-export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMember, newMember: GuildMember, context: BotContext) {
+export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMember, newMember: GuildMember, context: BotContext, options: HierarchyMemberUpdateOptions = {}) {
   if (!isBotModuleEnabled("fivem-hierarchy")) return;
 
-  const oldRoleIds = new Set(oldMember.roles.cache.keys());
+  const oldRoleIds = new Set((getSnapshotHierarchyMember(newMember.guild.id, newMember.id) ?? oldMember).roles.cache.keys());
   const newRoleIds = new Set(newMember.roles.cache.keys());
   const changedRoleIds = new Set<string>();
   const addedRoleIds: string[] = [];
@@ -172,12 +176,15 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
   }
 
   const nameChanged = oldMember.displayName !== newMember.displayName || oldMember.nickname !== newMember.nickname;
-  if (!changedRoleIds.size && !nameChanged) return;
   const panels = await loadActiveHierarchyPanels(context);
+  const guildPanels = panels.filter((panel) => panel.guildId === newMember.guild.id && panel.autoUpdateEnabled !== false);
+  if (!changedRoleIds.size && !nameChanged && options.diffReliable !== false) return;
   const affectedPanels = selectHierarchyPanelsForMemberUpdate(
-    panels.filter((panel) => panel.guildId === newMember.guild.id && panel.autoUpdateEnabled !== false),
+    guildPanels,
     changedRoleIds,
-    nameChanged ? newRoleIds : new Set<string>()
+    options.diffReliable === false && !changedRoleIds.size
+      ? new Set(guildPanels.flatMap((panel) => panel.hierarchies.map((item) => item.roleId).filter(Boolean)))
+      : nameChanged ? newRoleIds : new Set<string>()
   );
   if (!affectedPanels.length) return;
 
@@ -185,6 +192,7 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
     action: "hierarchy.member_change_detected",
     addedRoleIds,
     affectedPanelIds: affectedPanels.map((panel) => panel.id),
+    diffReliable: options.diffReliable !== false,
     guildId: newMember.guild.id,
     nameChanged,
     removedRoleIds,
@@ -554,6 +562,10 @@ export function forgetHierarchyMember(guildId: string, userId: string) {
   const next = new Map(snapshot);
   next.delete(userId);
   hierarchyMemberSnapshots.set(guildId, next);
+}
+
+function getSnapshotHierarchyMember(guildId: string, userId: string) {
+  return hierarchyMemberSnapshots.get(guildId)?.get(userId) ?? null;
 }
 
 function rememberHierarchyMembers(guildId: string, members: HierarchyMemberCache) {

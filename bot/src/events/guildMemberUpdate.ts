@@ -5,7 +5,7 @@ import { scheduleHierarchyRefreshForMemberUpdate } from "../services/fivemHierar
 import { applyAutomaticRoles } from "../services/roleService";
 import type { BotContext } from "../types";
 
-export async function handleGuildMemberUpdate(oldMember: GuildMember, newMember: GuildMember, context: BotContext) {
+export async function handleGuildMemberUpdate(oldMember: GuildMember, newMember: GuildMember, context: BotContext, options: { diffReliable?: boolean } = {}) {
   const welcomeEnabled = isBotModuleEnabled("welcome");
   const rolesEnabled = isBotModuleEnabled("roles");
   const tasks: Promise<unknown>[] = [];
@@ -22,7 +22,7 @@ export async function handleGuildMemberUpdate(oldMember: GuildMember, newMember:
     .map((role) => role.name);
 
   if (isBotModuleEnabled("fivem-hierarchy")) {
-    tasks.push(scheduleHierarchyRefreshForMemberUpdate(oldMember, newMember, context));
+    tasks.push(scheduleHierarchyRefreshForMemberUpdate(oldMember, newMember, context, options));
   }
 
   if (isBotModuleEnabled("logs")) {
