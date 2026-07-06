@@ -8,7 +8,8 @@ import {
   type Guild,
   type GuildMember,
   type GuildTextBasedChannel,
-  type Interaction
+  type Interaction,
+  type Message
 } from "discord.js";
 import { isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
@@ -20,6 +21,7 @@ const autoRefreshTimers = new Map<string, NodeJS.Timeout>();
 const publishingPanels = new Map<string, Promise<void>>();
 const hierarchyMemberSnapshots = new Map<string, Map<string, GuildMember>>();
 const hierarchyPanelVisuals = new Map<string, { expiresAt: number; visuals: PanelVisualConfig[] }>();
+const hierarchyPanelMessages = new Map<string, Message<true>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
 const HIERARCHY_VISUAL_CACHE_MS = 60_000;
 let hierarchyRuntime: { client: Client<true>; context: BotContext } | null = null;
@@ -106,12 +108,14 @@ export function startFivemHierarchyService(client: Client<true>, context: BotCon
 
     if (payload.action === "publish") {
       clearHierarchyPanelVisualCache(payload.guildId, payload.panelId);
+      clearHierarchyPanelMessageCache(payload.guildId, payload.panelId);
       void refreshHierarchyPanelsForGuild(guild, context, payload.panelId, { allowCreate: true, automatic: false });
       void reconcileHierarchyAutoRefreshTimers(client, context, guild.id);
       return;
     }
 
     clearHierarchyPanelVisualCache(payload.guildId, payload.panelId);
+    clearHierarchyPanelMessageCache(payload.guildId, payload.panelId);
     scheduleHierarchyRefresh(guild, context, payload.panelId, { allowCreate: true, automatic: false });
     void reconcileHierarchyAutoRefreshTimers(client, context, guild.id);
   });
@@ -311,18 +315,28 @@ async function publishHierarchyPanelOnce(guild: Guild, context: BotContext, pane
 async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: FivemHierarchyPanel, members?: HierarchyMemberCache, options: HierarchyRefreshOptions = {}) {
   if (!panel.enabled || !panel.panelChannelId) return;
   const allowCreate = options.allowCreate !== false;
-  const channel = await guild.channels.fetch(panel.panelChannelId).catch(() => null);
+  const channel = getCachedHierarchyPanelChannel(guild, panel.panelChannelId)
+    ?? await guild.channels.fetch(panel.panelChannelId).catch(() => null);
   if (!channel || !("send" in channel) || !("messages" in channel)) return;
   const visuals = await getPanelVisualSlots(context, guild.id, panel.id);
   const payload = createHierarchyPayload(guild, panel, visuals[0] ?? null, visuals.slice(1), members);
-  let message = panel.panelMessageId ? await channel.messages.fetch(panel.panelMessageId).catch(() => null) : null;
+  let message = getCachedHierarchyPanelMessage(guild.id, panel, channel);
+  if (!message && panel.panelMessageId) {
+    message = await channel.messages.fetch(panel.panelMessageId).catch(() => null);
+  }
   const matchingMessages = options.allowCreate !== false
     ? await findHierarchyPanelMessages(channel, guild.client.user.id, panel)
     : [];
   if (!message) message = matchingMessages[0] ?? null;
 
   if (message) {
-    await message.edit(payload);
+    message = await message.edit(payload).catch(async (error) => {
+      forgetHierarchyPanelMessage(guild.id, panel.id);
+      if (!panel.panelMessageId) return null;
+      console.warn(`[HIERARQUIA] Falha ao editar mensagem em cache do painel ${panel.id}; tentando buscar novamente.`, error instanceof Error ? error.message : error);
+      const freshMessage = await channel.messages.fetch(panel.panelMessageId).catch(() => null);
+      return freshMessage ? freshMessage.edit(payload).catch(() => null) : null;
+    });
   } else if (!allowCreate) {
     console.log(`[HIERARQUIA] Painel ${panel.name} sem mensagem salva/encontrada. Atualizacao automatica nao criou painel novo.`);
     return;
@@ -330,6 +344,7 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
     message = await channel.send(payload).catch(() => null);
   }
   if (!message) return;
+  rememberHierarchyPanelMessage(guild.id, panel.id, message);
 
   const savedPanel = await context.api.updateFivemHierarchyPanelState({
     expectedMessageId: panel.panelMessageId,
@@ -338,9 +353,13 @@ async function publishHierarchyPanel(guild: Guild, context: BotContext, panel: F
     panelId: panel.id
   }).catch(() => null);
   if (savedPanel?.panelMessageId && savedPanel.panelMessageId !== message.id) {
+    forgetHierarchyPanelMessage(guild.id, panel.id);
     await message.delete().catch(() => undefined);
     const canonicalMessage = await channel.messages.fetch(savedPanel.panelMessageId).catch(() => null);
-    if (canonicalMessage) await canonicalMessage.edit(payload);
+    if (canonicalMessage) {
+      const edited = await canonicalMessage.edit(payload);
+      rememberHierarchyPanelMessage(guild.id, panel.id, edited);
+    }
     return;
   }
 
@@ -580,6 +599,42 @@ function clearHierarchyPanelVisualCache(guildId: string, panelId?: string | null
       hierarchyPanelVisuals.delete(key);
     }
   }
+}
+
+function clearHierarchyPanelMessageCache(guildId: string, panelId?: string | null) {
+  if (panelId) {
+    forgetHierarchyPanelMessage(guildId, panelId);
+    return;
+  }
+
+  for (const key of [...hierarchyPanelMessages.keys()]) {
+    if (key.startsWith(`${guildId}:`)) {
+      hierarchyPanelMessages.delete(key);
+    }
+  }
+}
+
+function getCachedHierarchyPanelChannel(guild: Guild, channelId: string) {
+  const channel = guild.channels.cache.get(channelId);
+  return channel && "send" in channel && "messages" in channel ? channel : null;
+}
+
+function getCachedHierarchyPanelMessage(guildId: string, panel: FivemHierarchyPanel, channel: GuildTextBasedChannel) {
+  const cached = hierarchyPanelMessages.get(hierarchyPanelMessageKey(guildId, panel.id));
+  if (cached && (!panel.panelMessageId || cached.id === panel.panelMessageId)) return cached;
+  return panel.panelMessageId ? channel.messages.cache.get(panel.panelMessageId) ?? null : null;
+}
+
+function rememberHierarchyPanelMessage(guildId: string, panelId: string, message: Message<true>) {
+  hierarchyPanelMessages.set(hierarchyPanelMessageKey(guildId, panelId), message);
+}
+
+function forgetHierarchyPanelMessage(guildId: string, panelId: string) {
+  hierarchyPanelMessages.delete(hierarchyPanelMessageKey(guildId, panelId));
+}
+
+function hierarchyPanelMessageKey(guildId: string, panelId: string) {
+  return `${guildId}:${panelId}`;
 }
 
 function canEditHierarchyPanel(member: GuildMember, panel: FivemHierarchyPanel, hasManageGuild: boolean) {

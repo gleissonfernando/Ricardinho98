@@ -84,7 +84,7 @@ export function registerEvents(client: Client, context: BotContext) {
             scheduleHierarchyRefresh(resolved.guild, context);
           }
         }
-      });
+      }, isBotModuleEnabled("fivem-hierarchy"));
     });
     client.on(Events.GuildMemberRemove, (member) => {
       if (isMaintenanceModeActive()) return;
@@ -97,7 +97,7 @@ export function registerEvents(client: Client, context: BotContext) {
         if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {
           await handleAntiBanDetection(context, { actionType: "kick", auditType: AuditLogEvent.MemberKick, guild: member.guild, targetId: member.id });
         }
-      });
+      }, isBotModuleEnabled("fivem-hierarchy"));
     });
     client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
       if (isMaintenanceModeActive()) return;
@@ -123,7 +123,7 @@ export function registerEvents(client: Client, context: BotContext) {
             });
           }
         }
-      });
+      }, isBotModuleEnabled("fivem-hierarchy"));
     });
   }
 
@@ -327,8 +327,8 @@ export function stopEventProcessing(timeoutMs = 10_000) {
   return eventQueue.stopAndDrain(timeoutMs);
 }
 
-function runEvent(name: string, handler: () => Promise<unknown>) {
-  const accepted = eventQueue.enqueue(name, handler, name === "interactionCreate" || name === "ready");
+function runEvent(name: string, handler: () => Promise<unknown>, priority = false) {
+  const accepted = eventQueue.enqueue(name, handler, priority || name === "interactionCreate" || name === "ready");
   if (!accepted) {
     console.warn(`[event:${name}] descartado para proteger o processo contra sobrecarga.`);
   }
