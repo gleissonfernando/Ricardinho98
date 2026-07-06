@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   collectHierarchyMembersForPanel,
   getHierarchyPanelVisualIds,
+  isHierarchyMemberCacheComplete,
   selectHierarchyPanelsForMemberUpdate
 } from '../fivemHierarchyService';
 
@@ -109,6 +110,12 @@ test('alteracao de nome atualiza apenas paineis onde o membro aparece', () => {
   );
 
   assert.deepStrictEqual(affected.map((panel) => panel.id), ['panel-swat']);
+});
+
+test('usa o caminho rapido somente quando o cache contem todos os membros', () => {
+  assert.equal(isHierarchyMemberCacheComplete(100, 100), true);
+  assert.equal(isHierarchyMemberCacheComplete(101, 100), true);
+  assert.equal(isHierarchyMemberCacheComplete(99, 100), false);
 });
 
 test('deduplica apenas dentro do mesmo bloco do mesmo painel', () => {

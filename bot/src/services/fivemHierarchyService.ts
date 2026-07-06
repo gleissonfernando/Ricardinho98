@@ -160,7 +160,9 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
   if (!affectedPanels.length) return;
 
   console.log(`[HIERARQUIA] Alteracao relevante detectada para ${newMember.user.tag}. Atualizando ${affectedPanels.length} painel(is).`);
-  const members = newMember.guild.members.cache;
+  const members = isHierarchyMemberCacheComplete(newMember.guild.members.cache.size, newMember.guild.memberCount)
+    ? newMember.guild.members.cache
+    : await fetchHierarchyMembers(newMember.guild);
   const knownRoleIds = new Set(newMember.guild.roles.cache.keys());
   await Promise.all(affectedPanels.map((panel) => syncHierarchyPanel(
     newMember.guild.id,
@@ -182,6 +184,10 @@ export function selectHierarchyPanelsForMemberUpdate(
   return panels.filter((panel) => panel.hierarchies.some((item) => item.active
     && item.roleId
     && (changedRoleIds.has(item.roleId) || currentRoleIds.has(item.roleId))));
+}
+
+export function isHierarchyMemberCacheComplete(cachedMemberCount: number, guildMemberCount: number) {
+  return cachedMemberCount >= guildMemberCount;
 }
 
 export async function refreshHierarchyPanelsForGuild(guild: Guild, context: BotContext, panelId?: string | null, options: HierarchyRefreshOptions = {}) {

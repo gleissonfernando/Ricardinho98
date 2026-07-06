@@ -101,7 +101,11 @@ export function registerEvents(client: Client, context: BotContext) {
     client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
       if (isMaintenanceModeActive()) return;
       runEvent("guildMemberUpdate", async () => {
+        const oldMemberWasPartial = oldMember.partial;
         const [oldResolved, newResolved] = await Promise.all([resolveMember(oldMember), resolveMember(newMember)]);
+        if (oldMemberWasPartial && newResolved && isBotModuleEnabled("fivem-hierarchy")) {
+          scheduleHierarchyRefresh(newResolved.guild, context);
+        }
         if (oldResolved && newResolved) {
           await handleGuildMemberUpdate(oldResolved, newResolved, context);
           if (managedRuntimeBot || isBotModuleEnabled("anti-ban")) {
