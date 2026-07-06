@@ -18,6 +18,7 @@ import { resolvePanelImageUrl, type PanelVisualConfig, type PanelVisualPosition 
 const scheduledGuilds = new Map<string, NodeJS.Timeout>();
 const autoRefreshTimers = new Map<string, NodeJS.Timeout>();
 const publishingPanels = new Map<string, Promise<void>>();
+const hierarchyMemberSnapshots = new Map<string, Map<string, GuildMember>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
 let hierarchyRuntime: { client: Client<true>; context: BotContext } | null = null;
 
@@ -181,9 +182,10 @@ export async function scheduleHierarchyRefreshForMemberUpdate(oldMember: GuildMe
     removedRoleIds,
     userId: newMember.id
   }));
-  const members = isHierarchyMemberCacheComplete(newMember.guild.members.cache.size, newMember.guild.memberCount)
-    ? newMember.guild.members.cache
-    : await fetchHierarchyMembers(newMember.guild);
+  const members = resolveHierarchyMembersForMemberUpdate(newMember)
+    ?? (isHierarchyMemberCacheComplete(newMember.guild.members.cache.size, newMember.guild.memberCount)
+      ? rememberHierarchyMembers(newMember.guild.id, newMember.guild.members.cache)
+      : await fetchHierarchyMembers(newMember.guild));
   if (!members) return;
   const knownRoleIds = new Set(newMember.guild.roles.cache.keys());
   await Promise.all(affectedPanels.map((panel) => syncHierarchyPanel(
@@ -475,7 +477,7 @@ async function fetchHierarchyMembers(guild: Guild): Promise<HierarchyMemberCache
       console.error(`[HIERARQUIA] Consulta incompleta no servidor ${guild.id}: ${members.size}/${guild.memberCount} membros. Painel preservado.`);
       return null;
     }
-    return members;
+    return rememberHierarchyMembers(guild.id, members);
   } catch (error) {
     console.error(`[HIERARQUIA] Falha ao buscar membros atualizados do servidor ${guild.id}. Verifique SERVER MEMBERS INTENT no Developer Portal.`, error);
     return null;
@@ -498,6 +500,46 @@ async function findHierarchyPanelMessages(
 
 function getHierarchyMemberCache(source: HierarchyMemberSource): HierarchyMemberCache {
   return "members" in source ? source.members.cache : source;
+}
+
+export function resolveHierarchyMembersForMemberUpdate(member: GuildMember) {
+  const snapshot = hierarchyMemberSnapshots.get(member.guild.id);
+  if (!snapshot) return null;
+  const next = new Map(snapshot);
+  next.set(member.id, member);
+  hierarchyMemberSnapshots.set(member.guild.id, next);
+  return createHierarchyMemberCache(next);
+}
+
+export function forgetHierarchyMember(guildId: string, userId: string) {
+  const snapshot = hierarchyMemberSnapshots.get(guildId);
+  if (!snapshot) return;
+  const next = new Map(snapshot);
+  next.delete(userId);
+  hierarchyMemberSnapshots.set(guildId, next);
+}
+
+function rememberHierarchyMembers(guildId: string, members: HierarchyMemberCache) {
+  const snapshot = new Map<string, GuildMember>();
+  for (const member of members.filter(() => true).values()) {
+    snapshot.set(member.id, member);
+  }
+  hierarchyMemberSnapshots.set(guildId, snapshot);
+  return createHierarchyMemberCache(snapshot);
+}
+
+function createHierarchyMemberCache(members: Map<string, GuildMember>): HierarchyMemberCache {
+  return {
+    filter(predicate: (member: GuildMember) => boolean) {
+      const filtered = new Map<string, GuildMember>();
+      for (const [id, member] of members) {
+        if (predicate(member)) filtered.set(id, member);
+      }
+      return {
+        values: () => filtered.values()
+      };
+    }
+  };
 }
 
 function canEditHierarchyPanel(member: GuildMember, panel: FivemHierarchyPanel, hasManageGuild: boolean) {

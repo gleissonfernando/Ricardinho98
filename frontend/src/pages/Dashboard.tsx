@@ -3313,17 +3313,30 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const refreshHierarchyDashboard = useCallback(async (options: { refreshOptions?: boolean; resetDraft?: boolean } = {}) => {
+    if (!guild) return;
+    const [dashboard, liveOptions] = await Promise.all([
+      getFivemHierarchy(guild.id, botId),
+      options.refreshOptions !== false ? getGuildLiveOptions(guild.id, botId) : Promise.resolve(null)
+    ]);
+    setPanels(dashboard.panels);
+    setDraft((current) => {
+      if (options.resetDraft || !current) return dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
+      return dashboard.panels.find((panel) => panel.id === current.id) ?? current;
+    });
+    if (liveOptions) {
+      setChannels(liveOptions.channels);
+      setRoles(liveOptions.roles);
+    }
+  }, [botId, guild]);
+
   useEffect(() => {
     if (!guild) return;
     let active = true;
     setLoading(true);
-    Promise.all([getFivemHierarchy(guild.id, botId), getGuildLiveOptions(guild.id, botId)])
-      .then(([dashboard, options]) => {
+    refreshHierarchyDashboard({ resetDraft: true })
+      .then(() => {
         if (!active) return;
-        setPanels(dashboard.panels);
-        setDraft(dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId));
-        setChannels(options.channels);
-        setRoles(options.roles);
       })
       .catch(() => {
         if (active) setError("Nao foi possivel carregar Hierarquia FAQ.");
@@ -3334,7 +3347,24 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     return () => {
       active = false;
     };
-  }, [botId, guild?.id]);
+  }, [guild, refreshHierarchyDashboard]);
+
+  useEffect(() => {
+    if (!guild) return;
+    const socket = createDashboardSocket();
+    const refresh = (payload: { botId?: string | null; guildId?: string | null } = {}) => {
+      if (payload.guildId !== guild.id) return;
+      if ((payload.botId ?? null) !== (botId ?? null)) return;
+      void refreshHierarchyDashboard({ refreshOptions: false }).catch(() => undefined);
+    };
+    socket.on("fivem:hierarchy:synced", refresh);
+    socket.on("fivem:hierarchy:panel_update", refresh);
+    return () => {
+      socket.off("fivem:hierarchy:synced", refresh);
+      socket.off("fivem:hierarchy:panel_update", refresh);
+      socket.disconnect();
+    };
+  }, [botId, guild, refreshHierarchyDashboard]);
 
   function patchDraft(patch: Partial<FivemHierarchyPanelType>) {
     setDraft((current) => current ? { ...current, ...patch } : current);

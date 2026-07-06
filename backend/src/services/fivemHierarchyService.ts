@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ensureGuild, getMongoCollections, type MongoFivemHierarchyEntry, type MongoFivemHierarchyLog, type MongoFivemHierarchyPanel } from "../database/mongo";
-import { devBotRealtimeRoom, emitRealtimeToRoom } from "../realtime/events";
+import { devBotRealtimeRoom, emitRealtime, emitRealtimeToRoom } from "../realtime/events";
 
 export const FIVEM_HIERARCHY_MODULE_ID = "fivem-hierarchy";
 
@@ -201,6 +201,17 @@ export async function recordFivemHierarchySync(
     panelId,
     userId: input.actorId ?? null
   });
+  const payload = {
+    botId,
+    guildId,
+    memberCount: input.memberCount,
+    missingRoleIds: input.missingRoleIds,
+    panelId,
+    processedRoleIds: input.processedRoleIds,
+    syncedAt: new Date().toISOString()
+  };
+  emitRealtimeToRoom(devBotRealtimeRoom(botId), "fivem:hierarchy:synced", payload);
+  emitRealtime("fivem:hierarchy:synced", payload);
 }
 
 export async function listFivemHierarchyLogs(guildId: string, botId?: string | null, panelId?: string | null) {
