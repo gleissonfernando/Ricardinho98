@@ -161,14 +161,26 @@ export async function requestFivemHierarchyPanelPublish(guildId: string, botId: 
   return panel;
 }
 
-export async function updateFivemHierarchyPanelState(guildId: string, botId: string | null, panelId: string, messageId: string | null) {
+export async function updateFivemHierarchyPanelState(
+  guildId: string,
+  botId: string | null,
+  panelId: string,
+  messageId: string | null,
+  expectedMessageId?: string | null
+) {
   const { fivemHierarchyPanels } = await getMongoCollections();
+  const normalizedBotId = normalizeBotId(botId);
+  const expectedState = expectedMessageId === undefined
+    ? {}
+    : { panelMessageId: normalizeSnowflake(expectedMessageId) };
   const row = await fivemHierarchyPanels.findOneAndUpdate(
-    { _id: panelId, ...scopeQuery(guildId, normalizeBotId(botId)) },
+    { _id: panelId, ...scopeQuery(guildId, normalizedBotId), ...expectedState },
     { $set: { panelMessageId: normalizeSnowflake(messageId), updatedAt: new Date() } },
     { returnDocument: "after" }
   );
-  return row ? toPanelDto(row) : null;
+  if (row) return toPanelDto(row);
+  const current = await fivemHierarchyPanels.findOne({ _id: panelId, ...scopeQuery(guildId, normalizedBotId) });
+  return current ? toPanelDto(current) : null;
 }
 
 export async function recordFivemHierarchySync(

@@ -510,13 +510,20 @@ fivemRouter.get("/bot/hierarchy/configs", requireBot, async (req, res, next) => 
 fivemRouter.post("/bot/hierarchy/panel-state", requireBot, async (req, res, next) => {
   try {
     const input = z.object({
+      expectedMessageId: optionalSnowflakeSchema,
       guildId: guildIdSchema,
       messageId: optionalSnowflakeSchema,
       panelId: z.string().min(1).max(80)
     }).parse(req.body);
     const botId = await readRequiredBotId(req);
     await assertBotFivemHierarchyLicense(botId);
-    const panel = await updateFivemHierarchyPanelState(input.guildId, botId, input.panelId, input.messageId ?? null);
+    const panel = await updateFivemHierarchyPanelState(
+      input.guildId,
+      botId,
+      input.panelId,
+      input.messageId ?? null,
+      input.expectedMessageId
+    );
     return res.json({ panel });
   } catch (error) {
     return next(error);

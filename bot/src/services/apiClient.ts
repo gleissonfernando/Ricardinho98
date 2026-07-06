@@ -1709,7 +1709,7 @@ export class ApiClient {
     return data.panels;
   }
 
-  async updateFivemHierarchyPanelState(input: { guildId: string; messageId?: string | null; panelId: string }) {
+  async updateFivemHierarchyPanelState(input: { expectedMessageId?: string | null; guildId: string; messageId?: string | null; panelId: string }) {
     const { data } = await this.http.post<{ panel: FivemHierarchyPanel | null }>("/fivem/bot/hierarchy/panel-state", input);
     return data.panel;
   }
