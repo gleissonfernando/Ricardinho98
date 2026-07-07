@@ -409,7 +409,7 @@ function createHierarchyPayload(guild: Guild, panel: FivemHierarchyPanel, visual
   const mainImagePosition = normalizeHierarchyMainImagePosition(mainVisual?.imagePosition);
   const sideImageUrl = mainImageUrl && ["side", "thumbnail"].includes(mainImagePosition) ? mainImageUrl : null;
   const title = formatHierarchyTitle(panel);
-  const description = panel.description ?? `Lista oficial de membros da unidade ${panel.name}`;
+  const description = normalizeHierarchyPanelDescription(panel.description, panel.name);
   const updatedAt = formatHierarchyUpdatedAt(new Date());
   const header = [`# ${title}`, description, `-# 🔄 Atualizado automaticamente em: ${updatedAt}`].filter(Boolean).join("\n");
   const components: unknown[] = [];
@@ -771,6 +771,14 @@ function formatHierarchyTitle(panel: FivemHierarchyPanel) {
   const configured = panel.title?.trim() || `Hierarquia - ${panel.name}`;
   const normalized = configured.replace(/\s+-\s+/g, " — ");
   return /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(normalized) ? normalized : `📋 ${normalized}`;
+}
+
+function normalizeHierarchyPanelDescription(description: string | null | undefined, panelName: string) {
+  const value = description?.trim();
+  if (!value) return `Lista oficial de membros da unidade ${panelName}`;
+  const inheritedMatch = value.match(/^Lista oficial de membros da unidade\s+(.+)$/i);
+  if (inheritedMatch && inheritedMatch[1]?.trim() !== panelName) return `Lista oficial de membros da unidade ${panelName}`;
+  return value;
 }
 
 function formatHierarchyUpdatedAt(date: Date) {

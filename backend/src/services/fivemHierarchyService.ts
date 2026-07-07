@@ -387,7 +387,7 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     autoUpdateIntervalSeconds: normalizeAutoUpdateInterval(row.autoUpdateIntervalSeconds),
     color: row.color,
     createdAt: row.createdAt.toISOString(),
-    description: row.description ?? null,
+    description: normalizeHierarchyDescription(row.description, row.name),
     displayMode: normalizeDisplayMode(row.displayMode),
     emptyText: row.emptyText ?? "Nenhum membro encontrado com este cargo.",
     enabled: row.enabled === true,
