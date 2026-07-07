@@ -23,6 +23,7 @@ import { sendPoliceLog } from "./policeLogService";
 const MODULE_ID = "police-rh";
 const PREFIX = "police_rh";
 const DEFAULT_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
+const ABSENCE_RECONCILE_INTERVAL_MS = 60_000;
 
 type PoliceRhConfig = {
   enabled: boolean;
@@ -47,6 +48,7 @@ type PoliceRhConfig = {
   absenceDmApprovedMessage: string;
   absenceDmRejectedMessage: string;
   absenceDmFinishedMessage: string;
+  pendingAbsenceRemovals: PoliceRhPendingAbsenceRemoval[];
   absenceFooterText: string;
   absenceFooterImageUrl: string;
   absenceImagePosition: PanelVisualPosition;
@@ -70,7 +72,23 @@ type PoliceRhConfig = {
   rhLogChannelId: string | null;
 };
 
+type PoliceRhPendingAbsenceRemoval = {
+  absenceRoleId: string;
+  approvedAt: string;
+  approvedBy: string | null;
+  returnDate: string;
+  returnDateKey: string;
+  userId: string;
+};
+
+let policeRhServiceStarted = false;
+let absenceReconcileRunning = false;
+const absenceReconcileFailureLogAt = new Map<string, number>();
+
 export function startPoliceRhService(client: Client<true>, context: BotContext) {
+  if (policeRhServiceStarted) return;
+  policeRhServiceStarted = true;
+
   context.socket.onPoliceRhPanelUpdate((payload) => {
     const guild = client.guilds.cache.get(payload.guildId);
     if (!guild) return;
@@ -78,6 +96,12 @@ export function startPoliceRhService(client: Client<true>, context: BotContext) 
       console.warn("[police-rh] falha ao publicar painel:", error instanceof Error ? error.message : error);
     });
   });
+
+  void reconcilePoliceRhAbsenceRoles(client, context);
+  const interval = setInterval(() => {
+    void reconcilePoliceRhAbsenceRoles(client, context);
+  }, ABSENCE_RECONCILE_INTERVAL_MS);
+  interval.unref();
 }
 
 export async function showPoliceRhConfigPanel(interaction: ChatInputCommandInteraction, context: BotContext) {
@@ -508,6 +532,7 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
   if (approved && config.absenceRoleId) {
     const requester = await interaction.guild.members.fetch(topic.userId).catch(() => null);
     await requester?.roles.add(config.absenceRoleId, `Ausência aprovada por ${interaction.user.tag}`).catch(() => null);
+    await registerPendingAbsenceRemoval(interaction.guild.id, context, config, topic.userId, topic.returnDate, interaction.user.id);
     scheduleAbsenceRoleRemoval(interaction.guild, context, config, topic.userId, topic.returnDate);
   }
   const dmMessage = approved ? config.absenceDmApprovedMessage : config.absenceDmRejectedMessage;
@@ -549,6 +574,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     absenceDmApprovedMessage: readString(raw.absenceDmApprovedMessage) ?? "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
     absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "❌ Sua solicitação de ausência foi recusada.",
     absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
+    pendingAbsenceRemovals: readPendingAbsenceRemovals(raw.pendingAbsenceRemovals),
     absenceFooterText: readString(raw.absenceFooterText) ?? "📝 Solicitação de ausência",
     absenceFooterImageUrl: readString(raw.absenceFooterImageUrl) ?? "",
     absenceImagePosition: readImagePosition(raw.absenceImagePosition, absenceVisual.imagePosition),
@@ -565,6 +591,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     adornoFooterImageUrl: readString(raw.adornoFooterImageUrl) ?? "",
     adornoImagePosition: readImagePosition(raw.adornoImagePosition, adornoVisual.imagePosition),
     adornoImageUrl: readString(raw.adornoImageUrl) ?? adornoVisual.imageUrl,
+    adornoReviewMode: readString(raw.adornoReviewMode) === "channel" ? "channel" : "panel",
     adornoTitle: readString(raw.adornoTitle) ?? "North Police Department",
     adornoDescription: readString(raw.adornoDescription) ?? "",
     adornoFooterText: readString(raw.adornoFooterText) ?? "Solicitação enviada ao HCMD",
@@ -613,6 +640,19 @@ function parseAbsenceActionToken(value: string) {
   return { returnDate: encodedReturnDate ? decodeURIComponent(encodedReturnDate) : null, userId: userId as string };
 }
 
+function adornmentActionToken(userId: string, adornmentNumber: string) {
+  return `${userId}|${encodeURIComponent(adornmentNumber)}`;
+}
+
+function parseAdornmentActionToken(value: string) {
+  const [userId, encodedAdornmentNumber] = value.split("|");
+  if (!/^\d{5,32}$/.test(userId ?? "")) return null;
+  return {
+    adornmentNumber: encodedAdornmentNumber ? decodeURIComponent(encodedAdornmentNumber) : "",
+    userId: userId as string
+  };
+}
+
 function scheduleAbsenceRoleRemoval(guild: Guild, context: BotContext, config: PoliceRhConfig, userId: string, returnDate: string | null) {
   if (!config.absenceRoleId || !returnDate) return;
   const dueAt = parseReturnDate(returnDate);
@@ -633,12 +673,170 @@ function scheduleAbsenceRoleRemoval(guild: Guild, context: BotContext, config: P
   }, delay).unref?.();
 }
 
+async function registerPendingAbsenceRemoval(guildId: string, context: BotContext, config: PoliceRhConfig, userId: string, returnDate: string | null, approvedBy: string | null) {
+  if (!config.absenceRoleId || !returnDate) return;
+  const returnDateKey = parseReturnDateKey(returnDate);
+  if (!returnDateKey) return;
+  const latest = await loadConfig(guildId, context).catch(() => null);
+  const current = latest?.pendingAbsenceRemovals ?? config.pendingAbsenceRemovals;
+  const entry: PoliceRhPendingAbsenceRemoval = {
+    absenceRoleId: config.absenceRoleId,
+    approvedAt: new Date().toISOString(),
+    approvedBy,
+    returnDate,
+    returnDateKey,
+    userId
+  };
+  const next = [
+    ...current.filter((item) => pendingAbsenceKey(item) !== pendingAbsenceKey(entry)),
+    entry
+  ].sort((left, right) => left.returnDateKey.localeCompare(right.returnDateKey)).slice(-500);
+  await context.api.savePoliceRhRuntimeConfig(guildId, { pendingAbsenceRemovals: next }).catch((error) => {
+    console.warn("[police-rh] falha ao salvar retorno pendente de ausencia:", error instanceof Error ? error.message : error);
+  });
+}
+
+async function reconcilePoliceRhAbsenceRoles(client: Client<true>, context: BotContext) {
+  if (absenceReconcileRunning || !isBotModuleEnabled(MODULE_ID)) return;
+  absenceReconcileRunning = true;
+  const today = currentDateKey();
+
+  try {
+    for (const guild of client.guilds.cache.values()) {
+      const completed = new Set<string>();
+      const config = await loadConfig(guild.id, context).catch((error) => {
+        console.warn(`[police-rh] falha ao carregar config para reconciliar ausencias em ${guild.id}:`, error instanceof Error ? error.message : error);
+        return null;
+      });
+      if (!config?.enabled || !config.pendingAbsenceRemovals.length) continue;
+
+      for (const entry of config.pendingAbsenceRemovals) {
+        if (entry.returnDateKey > today) continue;
+        const result = await removePendingAbsenceRole(guild, entry);
+        const key = pendingAbsenceKey(entry);
+
+        if (result.done) {
+          completed.add(key);
+          await notifyFinishedAbsence(guild, context, config, entry).catch(() => null);
+          await writeLog(context, guild.id, entry.userId, "police-rh.absence.finished", "⏰ Cargo de ausência removido automaticamente na data de retorno.", {
+            returnDate: entry.returnDate,
+            returnDateKey: entry.returnDateKey,
+            roleId: entry.absenceRoleId
+          });
+        } else {
+          logPendingAbsenceFailure(key, `[police-rh] falha ao remover cargo de ausencia em ${guild.id}/${entry.userId}: ${result.reason}`);
+        }
+      }
+
+      if (completed.size) {
+        const latest = await loadConfig(guild.id, context).catch(() => null);
+        const next = (latest?.pendingAbsenceRemovals ?? config.pendingAbsenceRemovals)
+          .filter((entry) => !completed.has(pendingAbsenceKey(entry)));
+        await context.api.savePoliceRhRuntimeConfig(guild.id, { pendingAbsenceRemovals: next }).catch((error) => {
+          console.warn("[police-rh] falha ao limpar retornos de ausencia concluidos:", error instanceof Error ? error.message : error);
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("[police-rh] falha no reconciliador de ausencias:", error instanceof Error ? error.message : error);
+  } finally {
+    absenceReconcileRunning = false;
+  }
+}
+
+async function removePendingAbsenceRole(guild: Guild, entry: PoliceRhPendingAbsenceRemoval) {
+  const role = await guild.roles.fetch(entry.absenceRoleId).catch(() => null);
+  if (!role) return { done: true, reason: "Cargo nao existe mais." };
+  if (!role.editable) return { done: false, reason: "Bot sem permissao/hierarquia para remover o cargo." };
+  const member = await guild.members.fetch(entry.userId).catch(() => null);
+  if (!member) return { done: true, reason: "Usuario saiu do servidor." };
+  if (!member.roles.cache.has(entry.absenceRoleId)) return { done: true, reason: "Usuario ja nao possui o cargo." };
+  await member.roles.remove(entry.absenceRoleId, "Retorno automatico de ausencia");
+  return { done: true, reason: null };
+}
+
+async function notifyFinishedAbsence(guild: Guild, _context: BotContext, config: PoliceRhConfig, entry: PoliceRhPendingAbsenceRemoval) {
+  const user = await guild.client.users.fetch(entry.userId).catch(() => null);
+  await user?.send(renderComponentsV2Panel({
+    accentColor: 0x22c55e,
+    description: config.absenceDmFinishedMessage,
+    moduleId: MODULE_ID,
+    title: "⏰ Ausência finalizada"
+  })).catch(() => null);
+}
+
+function logPendingAbsenceFailure(key: string, message: string) {
+  const now = Date.now();
+  const last = absenceReconcileFailureLogAt.get(key) ?? 0;
+  if (now - last < 15 * 60_000) return;
+  absenceReconcileFailureLogAt.set(key, now);
+  console.warn(message);
+}
+
 function parseReturnDate(value: string) {
   const trimmed = value.trim();
   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
   if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), 12, 0, 0);
   const iso = new Date(trimmed);
   return Number.isNaN(iso.getTime()) ? null : iso;
+}
+
+function parseReturnDateKey(value: string) {
+  const trimmed = value.trim();
+  const br = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/.exec(trimmed);
+  if (br) {
+    const today = currentDateKey();
+    const year = br[3] ? Number(br[3]) : Number(today.slice(0, 4));
+    const month = Number(br[2]);
+    const day = Number(br[1]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+function currentDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Sao_Paulo",
+    year: "numeric"
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function readPendingAbsenceRemovals(value: unknown): PoliceRhPendingAbsenceRemoval[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const absenceRoleId = readString(record.absenceRoleId);
+      const approvedAt = readString(record.approvedAt);
+      const returnDate = readString(record.returnDate);
+      const returnDateKey = readString(record.returnDateKey) ?? (returnDate ? parseReturnDateKey(returnDate) : null);
+      const userId = readString(record.userId);
+      if (!absenceRoleId || !approvedAt || !returnDate || !returnDateKey || !userId) return null;
+      return {
+        absenceRoleId,
+        approvedAt,
+        approvedBy: readString(record.approvedBy),
+        returnDate,
+        returnDateKey,
+        userId
+      };
+    })
+    .filter((item): item is PoliceRhPendingAbsenceRemoval => Boolean(item))
+    .slice(0, 500);
+}
+
+function pendingAbsenceKey(entry: PoliceRhPendingAbsenceRemoval) {
+  return `${entry.userId}:${entry.absenceRoleId}:${entry.returnDateKey}`;
 }
 
 function withEmoji(value: string, emoji: string) {
@@ -658,6 +856,7 @@ async function loadPanelVisual(context: BotContext, guildId: string, panelId: st
 }
 function readString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function idList(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
+function uniqueIds(value: string[]) { return [...new Set(value.filter((item) => /^\d{5,32}$/.test(item)))]; }
 function readImagePosition(value: unknown, fallback: PanelVisualPosition = "side"): PanelVisualPosition {
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : fallback;
 }

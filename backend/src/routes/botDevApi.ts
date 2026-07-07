@@ -41,6 +41,14 @@ const policeRhRuntimeConfigSchema = z.object({
   absenceApproverRoleIds: z.array(snowflake).max(100).optional(),
   absenceLogChannelId: snowflake.nullable().optional(),
   absencePanelChannelId: snowflake.nullable().optional(),
+  pendingAbsenceRemovals: z.array(z.object({
+    absenceRoleId: snowflake,
+    approvedAt: z.string().datetime(),
+    approvedBy: snowflake.nullable(),
+    returnDate: z.string().max(40),
+    returnDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    userId: snowflake
+  })).max(500).optional(),
   absenceRoleId: snowflake.nullable().optional(),
   adornoLogChannelId: snowflake.nullable().optional(),
   adornoPanelChannelId: snowflake.nullable().optional(),

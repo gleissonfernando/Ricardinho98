@@ -214,6 +214,14 @@ const policeRhConfigSchema = z.object({
   absenceDmRejectedMessage: z.string().trim().max(1200).default("❌ Sua solicitação de ausência foi recusada."),
   absenceDmFinishedMessage: z.string().trim().max(1200).default("⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho."),
   absenceDmMessage: z.string().trim().max(1200).default("📋 Sua solicitação de ausência foi atualizada pela equipe."),
+  pendingAbsenceRemovals: z.array(z.object({
+    absenceRoleId: snowflakeSchema,
+    approvedAt: z.string().datetime(),
+    approvedBy: snowflakeSchema.nullable(),
+    returnDate: z.string().max(40),
+    returnDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    userId: snowflakeSchema
+  })).max(500).default([]),
   adornoEnabled: z.boolean().default(true),
   adornoPanelChannelId: snowflakeSchema.nullable().default(null),
   adornoCategoryId: snowflakeSchema.nullable().default(null),
@@ -441,6 +449,7 @@ advancedModulesRouter.patch("/:botId/:guildId/:moduleId", async (req, res, next)
       config: {
         ...normalizedConfig,
         ...(moduleId === "police-reports" || moduleId === "police-flight" || moduleId === "police-rh" ? { panelMessageId: previous.config.panelMessageId ?? null } : {}),
+        ...(moduleId === "police-rh" ? { pendingAbsenceRemovals: previous.config.pendingAbsenceRemovals ?? [] } : {}),
         ...(moduleId === "police-flight" ? {
           panelMessageChannelId: previous.config.panelMessageChannelId
             ?? (previous.config.panelMessageId
