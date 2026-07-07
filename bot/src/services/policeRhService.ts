@@ -181,7 +181,14 @@ export async function showPoliceRhConfigPanel(interaction: ChatInputCommandInter
 export async function handlePoliceRhInteraction(interaction: Interaction, context: BotContext) {
   if (!interaction.isButton() && !interaction.isModalSubmit()) return false;
   if (!interaction.customId.startsWith(`${PREFIX}:`)) return false;
-  if (!interaction.guild || !isBotModuleEnabled(MODULE_ID)) return true;
+  if (!interaction.guild) {
+    if (interaction.isRepliable()) await interaction.reply({ content: "Use este painel dentro de um servidor.", ephemeral: true }).catch(() => null);
+    return true;
+  }
+  if (!isBotModuleEnabled(MODULE_ID)) {
+    if (interaction.isRepliable()) await interaction.reply({ content: "❌ O sistema RH não está liberado para este bot.", ephemeral: true }).catch(() => null);
+    return true;
+  }
 
   const config = await loadConfig(interaction.guild.id, context);
   if (!config?.enabled) {
@@ -218,6 +225,7 @@ export async function handlePoliceRhInteraction(interaction: Interaction, contex
     await handleReviewAction(interaction, context, config, action as "approve" | "reject" | "close");
     return true;
   }
+  if (interaction.isRepliable()) await interaction.reply({ content: "Esta ação do RH não é mais válida. Publique o painel novamente.", ephemeral: true }).catch(() => null);
   return true;
 }
 

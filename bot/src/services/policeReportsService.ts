@@ -25,6 +25,8 @@ const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
 const PAGE_SIZE = 25;
 const IAB_WEBHOOK_NAME = "Human Resources - NPD";
+const PANEL_TITLE = "Denúncia IAB";
+const BUTTON_LABEL = "Abrir denuncia";
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -122,7 +124,14 @@ export function startPoliceReportsService(client: Client<true>, context: BotCont
 
 export async function handlePoliceReportsInteraction(interaction: Interaction, context: BotContext) {
   if ((!interaction.isButton() && !interaction.isStringSelectMenu()) || !interaction.customId.startsWith(`${PREFIX}:`)) return false;
-  if (!interaction.guild || !isBotModuleEnabled(MODULE_ID)) return true;
+  if (!interaction.guild) {
+    await interaction.reply({ content: "Use este painel dentro de um servidor.", ephemeral: true }).catch(() => undefined);
+    return true;
+  }
+  if (!isBotModuleEnabled(MODULE_ID)) {
+    await interaction.reply({ content: "A Denúncia IAB não está liberada para este bot.", ephemeral: true }).catch(() => undefined);
+    return true;
+  }
   const config = await loadConfig(interaction.guild.id, context);
   if (!config) {
     await interaction.reply({ content: "A configuracao deste painel nao esta disponivel.", ephemeral: true });
@@ -158,8 +167,12 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await handleProcedureAction(interaction, context, config, action!);
     return true;
   }
-  const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
-  await interaction.update(createPanelPayload(config, page));
+  if (action === "page") {
+    const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
+    await interaction.update(createPanelPayload(config, page));
+    return true;
+  }
+  await interaction.reply({ content: "Esta ação da Denúncia IAB não é mais válida. Publique o painel novamente.", ephemeral: true });
   return true;
 }
 
@@ -219,9 +232,9 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelChannelIds: idList(raw.panelChannelIds, readString(raw.panelChannelId)),
     panelMessageId: readString(raw.panelMessageId),
     allowAnonymous: raw.allowAnonymous !== false,
-    panelTitle: readString(raw.panelTitle) ?? "Denúncia IAB",
+    panelTitle: normalizePanelTitle(readString(raw.panelTitle)),
     panelDescription: readString(raw.panelDescription) ?? "Registre uma denuncia de forma segura e sigilosa.",
-    buttonLabel: readString(raw.buttonLabel) ?? "Selecionar denuncia",
+    buttonLabel: normalizeButtonLabel(readString(raw.buttonLabel)),
     color: readString(raw.color) ?? "#7c3aed",
     thumbnailUrl: readString(raw.thumbnailUrl) ?? "",
     categoryId: readString(raw.categoryId),
@@ -648,6 +661,8 @@ function isComplaintType(value: unknown): value is ComplaintType {
 }
 
 function readString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
+function normalizePanelTitle(value: string | null) { return !value || value === "Sistema de Denuncias IAB" ? PANEL_TITLE : value; }
+function normalizeButtonLabel(value: string | null) { return !value || value === "Selecionar denuncia" ? BUTTON_LABEL : value; }
 function readEnabledImageUrl(value: { imageEnabled?: boolean; imageUrl?: string | null } | null) { return value?.imageEnabled && value.imageUrl ? value.imageUrl : null; }
 function enabledVisual(value: PanelVisualConfig | null) { return value?.imageEnabled && value.imageUrl ? value : null; }
 function readStringArray(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && /^\d{5,32}$/.test(item)) : []; }
@@ -676,7 +691,7 @@ async function writeLog(context: BotContext, guildId: string, userId: string | n
     channelId: typeof record.channelId === "string" ? record.channelId : null,
     color: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     fields: [
-      { name: "Sistema", value: "Denúncias IAB" },
+      { name: "Sistema", value: PANEL_TITLE },
       { name: "Tipo", value: typeof record.selectedType === "string" ? record.selectedType : typeof record.typeName === "string" ? record.typeName : "Denúncia" },
       { name: "Denunciante", value: record.anonymous === true ? "Denúncia anônima" : typeof record.requesterId === "string" ? `<@${record.requesterId}> | ${record.requesterId}` : typeof record.authorId === "string" ? `<@${record.authorId}> | ${record.authorId}` : null },
       { name: "Detalhes", value: formatPoliceReportDetails(record) }

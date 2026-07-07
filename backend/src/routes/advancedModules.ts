@@ -124,7 +124,7 @@ const policeReportsConfigSchema = z.object({
   panelMessageId: snowflakeSchema.nullable().default(null),
   panelTitle: z.string().trim().min(1).max(120).default("Denúncia IAB"),
   panelDescription: z.string().trim().max(1200).default("Registre uma denuncia de forma segura e sigilosa."),
-  buttonLabel: z.string().trim().max(80).default("Selecionar denuncia"),
+  buttonLabel: z.string().trim().max(80).default("Abrir denuncia"),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
   thumbnailUrl: z.string().trim().max(2048).default(""),
   complaintTypes: z.array(policeReportTypeSchema).default(defaultPoliceReportComplaintTypes)
@@ -133,6 +133,8 @@ const policeReportsSaveSchema = z.object({
   config: policeReportsConfigSchema,
   guildName: z.string().min(1).max(100).optional()
 });
+const POLICE_REPORTS_PANEL_TITLE = "Denúncia IAB";
+const POLICE_REPORTS_BUTTON_LABEL = "Abrir denuncia";
 const policeFlightConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),
@@ -811,9 +813,11 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
     const complaintTypes = mergeDefaultPoliceReportTypes(parsed.complaintTypes);
     return {
       ...parsed,
+      buttonLabel: parsed.buttonLabel === "Selecionar denuncia" ? POLICE_REPORTS_BUTTON_LABEL : parsed.buttonLabel,
       complaintTypes: complaintTypes
         .map((item, index) => ({ ...item, order: Number.isFinite(item.order) ? item.order : index }))
-        .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
+        .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name)),
+      panelTitle: parsed.panelTitle === "Sistema de Denuncias IAB" ? POLICE_REPORTS_PANEL_TITLE : parsed.panelTitle
     };
   }
 

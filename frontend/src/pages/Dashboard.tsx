@@ -3005,6 +3005,14 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   complaintTypes: defaultPoliceReportComplaintTypes
 };
 
+function normalizePoliceReportsConfig(config: Partial<PoliceReportsConfig>): Partial<PoliceReportsConfig> {
+  return {
+    ...config,
+    buttonLabel: config.buttonLabel === "Selecionar denuncia" ? "Abrir denuncia" : config.buttonLabel,
+    panelTitle: config.panelTitle === "Sistema de Denuncias IAB" ? "Denúncia IAB" : config.panelTitle
+  };
+}
+
 type PoliceFlightConfig = {
   enabled: boolean;
   panelChannelId: string | null;
@@ -3192,7 +3200,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       .then(([module, options]) => {
         if (!active) return;
         const savedConfig = module.config as Partial<PoliceReportsConfig>;
-        setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
+        setConfig({ ...defaultPoliceReportsConfig, ...normalizePoliceReportsConfig(savedConfig), complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
         setChannels(options.channels);
         setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
@@ -3242,7 +3250,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       }
       const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
       const savedConfig = module.config as Partial<PoliceReportsConfig>;
-      setConfig({ ...defaultPoliceReportsConfig, ...savedConfig, complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
+      setConfig({ ...defaultPoliceReportsConfig, ...normalizePoliceReportsConfig(savedConfig), complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
       setMessage("Configuracao do IAB salva.");
     } catch {
       setError("Nao foi possivel salvar a configuracao do IAB.");
