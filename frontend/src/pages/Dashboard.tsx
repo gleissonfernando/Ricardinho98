@@ -3437,6 +3437,17 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     setDraft((current) => current ? { ...current, ...patch } : current);
   }
 
+  function patchHierarchyName(name: string) {
+    setDraftHasUnsavedChanges(true);
+    setDraft((current) => {
+      if (!current) return current;
+      const description = isInheritedHierarchyDescription(current.description, current.name)
+        ? `Lista oficial de membros da unidade ${name}`
+        : current.description;
+      return { ...current, description, name };
+    });
+  }
+
   function patchHierarchy(index: number, patch: Partial<FivemHierarchyPanelType["hierarchies"][number]>) {
     setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
@@ -3570,6 +3581,8 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     .filter((item) => item.roleId && !configuredRoleIds.has(item.roleId))
     .map((item) => `${item.name} (${item.roleId})`) ?? [];
   const persistedDraft = draft ? isPersistedHierarchyPanel(draft, panels) : false;
+  const hierarchyBlockLimit = 200;
+  const canAddHierarchyBlock = canManage && Boolean(draft) && (draft?.hierarchies.length ?? 0) < hierarchyBlockLimit;
 
   return (
     <Card className="border-emerald-500/10 bg-zinc-950/75">
@@ -3616,7 +3629,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
             </div>
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <TicketField disabled={!canManage} label="Nome interno" onChange={(value) => patchDraft({ name: value })} value={draft.name} />
+                <TicketField disabled={!canManage} label="Nome interno" onChange={patchHierarchyName} value={draft.name} />
                 <TicketField disabled={!canManage} label="Titulo do painel" onChange={(value) => patchDraft({ title: value })} value={draft.title} />
                 <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal do painel" onChange={(value) => patchDraft({ panelChannelId: value })} placeholder="Selecione" value={draft.panelChannelId} />
                 <TicketField disabled={!canManage} label="Cor" onChange={(value) => patchDraft({ color: value })} type="color" value={draft.color} />
@@ -3677,9 +3690,9 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-white">Cargos exibidos no painel</p>
-                    <p className="mt-1 text-xs text-zinc-500">Escolha um cargo do Discord e defina o nome da funcao que aparecera acima dos membros.</p>
+                    <p className="mt-1 text-xs text-zinc-500">Escolha um cargo do Discord e defina o nome da funcao que aparecera acima dos membros. {draft.hierarchies.length}/{hierarchyBlockLimit} blocos.</p>
                   </div>
-                  <Button disabled={!canManage} onClick={addHierarchy} size="sm" type="button" variant="outline">Adicionar cargo</Button>
+                  <Button disabled={!canAddHierarchyBlock} onClick={addHierarchy} size="sm" type="button" variant="outline">Adicionar cargo</Button>
                 </div>
                 {draft.hierarchies.map((item, index) => (
                   <div className="grid gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1.2fr_1fr_80px_90px_1fr_auto]" key={item.id}>
@@ -3697,6 +3710,9 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   </div>
                 ))}
                 {!draft.hierarchies.length ? <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">Nenhum cargo configurado. Clique em Adicionar cargo para comecar.</div> : null}
+                <div className="flex justify-end">
+                  <Button disabled={!canAddHierarchyBlock} onClick={addHierarchy} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Adicionar mais um bloco</Button>
+                </div>
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-xs text-emerald-100">
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
@@ -3855,6 +3871,10 @@ function isPersistedHierarchyPanel(panel: FivemHierarchyPanelType, panels: Fivem
 
 function isLocalNewHierarchyPanel(panel: Pick<FivemHierarchyPanelType, "id"> | null | undefined) {
   return Boolean(panel?.id?.startsWith("local-new-"));
+}
+
+function isInheritedHierarchyDescription(description: string | null | undefined, panelName: string) {
+  return hierarchyUnitTemplates.some((unit) => description === unit.description && unit.name !== panelName);
 }
 
 function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {

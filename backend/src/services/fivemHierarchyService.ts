@@ -320,12 +320,13 @@ function defaultPanelDto(guildId: string, botId: string | null, id: string, unit
 }
 
 function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: string, botId: string | null): Omit<MongoFivemHierarchyPanel, "_id" | "createdAt" | "guildId" | "panelMessageId" | "updatedAt" | "updatedBy"> {
+  const name = normalizeText(input.name, 100) ?? "Hierarquia Policial";
   return {
     botId,
     autoUpdateEnabled: input.autoUpdateEnabled !== false,
     autoUpdateIntervalSeconds: normalizeAutoUpdateInterval(input.autoUpdateIntervalSeconds),
     color: /^#[0-9a-f]{6}$/i.test(input.color ?? "") ? input.color ?? "#22c55e" : "#22c55e",
-    description: normalizeText(input.description, 1200) ?? "Hierarquia atualizada automaticamente pelos cargos do servidor.",
+    description: normalizeHierarchyDescription(input.description, name),
     displayMode: normalizeDisplayMode(input.displayMode),
     emptyText: normalizeText(input.emptyText, 80) ?? "Nenhum membro encontrado com este cargo.",
     enabled: input.enabled === true,
@@ -340,12 +341,19 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     imagePosition: input.imagePosition === "top" || input.imagePosition === "bottom" || input.imagePosition === "thumbnail" ? input.imagePosition : "none",
     imageUrl: normalizeText(input.imageUrl, 2048),
     linkedToFivem: input.linkedToFivem === true,
-    name: normalizeText(input.name, 100) ?? "Hierarquia Policial",
+    name,
     panelChannelId: normalizeSnowflake(input.panelChannelId),
     title: normalizeText(input.title, 120) ?? "Hierarquia Policial",
     unitId: normalizeText(input.unitId, 40)?.toLowerCase() ?? "custom",
     useGlobalFooter: input.useGlobalFooter === true || input.footerScope === "global"
   };
+}
+
+function normalizeHierarchyDescription(value: string | null | undefined, panelName: string) {
+  const description = normalizeText(value, 1200);
+  if (!description) return "Hierarquia atualizada automaticamente pelos cargos do servidor.";
+  const inheritedDefault = DEFAULT_HIERARCHY_UNITS.some((unit) => description === unit.description && unit.name !== panelName);
+  return inheritedDefault ? `Lista oficial de membros da unidade ${panelName}` : description;
 }
 
 function normalizeHierarchies(values: Array<Partial<FivemHierarchyEntryDto> | MongoFivemHierarchyEntry>) {
