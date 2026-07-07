@@ -47,6 +47,7 @@ type PoliceRhConfig = {
   absenceDmApprovedMessage: string;
   absenceDmRejectedMessage: string;
   absenceDmFinishedMessage: string;
+  absenceFooterText: string;
   absenceFooterImageUrl: string;
   absenceImagePosition: PanelVisualPosition;
   absenceImageUrl: string;
@@ -259,6 +260,11 @@ async function createAbsenceRequestChannel(interaction: ModalSubmitInteraction, 
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guild = interaction.guild!;
+  const requester = await guild.members.fetch(interaction.user.id).catch(() => null);
+  if (config.absenceRoleId && requester?.roles.cache.has(config.absenceRoleId)) {
+    await interaction.editReply("❌ Você já está em ausência. Só é possível pedir novamente quando a ausência acabar ou quando o cargo de ausência for removido.");
+    return;
+  }
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) {
     await interaction.editReply("❌ Canal de solicitações de ausência inválido ou removido.");
@@ -362,10 +368,16 @@ function absenceRequestPanelPayload(config: PoliceRhConfig, fields: string[], us
   });
 }
 
-function absenceReviewedPanel(config: PoliceRhConfig, status: string) {
+function absenceReviewedPanel(config: PoliceRhConfig, status: string, token: string) {
   const imageUrl = config.absenceImageUrl || config.absenceBannerUrl;
+  const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:approve:${token}`).setEmoji("✅").setLabel("Aprovar Ausência").setStyle(ButtonStyle.Success).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${PREFIX}:reject:${token}`).setEmoji("❌").setLabel("Recusar Ausência").setStyle(ButtonStyle.Danger).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${PREFIX}:close:${token}`).setEmoji("🔒").setLabel("Fechar Solicitação").setStyle(ButtonStyle.Secondary).setDisabled(true)
+  );
   return renderComponentsV2Panel({
     accentColor: status.includes("✅") ? 0x22c55e : status.includes("❌") ? 0xef4444 : 0x71717a,
+    actions: [buttons],
     description: status,
     fields: [],
     footerIcon: visual(config.absenceFooterImageUrl, "footer"),
@@ -376,10 +388,16 @@ function absenceReviewedPanel(config: PoliceRhConfig, status: string) {
 }
 
 async function handleReviewAction(interaction: ButtonInteraction, context: BotContext, config: PoliceRhConfig, action: "approve" | "reject" | "close") {
-  if (!interaction.guild || !interaction.channel) return;
+  if (!interaction.guild || !interaction.channel) {
+    await interaction.reply({ content: "❌ Não consegui identificar o servidor ou canal desta solicitação.", ephemeral: true }).catch(() => null);
+    return;
+  }
   const token = interaction.customId.split(":")[2] ?? "";
   const topic = parseAbsenceActionToken(token);
-  if (!topic) return;
+  if (!topic) {
+    await interaction.reply({ content: "❌ Esta solicitação de ausência está inválida ou expirada.", ephemeral: true }).catch(() => null);
+    return;
+  }
   const allowedRoles = config.absenceApproverRoleIds;
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || allowedRoles.some((roleId) => member?.roles.cache.has(roleId)));
@@ -387,21 +405,24 @@ async function handleReviewAction(interaction: ButtonInteraction, context: BotCo
     await interaction.reply({ content: "❌ Apenas cargos aprovadores configurados podem executar esta ação.", ephemeral: true });
     return;
   }
+  const approved = action === "approve";
+  const status = action === "close"
+    ? "🔒 Solicitação fechada."
+    : `${approved ? "✅" : "❌"} Solicitação ${approved ? "aprovada" : "recusada"}.`;
+  await interaction.update(absenceReviewedPanel(config, status, token));
+
   if (action === "close") {
-    await interaction.update(absenceReviewedPanel(config, interaction.message.components.length ? "🔒 Solicitação fechada" : "🔒 Fechada"));
-    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "🔒 Solicitação de ausência fechada.", { channelId: interaction.channel.id, requesterId: topic.userId, type: "absence" });
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-rh.closed", "🔒 Solicitação de ausência fechada.", { channelId: interaction.channel.id, requesterId: topic.userId, type: "absence" }).catch(() => null);
     return;
   }
-  const approved = action === "approve";
   if (approved && config.absenceRoleId) {
     const requester = await interaction.guild.members.fetch(topic.userId).catch(() => null);
     await requester?.roles.add(config.absenceRoleId, `Ausência aprovada por ${interaction.user.tag}`).catch(() => null);
     scheduleAbsenceRoleRemoval(interaction.guild, context, config, topic.userId, topic.returnDate);
   }
   const dmMessage = approved ? config.absenceDmApprovedMessage : config.absenceDmRejectedMessage;
-  await sendDm(interaction, topic.userId, approved ? "✅ Solicitação aprovada" : "❌ Solicitação recusada", dmMessage, approved ? 0x22c55e : 0xef4444);
-  await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.absence.${approved ? "approved" : "rejected"}`, `${approved ? "✅" : "❌"} Solicitação de ausência ${approved ? "aprovada" : "recusada"}.`, { channelId: interaction.channel.id, requesterId: topic.userId });
-  await interaction.update(absenceReviewedPanel(config, `${approved ? "✅" : "❌"} Solicitação ${approved ? "aprovada" : "recusada"}.`));
+  await sendAbsenceReviewDm(interaction, config, topic.userId, approved ? "approved" : "rejected", dmMessage, topic.returnDate);
+  await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.absence.${approved ? "approved" : "rejected"}`, `${approved ? "✅" : "❌"} Solicitação de ausência ${approved ? "aprovada" : "recusada"}.`, { channelId: interaction.channel.id, requesterId: topic.userId }).catch(() => null);
 }
 
 async function loadConfig(guildId: string, context: BotContext): Promise<PoliceRhConfig | null> {
@@ -438,6 +459,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     absenceDmApprovedMessage: readString(raw.absenceDmApprovedMessage) ?? "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
     absenceDmRejectedMessage: readString(raw.absenceDmRejectedMessage) ?? "❌ Sua solicitação de ausência foi recusada.",
     absenceDmFinishedMessage: readString(raw.absenceDmFinishedMessage) ?? "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
+    absenceFooterText: readString(raw.absenceFooterText) ?? "📝 Solicitação de ausência",
     absenceFooterImageUrl: readString(raw.absenceFooterImageUrl) ?? "",
     absenceImagePosition: readImagePosition(raw.absenceImagePosition, absenceVisual.imagePosition),
     absenceImageUrl: readString(raw.absenceImageUrl) ?? absenceVisual.imageUrl,
@@ -460,9 +482,29 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
   };
 }
 
-async function sendDm(interaction: ButtonInteraction, userId: string, title: string, description: string, color: number) {
+async function sendAbsenceReviewDm(interaction: ButtonInteraction, config: PoliceRhConfig, userId: string, status: "approved" | "rejected", message: string, returnDate: string | null) {
   const user = await interaction.client.users.fetch(userId).catch(() => null);
-  await user?.send(renderComponentsV2Panel({ accentColor: color, description, moduleId: MODULE_ID, title })).catch(() => null);
+  if (!user) return;
+  const approved = status === "approved";
+  const title = approved ? "✅ Solicitação de Ausência Aprovada" : "❌ Solicitação de Ausência Recusada";
+  const color = approved ? 0x22c55e : 0xef4444;
+  await user.send(renderComponentsV2Panel({
+    accentColor: color,
+    description: [
+      message,
+      "",
+      `**Status:** ${approved ? "Aprovada" : "Recusada"}`,
+      `**Solicitante:** <@${userId}>`,
+      returnDate ? `**Retorno previsto:** ${returnDate}` : null,
+      `**Responsavel:** <@${interaction.user.id}>`,
+      `**Atualizado em:** <t:${Math.floor(Date.now() / 1000)}:F>`
+    ].filter(Boolean).join("\n"),
+    footerIcon: visual(config.absenceFooterImageUrl, "footer"),
+    footerText: config.absenceFooterText || "RH - Ausencias",
+    image: visual(config.absenceImageUrl || config.absenceBannerUrl || config.absenceFooterImageUrl, config.absenceImagePosition === "none" ? "side" : config.absenceImagePosition),
+    moduleId: MODULE_ID,
+    title
+  })).catch(() => null);
 }
 
 function parseTopic(topic: string) {

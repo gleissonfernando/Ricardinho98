@@ -28,6 +28,7 @@ import { listFivemModules } from "../services/fivemModuleService";
 import {
   deleteFivemHierarchyPanel,
   FIVEM_HIERARCHY_MODULE_ID,
+  type FivemHierarchyPanelDto,
   getFivemHierarchyDashboard,
   listActiveFivemHierarchyPanels,
   listFivemHierarchyPanels,
@@ -1351,10 +1352,11 @@ function normalizeGoalConfigInput(input: Partial<z.infer<typeof goalConfigSchema
   };
 }
 
-function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPanelSchema>>) {
-  return {
-    ...input,
-    hierarchies: input.hierarchies?.map((item, index) => ({
+function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPanelSchema>>): Partial<FivemHierarchyPanelDto> {
+  const { hierarchies, panelChannelId, panelMessageId, ...rest } = input;
+  const normalized: Partial<FivemHierarchyPanelDto> = { ...rest };
+  if (hierarchies) {
+    normalized.hierarchies = hierarchies.map((item, index) => ({
       active: item.active !== false,
       color: item.color ?? null,
       description: item.description ?? null,
@@ -1366,10 +1368,17 @@ function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPan
       order: item.order,
       roleId: normalizeOptionalId(item.roleId) ?? "",
       showWhenEmpty: item.showWhenEmpty !== false
-    })),
-    panelChannelId: normalizeOptionalId(input.panelChannelId),
-    panelMessageId: normalizeOptionalId(input.panelMessageId)
-  };
+    }));
+  } else {
+    delete normalized.hierarchies;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "panelChannelId")) {
+    normalized.panelChannelId = normalizeOptionalId(panelChannelId);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "panelMessageId")) {
+    normalized.panelMessageId = normalizeOptionalId(panelMessageId);
+  }
+  return normalized;
 }
 
 function normalizeOptionalId(value: string | null | undefined) {
