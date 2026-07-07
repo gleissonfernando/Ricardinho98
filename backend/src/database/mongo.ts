@@ -1301,6 +1301,7 @@ export type MongoFivemModule = {
 
 export type MongoFivemActionArchitecture = "fac" | "police";
 export type MongoFivemActionImagePosition = "top" | "center" | "bottom" | "none";
+export type MongoFivemActionType = "fuga" | "tiro";
 
 export type MongoFivemActionSettings = {
   _id: string;
@@ -1316,6 +1317,14 @@ export type MongoFivemActionSettings = {
   actionChannelIds?: string[];
   reportChannelId: string | null;
   reportChannelIds?: string[];
+  logChannelId?: string | null;
+  logChannelIds?: string[];
+  historyChannelId?: string | null;
+  historyChannelIds?: string[];
+  createRoleIds?: string[];
+  finishRoleIds?: string[];
+  statsRoleIds?: string[];
+  configRoleIds?: string[];
   panelMessageId: string | null;
   panelTitle: string;
   panelDescription: string;
@@ -1342,6 +1351,7 @@ export type MongoFivemActionDefinition = {
   destinationSystem: string | null;
   bannerUrl: string | null;
   maxParticipants: number;
+  allowedTypes?: MongoFivemActionType[];
   enabled: boolean;
   order: number;
   createdAt: Date;
@@ -1517,11 +1527,16 @@ export type MongoFivemActionSession = {
   actionEmoji: string | null;
   actionImageUrl: string | null;
   actionColor: string;
+  actionType?: MongoFivemActionType;
   openerId: string;
   openerName: string;
   channelId: string | null;
   messageId: string | null;
-  status: "active" | "victory" | "defeat";
+  status: "active" | "victory" | "defeat" | "cancelled";
+  result?: "victory" | "defeat" | null;
+  observation?: string | null;
+  extraInfo?: string | null;
+  finalParticipantCount?: number | null;
   maxParticipants: number;
   participants: MongoFivemActionParticipant[];
   startedAt: Date;
@@ -3107,6 +3122,8 @@ async function createMongoIndexes(db: Db) {
     db.collection<MongoServiceHeartbeat>("service_heartbeats").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection<MongoServiceHeartbeat>("service_heartbeats").createIndex({ service: 1, updatedAt: -1 }),
     db.collection<MongoLogEntry>("LogEntry").createIndex({ guildId: 1, createdAt: -1 }),
+    db.collection<MongoLogEntry>("LogEntry").createIndex({ botId: 1, guildId: 1, createdAt: -1 }),
+    db.collection<MongoLogEntry>("LogEntry").createIndex({ botId: 1, createdAt: -1 }),
     db.collection<MongoPanelImageSettings>("panel_image_settings").createIndex(
       { botId: 1, guildId: 1, panelId: 1 },
       { unique: true }
@@ -3176,6 +3193,8 @@ async function createMongoIndexes(db: Db) {
     ),
     ensureDevBotIndexes(db),
     db.collection<MongoBotGuildConfig>("BotGuildConfig").createIndex({ botId: 1, guildId: 1 }, { unique: true }),
+    db.collection<MongoBotGuildConfig>("BotGuildConfig").createIndex({ botId: 1, updatedAt: -1 }),
+    db.collection<MongoBotGuildConfig>("BotGuildConfig").createIndex({ guildId: 1, updatedAt: -1 }),
     db.collection<MongoDevPermission>("DevPermission").createIndex({ userId: 1 }, { unique: true }),
     ensureDashboardAuditLogIndexes(db)
   ]);

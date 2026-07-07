@@ -29,6 +29,7 @@ const IAB_WEBHOOK_NAME = "Human Resources - NPD";
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
   enabled: boolean;
+  allowAnonymous: boolean;
   panelChannelId: string | null;
   panelChannelIds: string[];
   panelMessageId: string | null;
@@ -61,12 +62,12 @@ type PoliceReportsConfig = {
 };
 
 const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
-  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
-  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🛡️", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "⭐", order: 2 },
   { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
-  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📣", order: 4 },
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
-  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
 
 function mergeDefaultComplaintTypes(types: ComplaintType[]) {
@@ -76,7 +77,7 @@ function mergeDefaultComplaintTypes(types: ComplaintType[]) {
   const required = DEFAULT_COMPLAINT_TYPES.map((fallback) => {
     const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
     if (existing) matched.add(existing.id);
-    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+    return existing ? { ...existing, id: fallback.id, name: fallback.name, emoji: fallback.emoji, order: fallback.order } : fallback;
   });
   return [...required, ...types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }))];
 }
@@ -134,6 +135,10 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
       return true;
     }
     const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
+    if (!config.allowAnonymous) {
+      await createTemporaryProcedureChannel(interaction, context, config, selected, false);
+      return true;
+    }
     await interaction.update(createPanelPayload(config, page));
     await showIdentitySelection(interaction, selected);
     return true;
@@ -160,8 +165,8 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
 
 async function showIdentitySelection(interaction: StringSelectMenuInteraction, selected: ComplaintType) {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji("👤").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji("🕵️").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji("🪪").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji("🎭").setStyle(ButtonStyle.Secondary)
   );
   await interaction.followUp({
     components: [{
@@ -178,7 +183,7 @@ async function showIdentitySelection(interaction: StringSelectMenuInteraction, s
 
 async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allowCreate: boolean) {
   const config = await loadConfig(guild.id, context);
-  if (!config?.enabled) throw new Error("Ative o Sistema de Denuncias IAB antes de publicar.");
+  if (!config?.enabled) throw new Error("Ative a Denúncia IAB antes de publicar.");
   if (!config.complaintTypes.length) throw new Error("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
   const panelChannelId = firstId(config.panelChannelIds, config.panelChannelId);
   if (!panelChannelId) throw new Error("Configure o canal do painel antes de publicar.");
@@ -213,7 +218,8 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     panelChannelId: readString(raw.panelChannelId),
     panelChannelIds: idList(raw.panelChannelIds, readString(raw.panelChannelId)),
     panelMessageId: readString(raw.panelMessageId),
-    panelTitle: readString(raw.panelTitle) ?? "Sistema de Denuncias IAB",
+    allowAnonymous: raw.allowAnonymous !== false,
+    panelTitle: readString(raw.panelTitle) ?? "Denúncia IAB",
     panelDescription: readString(raw.panelDescription) ?? "Registre uma denuncia de forma segura e sigilosa.",
     buttonLabel: readString(raw.buttonLabel) ?? "Selecionar denuncia",
     color: readString(raw.color) ?? "#7c3aed",
@@ -272,7 +278,7 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
 }
 
 async function createTemporaryProcedureChannel(
-  interaction: ButtonInteraction,
+  interaction: ButtonInteraction | StringSelectMenuInteraction,
   context: BotContext,
   config: PoliceReportsConfig,
   selected: ComplaintType,
@@ -280,7 +286,7 @@ async function createTemporaryProcedureChannel(
 ) {
   if (!interaction.guild) return;
   if (!config.enabled) {
-    await interaction.reply({ content: "O Sistema de Denuncias IAB esta desativado.", ephemeral: true });
+    await interaction.reply({ content: "A Denúncia IAB esta desativada.", ephemeral: true });
     return;
   }
   const highCommandComplaint = isHighCommandComplaint(selected);

@@ -163,7 +163,7 @@ const fallbackModules: DevModuleDefinition[] = [
   { id: "fivem-actions", label: "FiveM - Acoes FAC" },
   { id: "police-actions", label: "Policia - Acoes" },
   { id: "police-patrol-reports", label: "Polícia - Relatórios de Patrulhamento" },
-  { id: "police-reports", label: "Policia - Denuncias IAB" },
+  { id: "police-reports", label: "Policia - Denúncia IAB" },
   { id: "police-rh", label: "Policia - RH Ausencias e Adornos" },
   { id: "police-flight", label: "Policia - Escalacao DAF" },
   { id: "police-courses", label: "Policia - Cursos e Treinamentos" },
@@ -496,7 +496,7 @@ const botMenuItems: BotMenuItem[] = [
       },
       {
         id: "police-reports",
-        label: "Denuncias IAB",
+        label: "Denúncia IAB",
         description: "Denuncias internas e corregedoria",
         icon: ShieldAlert,
         moduleIds: ["police-reports"]

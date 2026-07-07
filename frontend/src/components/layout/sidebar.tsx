@@ -165,7 +165,7 @@ const navItems: NavItem[] = [
   { id: "fivem-actions", label: "Ações FAC", icon: Activity, moduleId: "fivem-actions" },
   { id: "police-actions", label: "Ações Policiais", icon: Activity, moduleId: "police-actions" },
   { id: "police-patrol-reports", label: "Relatórios Policiais", icon: ShieldCheck, moduleIds: ["police-patrol-reports", "patrol-reports"] },
-  { id: "police-reports", label: "Denuncias IAB", icon: ShieldAlert, moduleId: "police-reports" },
+  { id: "police-reports", label: "Denúncia IAB", icon: ShieldAlert, moduleId: "police-reports" },
   { id: "police-flight", label: "Escalacao DAF", icon: Radio, moduleId: "police-flight" },
   { id: "rh-ausencias-adornos", label: "RH - Ausências e Adornos", icon: CalendarClock, moduleIds: ["police-rh", "fivem-absences", "fivem-fac"] },
   { id: "police-courses", label: "Cursos / Treinamentos", icon: ListChecks, moduleId: "police-courses" },

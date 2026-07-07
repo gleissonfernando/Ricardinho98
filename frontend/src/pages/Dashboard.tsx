@@ -544,7 +544,7 @@ const moduleCatalog: ModuleDefinition[] = [
   },
   {
     id: "police-reports",
-    title: "Denuncias IAB",
+    title: "Denúncia IAB",
     description: "Painel de denuncias internas com tipos configuraveis, canal temporario e auditoria.",
     icon: ShieldAlert,
     view: "police-reports"
@@ -2910,6 +2910,7 @@ function FivemView({
 
 type PoliceReportsConfig = {
   enabled: boolean;
+  allowAnonymous: boolean;
   panelChannelId: string | null;
   panelChannelIds: string[];
   categoryId: string | null;
@@ -2939,12 +2940,12 @@ type PoliceReportsConfig = {
 };
 
 const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] = [
-  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
-  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🛡️", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "⭐", order: 2 },
   { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
-  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📣", order: 4 },
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
-  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
 
 function normalizedName(value: string) {
@@ -2957,7 +2958,7 @@ function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintType
   const required = defaultPoliceReportComplaintTypes.map((fallback) => {
     const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
     if (existing) matched.add(existing.id);
-    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+    return existing ? { ...existing, id: fallback.id, name: fallback.name, emoji: fallback.emoji, order: fallback.order } : fallback;
   });
   const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
   return [...required, ...custom];
@@ -2975,6 +2976,7 @@ function hasHighCommandComplaintType(types: PoliceReportsConfig["complaintTypes"
 
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
+  allowAnonymous: true,
   panelChannelId: null,
   panelChannelIds: [],
   categoryId: null,
@@ -2994,7 +2996,7 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
   channelImageUrl: "",
   footerImageUrl: "",
   imagePosition: "banner",
-  panelTitle: "Sistema de Denuncias IAB",
+  panelTitle: "Denúncia IAB",
   panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
   buttonLabel: "Abrir denuncia",
   color: "#7c3aed",
@@ -3195,7 +3197,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
         setRoles(options.roles);
       })
-      .catch(() => active && setError("Nao foi possivel carregar o Sistema de Denuncias IAB."))
+      .catch(() => active && setError("Nao foi possivel carregar a Denúncia IAB."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [botId, guild?.id]);
@@ -3286,8 +3288,8 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Sistema de Denuncias IAB</CardTitle>
-            <CardDescription>Configuracao exclusiva da area Policia.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Denúncia IAB</CardTitle>
+            <CardDescription>Configuração do painel de denúncias internas.</CardDescription>
           </div>
           <div className="flex items-center gap-3">
             <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
@@ -3303,6 +3305,19 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       <CardContent className="space-y-4">
         {error ? <div className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
         {message ? <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-black/30 px-3 py-2">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Permitir denúncia anônima</p>
+              <p className="text-xs text-zinc-500">Quando desativado, o painel de escolha de anonimato não aparece.</p>
+            </div>
+            <Switch checked={config.allowAnonymous} disabled={!canManage || loading} onCheckedChange={(allowAnonymous) => patch({ allowAnonymous })} />
+          </div>
+          <div className="rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-300">
+            <p className="font-medium text-zinc-200">Fluxo atual</p>
+            <p className="mt-1 text-xs text-zinc-500">{config.allowAnonymous ? "O denunciante escolhe entre identificado e anônimo antes de abrir o ticket." : "A denúncia abre como identificada direto, sem mostrar o painel de anonimato."}</p>
+          </div>
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
@@ -3345,7 +3360,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
             botId={botId}
             canManage={canManage}
             guildId={guild.id}
-            panelLabel="Denuncias IAB"
+            panelLabel="Denúncia IAB"
             panelSlots={[
               { id: "police-reports", label: "Painel principal" },
               { id: "police-reports-banner-2", label: "Imagem grande / canal temporario" },
@@ -4426,7 +4441,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
     { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
-    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Sistema de Denuncias IAB" }
+    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Denúncia IAB" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -9811,7 +9826,7 @@ function policePanelImageSlotsForView(view: ViewId) {
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias IAB" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denúncia IAB" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },

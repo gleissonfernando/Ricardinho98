@@ -48,6 +48,8 @@ import { startXMonitor } from "../services/xMonitor";
 import type { BotContext } from "../types";
 
 let lastRuntimeModuleSignature = "";
+let statusInterval: NodeJS.Timeout | null = null;
+let moduleReconcileInterval: NodeJS.Timeout | null = null;
 
 export async function handleReady(client: Client<true>, context: BotContext) {
   console.log(`[bot] conectado como ${client.user.tag}`);
@@ -218,13 +220,19 @@ export async function handleReady(client: Client<true>, context: BotContext) {
   context.socket.connect(client);
   context.socket.emitStatus(client, true);
 
-  const interval = setInterval(() => {
+  if (statusInterval) {
+    clearInterval(statusInterval);
+  }
+  statusInterval = setInterval(() => {
     context.socket.emitStatus(client, true);
   }, 30_000);
 
-  interval.unref();
+  statusInterval.unref();
 
-  const moduleReconcileInterval = setInterval(() => {
+  if (moduleReconcileInterval) {
+    clearInterval(moduleReconcileInterval);
+  }
+  moduleReconcileInterval = setInterval(() => {
     void reconcileRuntimeModules(client, context);
   }, 45_000);
 

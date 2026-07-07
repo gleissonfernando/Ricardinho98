@@ -148,6 +148,40 @@ let shuttingDown = false;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let reconnectAttempts = 0;
 let highMemorySamples = 0;
+let unhandledRejectionCount = 0;
+let unhandledRejectionWindowStartedAt = 0;
+
+function memorySnapshot() {
+  const memory = process.memoryUsage();
+
+  return {
+    arrayBuffersMb: Math.round(memory.arrayBuffers / 1024 / 1024),
+    externalMb: Math.round(memory.external / 1024 / 1024),
+    heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+    heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+    rssMb: Math.round(memory.rss / 1024 / 1024)
+  };
+}
+
+function runtimeSnapshot(extra: Record<string, unknown> = {}) {
+  const cpu = process.cpuUsage();
+
+  return {
+    at: new Date().toISOString(),
+    cpuSystemMs: Math.round(cpu.system / 1000),
+    cpuUserMs: Math.round(cpu.user / 1000),
+    discordPingMs: Number.isFinite(client.ws.ping) ? Math.round(client.ws.ping) : null,
+    guildCount: client.guilds.cache.size,
+    memory: memorySnapshot(),
+    pid: process.pid,
+    readyAt: client.readyAt?.toISOString() ?? null,
+    reconnectAttempts,
+    service: "bot",
+    shardStatus: client.ws.status,
+    uptimeSeconds: Math.round(process.uptime()),
+    ...extra
+  };
+}
 
 function scheduleReconnect(reason: string) {
   if (shuttingDown || reconnectTimer) {
@@ -213,18 +247,32 @@ process.on("SIGTERM", () => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error(JSON.stringify({
-    at: new Date().toISOString(),
+  const now = Date.now();
+  if (!unhandledRejectionWindowStartedAt || now - unhandledRejectionWindowStartedAt > 60_000) {
+    unhandledRejectionWindowStartedAt = now;
+    unhandledRejectionCount = 0;
+  }
+
+  unhandledRejectionCount += 1;
+  console.error(JSON.stringify(runtimeSnapshot({
     error: reason instanceof Error ? reason.stack ?? reason.message : String(reason),
-    level: "critical",
-    service: "bot",
-    type: "unhandledRejection"
-  }));
-  shutdown("unhandledRejection", 1);
+    level: unhandledRejectionCount >= 5 ? "critical" : "error",
+    type: "unhandledRejection",
+    unhandledRejectionCount,
+    windowSeconds: 60
+  })));
+
+  if (unhandledRejectionCount >= 5) {
+    shutdown("unhandledRejection storm", 1);
+  }
 });
 
 process.on("uncaughtException", (error) => {
-  console.error(JSON.stringify({ at: new Date().toISOString(), error: error.stack ?? error.message, level: "critical", service: "bot", type: "uncaughtException" }));
+  console.error(JSON.stringify(runtimeSnapshot({
+    error: error.stack ?? error.message,
+    level: "critical",
+    type: "uncaughtException"
+  })));
   shutdown("uncaughtException", 1);
 });
 
@@ -237,7 +285,12 @@ const memoryMonitor = setInterval(() => {
   const rssMb = memory.rss / 1024 / 1024;
   highMemorySamples = rssMb >= env.BOT_MEMORY_RESTART_MB ? highMemorySamples + 1 : 0;
   if (highMemorySamples >= 3) {
-    console.error(JSON.stringify({ at: new Date().toISOString(), level: "critical", rssMb: Math.round(rssMb), service: "bot", thresholdMb: env.BOT_MEMORY_RESTART_MB, type: "memory_limit" }));
+    console.error(JSON.stringify(runtimeSnapshot({
+      highMemorySamples,
+      level: "critical",
+      thresholdMb: env.BOT_MEMORY_RESTART_MB,
+      type: "memory_limit"
+    })));
     shutdown("memory limit", 1);
   }
 }, 30_000);

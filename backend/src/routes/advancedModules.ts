@@ -69,12 +69,12 @@ const policeReportTypeSchema = z.object({
   order: z.coerce.number().int().min(0).default(0)
 });
 const defaultPoliceReportComplaintTypes = [
-  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🚔", order: 1 },
-  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "👮", order: 2 },
+  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🛡️", order: 1 },
+  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "⭐", order: 2 },
   { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
-  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📋", order: 4 },
+  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📣", order: 4 },
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
-  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
+  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
 function mergeDefaultPoliceReportTypes(types: Array<z.infer<typeof policeReportTypeSchema>>) {
   const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
@@ -82,7 +82,7 @@ function mergeDefaultPoliceReportTypes(types: Array<z.infer<typeof policeReportT
   const required = defaultPoliceReportComplaintTypes.map((fallback) => {
     const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
     if (existing) matched.add(existing.id);
-    return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
+    return existing ? { ...existing, id: fallback.id, name: fallback.name, emoji: fallback.emoji, order: fallback.order } : fallback;
   });
   const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
   return [...required, ...custom];
@@ -101,6 +101,7 @@ function hasHighCommandPoliceReportType(types: Array<z.infer<typeof policeReport
 }
 const policeReportsConfigSchema = z.object({
   enabled: z.boolean().default(false),
+  allowAnonymous: z.boolean().default(true),
   panelChannelId: snowflakeSchema.nullable().default(null),
   panelChannelIds: z.array(snowflakeSchema).max(100).default([]),
   categoryId: snowflakeSchema.nullable().default(null),
@@ -121,7 +122,7 @@ const policeReportsConfigSchema = z.object({
   footerImageUrl: z.string().trim().max(2048).default(""),
   imagePosition: z.enum(["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"]).default("banner"),
   panelMessageId: snowflakeSchema.nullable().default(null),
-  panelTitle: z.string().trim().min(1).max(120).default("Sistema de Denuncias IAB"),
+  panelTitle: z.string().trim().min(1).max(120).default("Denúncia IAB"),
   panelDescription: z.string().trim().max(1200).default("Registre uma denuncia de forma segura e sigilosa."),
   buttonLabel: z.string().trim().max(80).default("Selecionar denuncia"),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7c3aed"),
