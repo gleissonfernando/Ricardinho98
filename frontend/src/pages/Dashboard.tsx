@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -48,34 +48,8 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "../components/layout/dashboard-layout";
 import type { ViewId } from "../components/layout/sidebar";
-import { ClipsPanel } from "../components/clips/ClipsPanel";
-import { FacAbsencePanel } from "../components/fivem/FacAbsencePanel";
-import { FivemActionsPanel } from "../components/fivem/FivemActionsPanel";
-import { CommunicationPanel } from "../components/communication/CommunicationPanel";
-import { PolicePatrolReportsPanel } from "../components/fivem/PolicePatrolReportsPanel";
-import { PoliceCoursesPanel } from "../components/police/PoliceCoursesPanel";
-import { FivemFinancePanel } from "../components/fivem/FivemFinancePanel";
-import { FivemOrdersManager } from "../components/fivem/FivemOrdersPanel";
 import { FivemResourceMultiSelect, FivemResourceSelect } from "../components/fivem/FivemResourceSelect";
-import { GiveawayPanel } from "../components/giveaway/GiveawayPanel";
-import { LogsSettingsPanel } from "../components/LogsSettingsPanel";
-import { MissionToolsPanel } from "../components/mission-tools/MissionToolsPanel";
-import { MediaLibraryPanel } from "../components/media/MediaLibraryPanel";
-import { SiteAccessPanel } from "../components/moderation/SiteAccessPanel";
-import { OpenPointNotificationPanel } from "../components/open-point/OpenPointNotificationPanel";
 import { PanelImageSettings } from "../components/panels/PanelImageSettings";
-import { ManualPaymentsPanel } from "../components/manual-payments/ManualPaymentsPanel";
-import { PriceTablesPanel } from "../components/price-tables/PriceTablesPanel";
-import { VoiceRecorderPanel } from "../components/moderation/VoiceRecorderPanel";
-import { AccountAgeSecurityPanel } from "../components/security/AccountAgeSecurityPanel";
-import { AntiBanPanel } from "../components/security/AntiBanPanel";
-import { SelfBotProtectionPanel } from "../components/security/SelfBotProtectionPanel";
-import { AutoRolesPanel } from "../components/roles/AutoRolesPanel";
-import { KickIntegrationPanel } from "../components/social/KickIntegrationPanel";
-import { LiveNotificationsPanel } from "../components/social/LiveNotificationsPanel";
-import { MemberSocialNetworkPanel } from "../components/social/MemberSocialNetworkPanel";
-import { XMonitorPanel } from "../components/social/XMonitorPanel";
-import { WelcomePanel } from "../components/welcome/WelcomePanel";
 import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -203,6 +177,33 @@ import type {
   TicketPanelOption,
   XAccount
 } from "../types";
+
+const ClipsPanel = lazy(() => import("../components/clips/ClipsPanel").then((module) => ({ default: module.ClipsPanel })));
+const FacAbsencePanel = lazy(() => import("../components/fivem/FacAbsencePanel").then((module) => ({ default: module.FacAbsencePanel })));
+const FivemActionsPanel = lazy(() => import("../components/fivem/FivemActionsPanel").then((module) => ({ default: module.FivemActionsPanel })));
+const CommunicationPanel = lazy(() => import("../components/communication/CommunicationPanel").then((module) => ({ default: module.CommunicationPanel })));
+const PolicePatrolReportsPanel = lazy(() => import("../components/fivem/PolicePatrolReportsPanel").then((module) => ({ default: module.PolicePatrolReportsPanel })));
+const PoliceCoursesPanel = lazy(() => import("../components/police/PoliceCoursesPanel").then((module) => ({ default: module.PoliceCoursesPanel })));
+const FivemFinancePanel = lazy(() => import("../components/fivem/FivemFinancePanel").then((module) => ({ default: module.FivemFinancePanel })));
+const FivemOrdersManager = lazy(() => import("../components/fivem/FivemOrdersPanel").then((module) => ({ default: module.FivemOrdersManager })));
+const GiveawayPanel = lazy(() => import("../components/giveaway/GiveawayPanel").then((module) => ({ default: module.GiveawayPanel })));
+const LogsSettingsPanel = lazy(() => import("../components/LogsSettingsPanel").then((module) => ({ default: module.LogsSettingsPanel })));
+const MissionToolsPanel = lazy(() => import("../components/mission-tools/MissionToolsPanel").then((module) => ({ default: module.MissionToolsPanel })));
+const MediaLibraryPanel = lazy(() => import("../components/media/MediaLibraryPanel").then((module) => ({ default: module.MediaLibraryPanel })));
+const SiteAccessPanel = lazy(() => import("../components/moderation/SiteAccessPanel").then((module) => ({ default: module.SiteAccessPanel })));
+const OpenPointNotificationPanel = lazy(() => import("../components/open-point/OpenPointNotificationPanel").then((module) => ({ default: module.OpenPointNotificationPanel })));
+const ManualPaymentsPanel = lazy(() => import("../components/manual-payments/ManualPaymentsPanel").then((module) => ({ default: module.ManualPaymentsPanel })));
+const PriceTablesPanel = lazy(() => import("../components/price-tables/PriceTablesPanel").then((module) => ({ default: module.PriceTablesPanel })));
+const VoiceRecorderPanel = lazy(() => import("../components/moderation/VoiceRecorderPanel").then((module) => ({ default: module.VoiceRecorderPanel })));
+const AccountAgeSecurityPanel = lazy(() => import("../components/security/AccountAgeSecurityPanel").then((module) => ({ default: module.AccountAgeSecurityPanel })));
+const AntiBanPanel = lazy(() => import("../components/security/AntiBanPanel").then((module) => ({ default: module.AntiBanPanel })));
+const SelfBotProtectionPanel = lazy(() => import("../components/security/SelfBotProtectionPanel").then((module) => ({ default: module.SelfBotProtectionPanel })));
+const AutoRolesPanel = lazy(() => import("../components/roles/AutoRolesPanel").then((module) => ({ default: module.AutoRolesPanel })));
+const KickIntegrationPanel = lazy(() => import("../components/social/KickIntegrationPanel").then((module) => ({ default: module.KickIntegrationPanel })));
+const LiveNotificationsPanel = lazy(() => import("../components/social/LiveNotificationsPanel").then((module) => ({ default: module.LiveNotificationsPanel })));
+const MemberSocialNetworkPanel = lazy(() => import("../components/social/MemberSocialNetworkPanel").then((module) => ({ default: module.MemberSocialNetworkPanel })));
+const XMonitorPanel = lazy(() => import("../components/social/XMonitorPanel").then((module) => ({ default: module.XMonitorPanel })));
+const WelcomePanel = lazy(() => import("../components/welcome/WelcomePanel").then((module) => ({ default: module.WelcomePanel })));
 
 type DashboardProps = {
   auth: AuthResponse;
@@ -1120,12 +1121,13 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
       status={displayedBotStatus}
       user={auth.user}
     >
-      <motion.div
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-5"
-        initial={{ opacity: 0, y: 14 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-      >
+      <Suspense fallback={<DashboardPanelLoading />}>
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-5"
+          initial={{ opacity: 0, y: 14 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
         <UserDashboardHeader
           bot={selectedBot}
           selectedGuild={selectedGuild}
@@ -1519,8 +1521,20 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             tickets={tickets}
           />
         ) : null}
-      </motion.div>
+        </motion.div>
+      </Suspense>
     </DashboardLayout>
+  );
+}
+
+function DashboardPanelLoading() {
+  return (
+    <Card>
+      <CardContent className="flex min-h-[220px] items-center justify-center text-sm text-zinc-400">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Carregando painel
+      </CardContent>
+    </Card>
   );
 }
 

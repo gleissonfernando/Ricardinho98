@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { Bot, CheckCircle2, LogIn, RotateCcw } from "lucide-react";
 import { Avatar } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
@@ -37,12 +36,7 @@ export function Login({
       <div className="absolute inset-0 bg-[#050505]" />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.028)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.028)_1px,transparent_1px)] bg-[size:42px_42px]" />
 
-      <motion.section
-        animate={{ opacity: 1, y: 0 }}
-        className="relative w-full max-w-md rounded-lg border border-white/10 bg-[#111111]/90 p-6 shadow-[0_28px_90px_rgba(0,0,0,0.7)] backdrop-blur-2xl sm:p-7"
-        initial={{ opacity: 0, y: 16 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-      >
+      <section className="relative w-full max-w-md animate-in fade-in slide-in-from-bottom-4 rounded-lg border border-white/10 bg-[#111111]/90 p-6 shadow-[0_28px_90px_rgba(0,0,0,0.7)] backdrop-blur-2xl sm:p-7">
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950">
             <Bot className="h-6 w-6 text-zinc-200" />
@@ -124,7 +118,7 @@ export function Login({
             </Button>
           </div>
         ) : null}
-      </motion.section>
+      </section>
     </main>
   );
 }

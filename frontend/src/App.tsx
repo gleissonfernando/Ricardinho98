@@ -1,13 +1,14 @@
 import { Loader2 } from "lucide-react";
-import { motion } from "framer-motion";
-import { useEffect } from "react";
-import { Dashboard } from "./pages/Dashboard";
-import { DevDashboard } from "./pages/DevDashboard";
-import { GiveawayRoulettePage } from "./pages/GiveawayRoulette";
+import { lazy, Suspense, useEffect } from "react";
+import type { ReactNode } from "react";
 import { Login } from "./pages/Login";
-import { OrvitechProductPage } from "./pages/OrvitechProductPage";
 import { useAuth } from "./hooks/useAuth";
 import { dashboardSlugFromPath, dashboardUrl, isDashboardRoutePath } from "./lib/urls";
+
+const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
+const DevDashboard = lazy(() => import("./pages/DevDashboard").then((module) => ({ default: module.DevDashboard })));
+const GiveawayRoulettePage = lazy(() => import("./pages/GiveawayRoulette").then((module) => ({ default: module.GiveawayRoulettePage })));
+const OrvitechProductPage = lazy(() => import("./pages/OrvitechProductPage").then((module) => ({ default: module.OrvitechProductPage })));
 
 export function App() {
   const {
@@ -54,11 +55,11 @@ export function App() {
   }, [auth, protectedPanelPath, error, loading, loginDiscord, productRoute, routeError, rouletteToken]);
 
   if (rouletteToken) {
-    return <GiveawayRoulettePage token={rouletteToken} />;
+    return <LazyRoute><GiveawayRoulettePage token={rouletteToken} /></LazyRoute>;
   }
 
   if (productRoute) {
-    return <OrvitechProductPage slug={productRoute.slug} storeId={productRoute.storeId} />;
+    return <LazyRoute><OrvitechProductPage slug={productRoute.slug} storeId={productRoute.storeId} /></LazyRoute>;
   }
 
   if (loading) {
@@ -83,10 +84,14 @@ export function App() {
   }
 
   if (devPanelPath) {
-    return <DevDashboard auth={auth} initialView={devViewFromPath(path)} onLogout={logout} />;
+    return <LazyRoute><DevDashboard auth={auth} initialView={devViewFromPath(path)} onLogout={logout} /></LazyRoute>;
   }
 
-  return <Dashboard auth={auth} initialBotSlug={dashboardSlugFromPath(path)} onLogout={logout} />;
+  return <LazyRoute><Dashboard auth={auth} initialBotSlug={dashboardSlugFromPath(path)} onLogout={logout} /></LazyRoute>;
+}
+
+function LazyRoute({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;
 }
 
 function readAuthError() {
@@ -195,16 +200,11 @@ function LoadingScreen() {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050505] px-4">
       <div className="absolute inset-0 bg-[#050505]" />
-      <motion.div
-        animate={{ opacity: 1, y: 0 }}
-        className="relative flex flex-col items-center rounded-lg border border-white/10 bg-white/[0.07] px-8 py-7 text-center shadow-glow backdrop-blur-2xl"
-        initial={{ opacity: 0, y: 14 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
-      >
+      <div className="relative flex animate-in fade-in slide-in-from-bottom-3 flex-col items-center rounded-lg border border-white/10 bg-white/[0.07] px-8 py-7 text-center shadow-glow backdrop-blur-2xl">
         <Loader2 className="h-8 w-8 animate-spin text-zinc-200" />
         <p className="mt-4 text-sm font-medium text-white">Carregando painel</p>
         <p className="mt-1 text-xs text-zinc-500">Sincronizando sessao Discord</p>
-      </motion.div>
+      </div>
     </main>
   );
 }
