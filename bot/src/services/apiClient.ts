@@ -296,6 +296,7 @@ export type FivemHierarchyPanel = {
   id: string;
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
+  linkedToFivem: boolean;
   name: string;
   panelChannelId: string | null;
   panelMessageId: string | null;

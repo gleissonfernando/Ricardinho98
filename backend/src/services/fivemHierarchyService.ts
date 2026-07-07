@@ -339,7 +339,7 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     hierarchies: normalizeHierarchies(input.hierarchies ?? []),
     imagePosition: input.imagePosition === "top" || input.imagePosition === "bottom" || input.imagePosition === "thumbnail" ? input.imagePosition : "none",
     imageUrl: normalizeText(input.imageUrl, 2048),
-    linkedToFivem: input.linkedToFivem !== false,
+    linkedToFivem: input.linkedToFivem === true,
     name: normalizeText(input.name, 100) ?? "Hierarquia Policial",
     panelChannelId: normalizeSnowflake(input.panelChannelId),
     title: normalizeText(input.title, 120) ?? "Hierarquia Policial",

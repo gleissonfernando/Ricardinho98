@@ -3548,6 +3548,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   const missingHierarchyRoles = draft?.hierarchies
     .filter((item) => item.roleId && !configuredRoleIds.has(item.roleId))
     .map((item) => `${item.name} (${item.roleId})`) ?? [];
+  const persistedDraft = draft ? isPersistedHierarchyPanel(draft, panels) : false;
 
   return (
     <Card className="border-emerald-500/10 bg-zinc-950/75">
@@ -3672,18 +3673,26 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
               </div>
-              <div className="rounded-lg border border-purple-500/20 bg-purple-500/[0.06] px-3 py-2 text-xs text-purple-100">
-                Editando banners da hierarquia: <strong>{draft.name}</strong>. Cada banner salvo aqui fica vinculado ao ID interno <code className="rounded bg-black/30 px-1">{draft.id}</code> e não aparece em outras unidades.
-              </div>
-              <PanelImageSettings
-                botId={botId}
-                canManage={canManage}
-                guildId={guild?.id ?? null}
-                panelLabel={`Hierarquia - ${draft.name}`}
-                panelSlots={hierarchyBannerSlots(draft)}
-              />
+              {persistedDraft ? (
+                <>
+                  <div className="rounded-lg border border-purple-500/20 bg-purple-500/[0.06] px-3 py-2 text-xs text-purple-100">
+                    Editando banners da hierarquia: <strong>{draft.name}</strong>. Cada banner salvo aqui fica vinculado ao ID interno <code className="rounded bg-black/30 px-1">{draft.id}</code> e nao aparece em outras unidades.
+                  </div>
+                  <PanelImageSettings
+                    botId={botId}
+                    canManage={canManage}
+                    guildId={guild?.id ?? null}
+                    panelLabel={`Hierarquia - ${draft.name}`}
+                    panelSlots={hierarchyBannerSlots(draft)}
+                  />
+                </>
+              ) : (
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                  Salve esta nova hierarquia antes de configurar banners. Isso cria um ID proprio e evita vincular imagens ou configuracoes de outra hierarquia.
+                </div>
+              )}
               <HierarchyPreview panel={draft} roles={roles} />
-              {isPersistedHierarchyPanel(draft, panels) ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
+              {persistedDraft ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
           </div>
         )}
@@ -3734,6 +3743,7 @@ function defaultHierarchyEmoji(index: number) {
 }
 
 function hierarchyBannerSlots(panel: FivemHierarchyPanelType) {
+  if (!panel.id) return [];
   return Array.from({ length: 8 }, (_, index) => {
     const number = index + 1;
     return {
@@ -3752,14 +3762,27 @@ function createNewHierarchyPanel(guildId: string, botId: string | null | undefin
   const number = existingCount + 1;
   return {
     ...panel,
+    autoUpdateEnabled: true,
+    color: "#22c55e",
     description: "Lista oficial de membros agrupados por cargos.",
+    editorRoleIds: [],
     enabled: false,
+    footerEnabled: false,
+    footerIconUrl: null,
+    footerText: null,
+    globalFooterIconUrl: null,
+    globalFooterText: null,
     hierarchies: [],
     id: "",
+    imagePosition: "none",
+    imageUrl: null,
+    linkedToFivem: false,
     name: `Nova Hierarquia ${number}`,
+    panelChannelId: null,
     panelMessageId: null,
     title: `Hierarquia - Nova Categoria ${number}`,
-    unitId: `custom-${Date.now()}`
+    unitId: `custom-${Date.now()}`,
+    useGlobalFooter: false
   };
 }
 
