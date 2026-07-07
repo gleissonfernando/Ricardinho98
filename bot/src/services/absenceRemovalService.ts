@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { currentRuntimeBotId } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
+import type { FivemFacAbsence } from "./apiClient";
 import { renderComponentsV2Panel } from "./panelVisualRenderer";
 
 const PREFIX = "remove_absence";
@@ -151,8 +152,11 @@ async function handleConfirmRemoval(interaction: ButtonInteraction, context: Bot
     return;
   }
   if (!target.roles.cache.has(role.id)) {
+    const closedAbsence = await closeActiveFacAbsenceIfNeeded(interaction, context, config, targetId, false);
     await interaction.editReply(removeAbsenceSuccessPayload({
-      detail: "O membro já não possui o cargo de ausência.",
+      detail: closedAbsence
+        ? "O membro já não possui o cargo de ausência. A ausência ativa foi encerrada no banco."
+        : "O membro já não possui o cargo de ausência.",
       roleId: role.id,
       targetId
     }));
@@ -160,19 +164,56 @@ async function handleConfirmRemoval(interaction: ButtonInteraction, context: Bot
   }
 
   await target.roles.remove(role.id, `Remoção manual de ausência por ${interaction.user.tag}`);
+  const closedAbsence = await closeActiveFacAbsenceIfNeeded(interaction, context, config, targetId, true);
   await context.api.postLog({
     guildId: guild.id,
     userId: interaction.user.id,
     type: "absence.role.manual_removed",
-    message: "Cargo de ausência removido manualmente.",
-    metadata: { roleId: role.id, targetId, source: config.source }
+    message: closedAbsence
+      ? "Cargo de ausência removido manualmente e ausência encerrada no FAC."
+      : "Cargo de ausência removido manualmente.",
+    metadata: { absenceId: closedAbsence?.id ?? null, roleId: role.id, targetId, source: config.source }
   }).catch(() => null);
 
   await interaction.editReply(removeAbsenceSuccessPayload({
-    detail: "Cargo de ausência removido com sucesso.",
+    detail: closedAbsence
+      ? "Cargo de ausência removido com sucesso. A ausência ativa foi encerrada no banco."
+      : "Cargo de ausência removido com sucesso.",
     roleId: role.id,
     targetId
   }));
+}
+
+async function closeActiveFacAbsenceIfNeeded(
+  interaction: ButtonInteraction,
+  context: BotContext,
+  config: AbsenceRemovalConfig,
+  targetId: string,
+  roleRemoved: boolean
+) {
+  if (config.source !== "FAC" || !interaction.guildId) return null;
+  const activeAbsence = await findActiveFacAbsence(context, interaction.guildId, targetId);
+  if (!activeAbsence) return null;
+  const moderatorRoleIds = [
+    ...new Set([
+      ...interactionRoleIds(interaction),
+      ...config.approverRoleIds
+    ])
+  ];
+  return context.api.closeFivemFacAbsence(activeAbsence.id, {
+    moderatorId: interaction.user.id,
+    moderatorRoleIds,
+    reason: roleRemoved ? "Cargo de ausência removido manualmente." : "Cargo de ausência ausente; ausência sincronizada como encerrada.",
+    roleRemoved
+  }).catch((error) => {
+    console.warn("[remove-absence] nao foi possivel encerrar ausencia FAC:", error instanceof Error ? error.message : error);
+    return null;
+  });
+}
+
+async function findActiveFacAbsence(context: BotContext, guildId: string, userId: string): Promise<FivemFacAbsence | null> {
+  const absences = await context.api.getFivemFacUserAbsences(guildId, userId).catch(() => []);
+  return absences.find((absence) => ["active", "approved", "pending"].includes(absence.status)) ?? null;
 }
 
 async function loadAbsenceRemovalConfig(guildId: string, context: BotContext): Promise<AbsenceRemovalConfig> {
@@ -292,4 +333,24 @@ function idList(value: unknown) {
 
 function readSnowflake(value: unknown) {
   return typeof value === "string" && /^\d{5,32}$/.test(value) ? value : null;
+}
+
+function interactionRoleIds(interaction: ButtonInteraction) {
+  const member = interaction.member;
+  const roleIds = new Set<string>();
+
+  if (interaction.guildId) {
+    roleIds.add(interaction.guildId);
+  }
+
+  if (member instanceof Object && "roles" in member) {
+    const roles = member.roles;
+    if (Array.isArray(roles)) {
+      roles.forEach((roleId) => roleIds.add(roleId));
+    } else if (roles instanceof Object && "cache" in roles) {
+      [...roles.cache.keys()].forEach((roleId) => roleIds.add(roleId));
+    }
+  }
+
+  return [...roleIds];
 }

@@ -394,7 +394,7 @@ export async function createFivemFacAbsence(input: CreateFivemFacAbsenceInput) {
   });
 
   if (duplicate) {
-    throw createFacError("Voce ja possui uma ausencia pendente, aprovada ou ativa.", 409);
+    throw createFacError("Você já possui uma ausência ativa. Aguarde ela ser removida antes de solicitar outra.", 409);
   }
 
   const now = new Date();

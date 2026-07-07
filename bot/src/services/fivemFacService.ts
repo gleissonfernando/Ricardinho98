@@ -149,7 +149,7 @@ export async function handleFivemFacInteraction(interaction: Interaction, contex
 
 async function handleFivemFacButton(interaction: ButtonInteraction, context: BotContext) {
   if (interaction.customId === REQUEST_BUTTON_ID) {
-    await showRequestModal(interaction);
+    await showRequestModal(interaction, context);
     return;
   }
 
@@ -217,7 +217,15 @@ async function handleFivemFacModal(interaction: ModalSubmitInteraction, context:
   });
 }
 
-async function showRequestModal(interaction: ButtonInteraction) {
+async function showRequestModal(interaction: ButtonInteraction, context: BotContext) {
+  if (await userHasActiveFacAbsence(interaction, context)) {
+    await interaction.reply({
+      content: "Você já possui uma ausência ativa. Aguarde ela ser removida antes de solicitar outra.",
+      ephemeral: true
+    });
+    return;
+  }
+
   const modal = new ModalBuilder()
     .setCustomId(`${REQUEST_MODAL_PREFIX}:${interaction.guildId}`)
     .setTitle("📅 Solicitar Ausência");
@@ -317,6 +325,11 @@ async function submitAbsenceRequest(interaction: ModalSubmitInteraction, context
 
     if (!hasMemberRole(interaction, settings)) {
       await interaction.editReply("Voce nao possui um cargo de membro autorizado para solicitar ausencia.");
+      return;
+    }
+
+    if (await userHasActiveFacAbsence(interaction, context)) {
+      await interaction.editReply("Você já possui uma ausência ativa. Aguarde ela ser removida antes de solicitar outra.");
       return;
     }
 
@@ -1112,28 +1125,35 @@ function buildAbsenceEmbed(absence: FivemFacAbsence) {
 }
 
 function buildAbsenceComponents(absence: FivemFacAbsence) {
-  const closed = ["rejected", "finished", "closed"].includes(absence.status);
   const pending = absence.status === "pending";
+  const locked = !pending;
 
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`${APPROVE_PREFIX}:${absence.id}`)
-        .setDisabled(!pending)
+        .setDisabled(locked)
         .setLabel("Aprovar")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`${REJECT_PREFIX}:${absence.id}`)
-        .setDisabled(!pending)
+        .setDisabled(locked)
         .setLabel("Reprovar")
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(`${CLOSE_PREFIX}:${absence.id}`)
-        .setDisabled(closed)
+        .setDisabled(locked)
         .setLabel("Encerrar")
         .setStyle(ButtonStyle.Secondary)
     )
   ];
+}
+
+async function userHasActiveFacAbsence(interaction: ButtonInteraction | ModalSubmitInteraction, context: BotContext | null) {
+  if (!context || !interaction.guildId) return null;
+  const absences = await context.api.getFivemFacUserAbsences(interaction.guildId, interaction.user.id).catch(() => null);
+  if (!absences) return null;
+  return absences.some((absence) => ["pending", "approved", "active"].includes(absence.status));
 }
 
 function hasApproverRole(interaction: ButtonInteraction | ModalSubmitInteraction, settings: FivemFacSettings) {

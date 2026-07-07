@@ -343,7 +343,8 @@ fivemRouter.post("/:guildId/hierarchy/panels", requireAuth, async (req, res, nex
     await assertCanManageFivemHierarchy(res.locals.dashboardAuth.user, guildId, botId);
     const input = hierarchyPanelSchema.parse(req.body);
     await validateHierarchyResources(guildId, botId, input);
-    return res.status(201).json({ panel: await saveFivemHierarchyPanel(guildId, botId, normalizeHierarchyPanelInput(input), res.locals.dashboardAuth.user.discordId) });
+    const { id: _ignoredId, panelMessageId: _ignoredMessageId, ...createInput } = normalizeHierarchyPanelInput(input);
+    return res.status(201).json({ panel: await saveFivemHierarchyPanel(guildId, botId, createInput, res.locals.dashboardAuth.user.discordId) });
   } catch (error) {
     return next(error);
   }
@@ -1307,7 +1308,7 @@ function normalizeHierarchyPanelInput(input: Partial<z.infer<typeof hierarchyPan
       description: item.description ?? null,
       emoji: item.emoji ?? null,
       emptyText: item.emptyText ?? null,
-      id: item.id ?? `hierarquia-${index + 1}`,
+      id: item.id ?? `hierarquia-${Date.now()}-${index + 1}`,
       limit: item.limit ?? null,
       name: item.name,
       order: item.order,

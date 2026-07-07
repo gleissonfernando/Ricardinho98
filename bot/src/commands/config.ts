@@ -3,6 +3,7 @@ import { showPolicePatrolConfigPanel } from "../services/policePatrolReportServi
 import { showPoliceFlightConfigPanel } from "../services/policeFlightService";
 import { showPoliceRhConfigPanel } from "../services/policeRhService";
 import { showSummonsConfigPanel } from "../services/communicationService";
+import { showFivemHierarchyConfigPanel } from "../services/fivemHierarchyService";
 import type { BotCommand } from "../types";
 
 export const configCommand: BotCommand = {
@@ -18,6 +19,9 @@ export const configCommand: BotCommand = {
     .addSubcommand((subcommand) => subcommand
       .setName("intimar")
       .setDescription("Abre o painel de configuracao das intimacoes."))
+    .addSubcommand((subcommand) => subcommand
+      .setName("hierarquia")
+      .setDescription("Abre o painel de configuracao das hierarquias."))
     .addSubcommand((subcommand) => subcommand
       .setName("rh")
       .setDescription("Configura RH, ausencias e adornos sincronizando com a dashboard.")
@@ -38,6 +42,8 @@ export const configCommand: BotCommand = {
       await showPoliceFlightConfigPanel(interaction, context);
     } else if (interaction.options.getSubcommand() === "intimar") {
       await showSummonsConfigPanel(interaction, context);
+    } else if (interaction.options.getSubcommand() === "hierarquia") {
+      await showFivemHierarchyConfigPanel(interaction, context);
     } else if (interaction.options.getSubcommand() === "rh") {
       await showPoliceRhConfigPanel(interaction, context);
     }
