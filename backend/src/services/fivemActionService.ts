@@ -13,7 +13,7 @@ export const POLICE_ACTIONS_MODULE_ID = "police-actions";
 export type ActionSettingsInput = Partial<Pick<MongoFivemActionSettings,
   "enabled" | "categoryId" | "panelChannelId" | "actionChannelId" | "reportChannelId" |
   "categoryIds" | "panelChannelIds" | "actionChannelIds" | "reportChannelIds" |
-  "panelTitle" | "panelDescription" | "color" | "imageUrl" | "imagePosition"
+  "panelTitle" | "panelDescription" | "color" | "imageUrl" | "imagePosition" | "panelMessageId" | "lastPanelRequestedAt"
 >>;
 
 export type ActionDefinitionInput = Partial<Pick<MongoFivemActionDefinition,
@@ -59,7 +59,17 @@ export async function saveFivemActionSettings(botId: string, guildId: string, ar
 }
 
 export async function requestFivemActionPanel(botId: string, guildId: string, architecture: MongoFivemActionArchitecture, actorId: string) {
-  return saveFivemActionSettings(botId, guildId, architecture, { enabled: true, lastPanelRequestedAt: new Date() } as ActionSettingsInput, actorId);
+  const { fivemActionDefinitions } = await getMongoCollections();
+  const settings = await getFivemActionSettings(botId, guildId, architecture);
+
+  if (!settings.enabled) throw serviceError("Ative o Sistema de Ações antes de publicar.", 409);
+  if (!idList(settings.panelChannelIds, settings.panelChannelId).length) throw serviceError("Configure pelo menos um canal para o painel principal.", 409);
+  if (!idList(settings.actionChannelIds, settings.actionChannelId).length) throw serviceError("Configure pelo menos um canal para os painéis de ação.", 409);
+
+  const hasActions = await fivemActionDefinitions.countDocuments({ botId, guildId, architecture, enabled: true });
+  if (!hasActions) throw serviceError("Cadastre pelo menos uma ação ativa antes de publicar.", 409);
+
+  return saveFivemActionSettings(botId, guildId, architecture, { lastPanelRequestedAt: new Date() }, actorId);
 }
 
 export async function updateFivemActionPanelState(botId: string, guildId: string, architecture: MongoFivemActionArchitecture, panelMessageId: string | null) {
@@ -70,10 +80,39 @@ export async function saveFivemActionDefinition(botId: string, guildId: string, 
   const { fivemActionDefinitions, fivemActionSettings } = await getMongoCollections();
   const now = new Date();
   const id = actionId ?? randomUUID();
-  await fivemActionDefinitions.updateOne({ _id: id, botId, guildId, architecture }, {
-    $set: { ...input, updatedAt: now },
-    $setOnInsert: { _id: id, botId, guildId, architecture, name: input.name ?? "Nova ação", description: input.description ?? "", emoji: input.emoji ?? null, imageUrl: input.imageUrl ?? null, bannerUrl: input.bannerUrl ?? null, color: input.color ?? "#7c3aed", authorizedRoleIds: input.authorizedRoleIds ?? [], destinationSystem: input.destinationSystem ?? null, maxParticipants: input.maxParticipants ?? 6, enabled: input.enabled ?? true, order: input.order ?? 0, createdAt: now, createdBy: actorId }
-  }, { upsert: true });
+  const normalized = normalizeActionInput(input);
+
+  if (actionId) {
+    const updated = await fivemActionDefinitions.findOneAndUpdate(
+      { _id: id, botId, guildId, architecture },
+      { $set: { ...normalized, updatedAt: now } },
+      { returnDocument: "after" }
+    );
+    if (!updated) throw serviceError("Ação não encontrada.", 404);
+  } else {
+    const doc: MongoFivemActionDefinition = {
+      _id: id,
+      botId,
+      guildId,
+      architecture,
+      name: normalized.name ?? "Nova ação",
+      description: normalized.description ?? "",
+      emoji: normalized.emoji ?? null,
+      imageUrl: normalized.imageUrl ?? null,
+      bannerUrl: normalized.bannerUrl ?? null,
+      color: normalized.color ?? "#7c3aed",
+      authorizedRoleIds: normalized.authorizedRoleIds ?? [],
+      destinationSystem: normalized.destinationSystem ?? null,
+      maxParticipants: normalized.maxParticipants ?? 6,
+      enabled: normalized.enabled ?? true,
+      order: normalized.order ?? 0,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: actorId
+    };
+    await fivemActionDefinitions.insertOne(doc);
+  }
+
   await fivemActionSettings.updateOne({ botId, guildId, architecture, panelMessageId: { $ne: null } }, { $set: { lastPanelRequestedAt: now, updatedAt: now, updatedBy: actorId } });
   return actionDto((await fivemActionDefinitions.findOne({ _id: id, botId, guildId, architecture }))!);
 }
@@ -91,12 +130,21 @@ export async function listActiveFivemActionSettings(botId: string, architectures
   return (await fivemActionSettings.find(query).toArray()).map(settingsDto);
 }
 
-export async function createFivemActionSession(input: { botId: string; guildId: string; architecture: MongoFivemActionArchitecture; actionId: string; openerId: string; openerName: string }) {
+export async function createFivemActionSession(input: { botId: string; guildId: string; architecture: MongoFivemActionArchitecture; actionId: string; openerId: string; openerName: string; openerRoleIds?: string[] }) {
   const { fivemActionDefinitions, fivemActionSessions } = await getMongoCollections();
-  const action = await fivemActionDefinitions.findOne({ _id: input.actionId, botId: input.botId, guildId: input.guildId, architecture: input.architecture, enabled: true });
+  const [settings, action] = await Promise.all([
+    getFivemActionSettings(input.botId, input.guildId, input.architecture),
+    fivemActionDefinitions.findOne({ _id: input.actionId, botId: input.botId, guildId: input.guildId, architecture: input.architecture, enabled: true })
+  ]);
+  if (!settings.enabled) throw serviceError("O Sistema de Ações está desativado na dashboard.", 403);
+  if (!idList(settings.actionChannelIds, settings.actionChannelId).length) throw serviceError("Canal de ações não configurado.", 409);
   if (!action) throw serviceError("Ação não encontrada ou desativada.", 404);
+  if (action.authorizedRoleIds.length && !normalizeIds(input.openerRoleIds).some((roleId) => action.authorizedRoleIds.includes(roleId))) {
+    throw serviceError("Você não possui o cargo autorizado para esta ação.", 403);
+  }
   const now = new Date();
-  const session = { _id: randomUUID(), ...input, actionName: action.name, actionDescription: action.description, actionEmoji: action.emoji, actionImageUrl: action.imageUrl, actionColor: action.color, channelId: null, messageId: null, status: "active" as const, maxParticipants: action.maxParticipants, participants: [], startedAt: now, finishedAt: null, createdAt: now, updatedAt: now };
+  const { openerRoleIds: _openerRoleIds, ...sessionInput } = input;
+  const session = { _id: randomUUID(), ...sessionInput, actionName: action.name, actionDescription: action.description, actionEmoji: action.emoji, actionImageUrl: action.imageUrl, actionColor: action.color, channelId: null, messageId: null, status: "active" as const, maxParticipants: action.maxParticipants, participants: [], startedAt: now, finishedAt: null, createdAt: now, updatedAt: now };
   await fivemActionSessions.insertOne(session);
   return sessionDto(session);
 }
@@ -168,15 +216,53 @@ function settingsDto(value: MongoFivemActionSettings) {
 function actionDto(value: MongoFivemActionDefinition) { return { ...value, id: value._id, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString() }; }
 function sessionDto(value: any) { return { ...value, id: value._id, startedAt: value.startedAt.toISOString(), finishedAt: value.finishedAt?.toISOString() ?? null, createdAt: value.createdAt.toISOString(), updatedAt: value.updatedAt.toISOString(), participants: value.participants.map((item: MongoFivemActionParticipant) => ({ ...item, joinedAt: item.joinedAt.toISOString(), leftAt: item.leftAt?.toISOString() ?? null })) }; }
 function normalizeSettingsInput(input: ActionSettingsInput) {
+  const panelChannelIds = normalizeIds(input.panelChannelIds);
+  const actionChannelIds = normalizeIds(input.actionChannelIds);
+  const reportChannelIds = normalizeIds(input.reportChannelIds);
+  const categoryIds = normalizeIds(input.categoryIds);
   return {
     ...input,
-    ...(input.panelChannelIds ? { panelChannelId: input.panelChannelIds[0] ?? null } : {}),
-    ...(input.actionChannelIds ? { actionChannelId: input.actionChannelIds[0] ?? null } : {}),
-    ...(input.reportChannelIds ? { reportChannelId: input.reportChannelIds[0] ?? null } : {}),
-    ...(input.categoryIds ? { categoryId: input.categoryIds[0] ?? null } : {})
+    ...(input.panelChannelIds ? { panelChannelIds, panelChannelId: panelChannelIds[0] ?? null } : {}),
+    ...(input.actionChannelIds ? { actionChannelIds, actionChannelId: actionChannelIds[0] ?? null } : {}),
+    ...(input.reportChannelIds ? { reportChannelIds, reportChannelId: reportChannelIds[0] ?? null } : {}),
+    ...(input.categoryIds ? { categoryIds, categoryId: categoryIds[0] ?? null } : {}),
+    ...(input.panelTitle !== undefined ? { panelTitle: normalizeText(input.panelTitle, 120, "Painel de Ações") } : {}),
+    ...(input.panelDescription !== undefined ? { panelDescription: normalizeText(input.panelDescription, 1500, "") } : {}),
+    ...(input.color !== undefined ? { color: normalizeColor(input.color, "#7c3aed") } : {}),
+    ...(input.imageUrl !== undefined ? { imageUrl: normalizeNullableUrl(input.imageUrl) } : {})
   };
 }
+
+function normalizeActionInput(input: ActionDefinitionInput): ActionDefinitionInput {
+  return {
+    ...input,
+    ...(input.name !== undefined ? { name: normalizeText(input.name, 80, "Nova ação") } : {}),
+    ...(input.description !== undefined ? { description: normalizeText(input.description, 1000, "") } : {}),
+    ...(input.emoji !== undefined ? { emoji: normalizeNullableText(input.emoji, 80) } : {}),
+    ...(input.imageUrl !== undefined ? { imageUrl: normalizeNullableUrl(input.imageUrl) } : {}),
+    ...(input.bannerUrl !== undefined ? { bannerUrl: normalizeNullableUrl(input.bannerUrl) } : {}),
+    ...(input.color !== undefined ? { color: normalizeColor(input.color, "#7c3aed") } : {}),
+    ...(input.authorizedRoleIds !== undefined ? { authorizedRoleIds: normalizeIds(input.authorizedRoleIds).slice(0, 50) } : {}),
+    ...(input.destinationSystem !== undefined ? { destinationSystem: normalizeNullableText(input.destinationSystem, 100) } : {}),
+    ...(input.maxParticipants !== undefined ? { maxParticipants: clampInt(input.maxParticipants, 1, 100, 6) } : {}),
+    ...(input.order !== undefined ? { order: clampInt(input.order, 0, 10000, 0) } : {})
+  };
+}
+
 function idList(values: unknown, fallback: string | null | undefined) {
   return [...new Set([...(Array.isArray(values) ? values : []), fallback].filter((value): value is string => typeof value === "string" && /^\d{5,32}$/.test(value)))];
+}
+function normalizeIds(values: unknown) { return Array.isArray(values) ? [...new Set(values.filter((value): value is string => typeof value === "string" && /^\d{5,32}$/.test(value)))] : []; }
+function normalizeText(value: unknown, maxLength: number, fallback: string) { return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : fallback; }
+function normalizeNullableText(value: unknown, maxLength: number) { return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : null; }
+function normalizeNullableUrl(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const normalized = value.trim().slice(0, 2048);
+  return /^https?:\/\//i.test(normalized) || normalized.startsWith("/uploads/") ? normalized : null;
+}
+function normalizeColor(value: unknown, fallback: string) { return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : fallback; }
+function clampInt(value: unknown, min: number, max: number, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.trunc(number))) : fallback;
 }
 function serviceError(message: string, statusCode: number) { return Object.assign(new Error(message), { statusCode }); }

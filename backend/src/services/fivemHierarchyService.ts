@@ -29,6 +29,7 @@ export type FivemHierarchyPanelDto = {
   emptyText: string;
   enabled: boolean;
   editorRoleIds: string[];
+  editorUserIds: string[];
   footerEnabled: boolean;
   footerIconUrl: string | null;
   footerScope: "unit" | "global";
@@ -286,6 +287,7 @@ function defaultPanelDto(guildId: string, botId: string | null, id: string, unit
     emptyText: "Nenhum membro encontrado com este cargo.",
     enabled: false,
     editorRoleIds: [],
+    editorUserIds: [],
     footerEnabled: true,
     footerIconUrl: null,
     footerScope: "unit",
@@ -330,7 +332,8 @@ function normalizePanelInput(input: Partial<FivemHierarchyPanelDto>, guildId: st
     displayMode: normalizeDisplayMode(input.displayMode),
     emptyText: normalizeText(input.emptyText, 80) ?? "Nenhum membro encontrado com este cargo.",
     enabled: input.enabled === true,
-    editorRoleIds: [...new Set((input.editorRoleIds ?? []).filter(Boolean))],
+    editorRoleIds: normalizeSnowflakes(input.editorRoleIds ?? []),
+    editorUserIds: normalizeSnowflakes(input.editorUserIds ?? []),
     footerEnabled: input.footerEnabled !== false,
     footerIconUrl: normalizeText(input.footerIconUrl, 2048),
     footerScope: input.footerScope === "global" ? "global" : "unit",
@@ -392,6 +395,7 @@ function toPanelDto(row: MongoFivemHierarchyPanel): FivemHierarchyPanelDto {
     emptyText: row.emptyText ?? "Nenhum membro encontrado com este cargo.",
     enabled: row.enabled === true,
     editorRoleIds: row.editorRoleIds ?? [],
+    editorUserIds: row.editorUserIds ?? [],
     footerEnabled: row.footerEnabled !== false,
     footerIconUrl: row.footerIconUrl ?? null,
     footerScope: row.footerScope === "global" || row.useGlobalFooter ? "global" : "unit",
@@ -435,6 +439,12 @@ function normalizeBotId(botId: string | null | undefined) {
 function normalizeSnowflake(value: string | null | undefined) {
   const normalized = value?.trim() ?? "";
   return /^\d{5,32}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeSnowflakes(values: unknown) {
+  return Array.isArray(values)
+    ? [...new Set(values.map((value) => typeof value === "string" ? normalizeSnowflake(value) : null).filter((value): value is string => Boolean(value)))]
+    : [];
 }
 
 function normalizeText(value: string | null | undefined, maxLength: number) {

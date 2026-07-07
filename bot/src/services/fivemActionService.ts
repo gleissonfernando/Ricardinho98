@@ -12,9 +12,12 @@ const PREFIX = "fivem_action";
 const MODULE_BY_ARCHITECTURE: Record<FivemActionArchitecture, string> = { fac: "fivem-actions", police: "police-actions" };
 const handledRequests = new Map<string, string>();
 let polling = false;
+let serviceStarted = false;
 
 export function startFivemActionService(client: Client, context: BotContext) {
   if (!isFivemActionRuntimeEnabled()) return;
+  if (serviceStarted) return;
+  serviceStarted = true;
   void processPanelRequests(client, context);
   const interval = setInterval(() => void processPanelRequests(client, context), 15_000);
   interval.unref();
@@ -22,15 +25,20 @@ export function startFivemActionService(client: Client, context: BotContext) {
 
 export async function handleFivemActionInteraction(interaction: Interaction, context: BotContext) {
   if (!(interaction.isButton() || interaction.isStringSelectMenu()) || !interaction.customId.startsWith(`${PREFIX}:`)) return false;
-  if (!isFivemActionRuntimeEnabled()) { await interaction.reply({ content: "Sistema de Ações não liberado para este bot.", ephemeral: true }); return true; }
-  if (!interaction.guildId || !interaction.guild) { await interaction.reply({ content: "Use este sistema dentro de um servidor.", ephemeral: true }); return true; }
-  const [, action, id] = interaction.customId.split(":");
-  if (interaction.isStringSelectMenu() && action === "open") await openAction(interaction, context);
-  else if (interaction.isButton() && action === "join") await changeParticipant(interaction, context, id!, true);
-  else if (interaction.isButton() && action === "leave") await changeParticipant(interaction, context, id!, false);
-  else if (interaction.isButton() && action === "result") await chooseResult(interaction, context, id!);
-  else if (interaction.isButton() && action === "page") await showActionPage(interaction, context, id!);
-  else if (interaction.isStringSelectMenu() && action === "finish") await finishAction(interaction, context, id!);
+  try {
+    if (!isFivemActionRuntimeEnabled()) { await interaction.reply({ content: "Sistema de Ações não liberado para este bot.", ephemeral: true }); return true; }
+    if (!interaction.guildId || !interaction.guild) { await interaction.reply({ content: "Use este sistema dentro de um servidor.", ephemeral: true }); return true; }
+    const [, action, id] = interaction.customId.split(":");
+    if (interaction.isStringSelectMenu() && action === "open") await openAction(interaction, context);
+    else if (interaction.isButton() && action === "join") await changeParticipant(interaction, context, id!, true);
+    else if (interaction.isButton() && action === "leave") await changeParticipant(interaction, context, id!, false);
+    else if (interaction.isButton() && action === "result") await chooseResult(interaction, context, id!);
+    else if (interaction.isButton() && action === "page") await showActionPage(interaction, context, id!);
+    else if (interaction.isStringSelectMenu() && action === "finish") await finishAction(interaction, context, id!);
+    else await replyOrEdit(interaction, "Ação do painel inválida.");
+  } catch (error) {
+    await replyOrEdit(interaction, readApiError(error) ?? "Não foi possível concluir esta ação.");
+  }
   return true;
 }
 
@@ -50,17 +58,17 @@ async function processPanelRequests(client: Client, context: BotContext) {
 }
 
 async function publishMainPanel(client: Client, context: BotContext, config: FivemActionSettings) {
-  if (!config.panelChannelId) throw new Error(`Canal principal não configurado para ${config.guildId}/${config.architecture}.`);
+  if (!firstId(config.panelChannelIds, config.panelChannelId)) throw new Error(`Canal principal não configurado para ${config.guildId}/${config.architecture}.`);
   const guild = await client.guilds.fetch(config.guildId);
-  const channel = await guild.channels.fetch(firstId(config.panelChannelIds, config.panelChannelId)!);
-  if (!channel?.isTextBased() || channel.isDMBased()) throw new Error("Canal do painel inválido.");
+  const channel = await firstTextChannel(guild, config.panelChannelIds, config.panelChannelId);
+  if (!channel) throw new Error("Canal do painel inválido ou sem acesso.");
   const dashboard = await context.api.getFivemActionDashboard(config.guildId, config.architecture);
   const enabled = dashboard.actions.filter((item) => item.enabled).sort((a, b) => a.order - b.order);
   if (!enabled.length) throw new Error("Cadastre ao menos uma ação antes de publicar.");
   const select = new StringSelectMenuBuilder().setCustomId(`${PREFIX}:open:${config.architecture}`).setPlaceholder("🎯 Escolha uma ação").addOptions(enabled.slice(0, 25).map((item) => ({ label: item.name.slice(0, 100), value: `${config.architecture}|${item.id}`, description: item.description.slice(0, 100) || undefined, emoji: item.emoji || undefined })));
   const intro = { type: 10, content: [`# ${config.panelTitle}`, config.panelDescription].join("\n") };
   const tutorial = { type: 10, content: ["## 📖 Como funciona", "1️⃣ Escolha uma ação no menu.", "2️⃣ Vá ao painel criado.", "3️⃣ Entre na ação e aguarde a equipe.", "4️⃣ O responsável encerra em Resultado da ação.", "5️⃣ O relatório será enviado automaticamente."].join("\n") };
-  const visuals = config.architecture === "police" ? await getPanelVisualSlots(context, config.guildId, "police-actions") : [];
+  const visuals = await getPanelVisualSlots(context, config.guildId, `fivem-actions-${config.architecture}`);
   const fallbackImageUrl = config.imageUrl && config.imagePosition !== "none" ? resolvePanelImageUrl(config.imageUrl) : null;
   const media = visuals.length ? visuals.map((visual) => mediaBlock(visual.imageUrl!, config.panelTitle)) : fallbackImageUrl ? [mediaBlock(fallbackImageUrl, config.panelTitle)] : [];
   const imagePosition = visuals[0] ? actionImagePosition(visuals[0].imagePosition) : config.imagePosition;
@@ -87,9 +95,9 @@ async function openAction(interaction: StringSelectMenuInteraction, context: Bot
   }
   const channelId = firstId(dashboard.settings.actionChannelIds, dashboard.settings.actionChannelId);
   if (!channelId) return void await interaction.editReply("Canal de ações não configurado.");
-  const channel = await interaction.guild!.channels.fetch(channelId);
-  if (!channel?.isTextBased() || channel.isDMBased()) return void await interaction.editReply("Canal de ações inválido.");
-  const session = await context.api.createFivemActionSession({ guildId: interaction.guildId!, architecture, actionId, openerId: interaction.user.id, openerName: displayName(interaction.member) });
+  const channel = await firstTextChannel(interaction.guild!, dashboard.settings.actionChannelIds, dashboard.settings.actionChannelId);
+  if (!channel) return void await interaction.editReply("Canal de ações inválido ou sem acesso.");
+  const session = await context.api.createFivemActionSession({ guildId: interaction.guildId!, architecture, actionId, openerId: interaction.user.id, openerName: displayName(interaction.member), openerRoleIds: [...member.roles.cache.keys()] });
   const message = await channel.send(sessionPayload(session));
   await context.api.updateFivemActionSessionMessage(session.id, { channelId: channel.id, messageId: message.id });
   await interaction.editReply(`Painel de **${session.actionName}** criado em <#${channel.id}>.${action.destinationSystem ? `\nDestino configurado: **${action.destinationSystem}**.` : ""}`);
@@ -126,6 +134,8 @@ async function changeParticipant(interaction: any, context: BotContext, sessionI
 
 async function chooseResult(interaction: any, context: BotContext, sessionId: string) {
   const session = await context.api.getFivemActionSession(sessionId);
+  if (!session) { await interaction.reply({ content: "Ação não encontrada.", ephemeral: true }); return; }
+  if (session.status !== "active") { await interaction.reply({ content: "Esta ação já foi encerrada.", ephemeral: true }); return; }
   if (session.openerId !== interaction.user.id) { await interaction.reply({ content: "Você não é o responsável por esta ação.", ephemeral: true }); return; }
   const select = new StringSelectMenuBuilder().setCustomId(`${PREFIX}:finish:${sessionId}`).setPlaceholder("Escolha o resultado").addOptions({ label: "Vitória", value: "victory", emoji: "🟢" }, { label: "Derrota", value: "defeat", emoji: "🔴" });
   await interaction.reply({ components: [{ type: 17, accent_color: 0x7c3aed, components: [{ type: 10, content: `## Resultado de ${session.actionName}\nSomente você pode concluir esta ação.` }, new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] }], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
@@ -150,9 +160,8 @@ async function refreshSessionMessage(interaction: any, session: FivemActionSessi
 
 async function sendReport(interaction: StringSelectMenuInteraction, context: BotContext, session: FivemActionSession) {
   const dashboard = await context.api.getFivemActionDashboard(session.guildId, session.architecture);
-  const reportChannelId = firstId(dashboard.settings.reportChannelIds, dashboard.settings.reportChannelId);
   const categoryId = firstId(dashboard.settings.categoryIds, dashboard.settings.categoryId);
-  let channel = reportChannelId ? await interaction.guild!.channels.fetch(reportChannelId).catch(() => null) : null;
+  let channel = await firstTextChannel(interaction.guild!, dashboard.settings.reportChannelIds, dashboard.settings.reportChannelId);
   if (!channel) channel = await interaction.guild!.channels.create({ name: "relatorio-de-acoes", type: ChannelType.GuildText, parent: categoryId ?? undefined, reason: "Relatorios do Sistema de Acoes" });
   if (!channel.isTextBased() || channel.isDMBased()) return;
   const active = session.participants.filter((item) => !item.leftAt);
@@ -202,3 +211,26 @@ function parseColor(value: string) { return Number.parseInt(value.replace("#", "
 function displayName(member: any) { return member?.displayName ?? member?.user?.globalName ?? member?.user?.username ?? "Usuário"; }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function firstId(values: string[] | undefined, fallback: string | null | undefined) { return values?.[0] ?? fallback ?? null; }
+async function firstTextChannel(guild: NonNullable<Interaction["guild"]>, ids: string[] | undefined, fallback: string | null | undefined) {
+  const channelIds = [...new Set([...(ids ?? []), fallback].filter((id): id is string => Boolean(id)))];
+  for (const channelId of channelIds) {
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (channel?.isTextBased() && !channel.isDMBased() && "send" in channel) return channel;
+  }
+  return null;
+}
+async function replyOrEdit(interaction: Interaction, content: string) {
+  if (!interaction.isRepliable()) return;
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({ content, components: [] }).catch(() => interaction.followUp({ content, ephemeral: true }).catch(() => null));
+    return;
+  }
+  await interaction.reply({ content, ephemeral: true }).catch(() => null);
+}
+function readApiError(error: unknown) {
+  if (typeof error === "object" && error !== null && "response" in error) {
+    const response = (error as { response?: { data?: { message?: unknown } } }).response;
+    if (typeof response?.data?.message === "string") return response.data.message;
+  }
+  return error instanceof Error ? error.message : null;
+}

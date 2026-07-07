@@ -2226,7 +2226,7 @@ export class ApiClient {
     const { data } = await this.http.post<{ settings: FivemActionSettings }>("/fivem-actions/bot/panel-state", input); return data.settings;
   }
 
-  async createFivemActionSession(input: { guildId: string; architecture: FivemActionArchitecture; actionId: string; openerId: string; openerName: string }) {
+  async createFivemActionSession(input: { guildId: string; architecture: FivemActionArchitecture; actionId: string; openerId: string; openerName: string; openerRoleIds?: string[] }) {
     const { data } = await this.http.post<{ session: FivemActionSession }>("/fivem-actions/bot/sessions", input); return data.session;
   }
 
