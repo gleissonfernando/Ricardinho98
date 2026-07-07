@@ -16,7 +16,7 @@ import { BotSocketClient } from "./websocket/socketClient";
 const intents = [GatewayIntentBits.Guilds];
 const managedRuntimeBot = Boolean(env.DASHBOARD_BOT_ID.trim());
 const needsVoiceRecorder = isBotModuleEnabled("voice-recorder");
-const needsMusic = isBotModuleEnabled("music") || managedRuntimeBot;
+const needsMusic = isBotModuleEnabled("music");
 const needsTagVerification = isBotModuleEnabled("tag-verification") || managedRuntimeBot;
 const needsVoiceEvents = managedRuntimeBot || isBotModuleEnabled("anti-abuse") || isBotModuleEnabled("anti-disconnect") || isBotModuleEnabled("temporary-voice") || isBotModuleEnabled("logs");
 const needsAntiBan = isBotModuleEnabled("anti-ban") || managedRuntimeBot;

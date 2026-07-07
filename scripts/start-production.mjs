@@ -109,7 +109,7 @@ function startProcess(name, command, args, options = {}) {
   const child = spawn(command, args, {
     env: {
       ...process.env,
-      NODE_OPTIONS: process.env.NODE_OPTIONS || `--max-old-space-size=${Math.max(256, Number(process.env.ORVITEK_NODE_MAX_OLD_SPACE_MB) || 512)}`
+      NODE_OPTIONS: process.env.NODE_OPTIONS || `--max-old-space-size=${Math.max(256, Number(process.env.ORVITEK_NODE_MAX_OLD_SPACE_MB) || 384)}`
     },
     shell: process.platform === "win32",
     stdio: "inherit"
