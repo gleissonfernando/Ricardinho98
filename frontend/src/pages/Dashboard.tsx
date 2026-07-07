@@ -3367,8 +3367,15 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   const [roles, setRoles] = useState<GuildRoleOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const draftDirtyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  function setDraftHasUnsavedChanges(value: boolean) {
+    draftDirtyRef.current = value;
+    setDraftDirty(value);
+  }
 
   const refreshHierarchyDashboard = useCallback(async (options: { refreshOptions?: boolean; resetDraft?: boolean } = {}) => {
     if (!guild) return;
@@ -3376,10 +3383,11 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       getFivemHierarchy(guild.id, botId),
       options.refreshOptions !== false ? getGuildLiveOptions(guild.id, botId) : Promise.resolve(null)
     ]);
+    if (options.resetDraft) setDraftHasUnsavedChanges(false);
     setPanels(dashboard.panels);
     setDraft((current) => {
       if (options.resetDraft || !current) return dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
-      if (isLocalNewHierarchyPanel(current)) return current;
+      if (draftDirtyRef.current || isLocalNewHierarchyPanel(current)) return current;
       return dashboard.panels.find((panel) => panel.id === current.id) ?? current;
     });
     if (liveOptions) {
@@ -3425,10 +3433,12 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   }, [botId, guild, refreshHierarchyDashboard]);
 
   function patchDraft(patch: Partial<FivemHierarchyPanelType>) {
+    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? { ...current, ...patch } : current);
   }
 
   function patchHierarchy(index: number, patch: Partial<FivemHierarchyPanelType["hierarchies"][number]>) {
+    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
       hierarchies: current.hierarchies.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item)
@@ -3436,6 +3446,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   }
 
   function addHierarchy() {
+    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
       hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: defaultHierarchyEmoji(current.hierarchies.length), emptyText: "Nenhum membro encontrado com este cargo.", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
@@ -3443,6 +3454,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   }
 
   function removeHierarchy(index: number) {
+    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
       hierarchies: current.hierarchies
@@ -3470,6 +3482,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const saved = await saveFivemHierarchyPanel(guild.id, draft, botId);
       setPanels((current) => [saved, ...current.filter((panel) => panel.id !== saved.id)]);
       setDraft(saved);
+      setDraftHasUnsavedChanges(false);
       setMessage("Hierarquia policial salva.");
     } catch {
       setError("Nao foi possivel salvar o painel de hierarquia.");
@@ -3489,6 +3502,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const saved = await saveFivemHierarchyPanel(guild.id, draft, botId);
       setPanels((current) => [saved, ...current.filter((panel) => panel.id !== saved.id && panel.id !== draft.id)]);
       setDraft(saved);
+      setDraftHasUnsavedChanges(false);
       await publishFivemHierarchyPanel(guild.id, saved.id, botId);
       setMessage("Hierarquia salva e publicada no Discord.");
     } catch {
@@ -3507,6 +3521,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const next = panels.filter((panel) => panel.id !== draft.id);
       setPanels(next);
       setDraft(next[0] ?? createEmptyHierarchyPanel(guild.id, botId));
+      setDraftHasUnsavedChanges(false);
       setMessage("Painel de hierarquia excluido.");
     } catch {
       setError("Nao foi possivel excluir o painel.");
@@ -3524,7 +3539,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const result = await registerDefaultFivemHierarchyPanels(guild.id, botId);
       setPanels(result.panels);
       setDraft((current) => {
-        if (current && isLocalNewHierarchyPanel(current)) return current;
+        if (current && (draftDirtyRef.current || isLocalNewHierarchyPanel(current))) return current;
         if (current) return result.panels.find((panel) => panel.id === current.id) ?? current;
         return result.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
       });
@@ -3539,6 +3554,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   function resetDraftToTemplate() {
     if (!guild || !draft) return;
     const template = hierarchyUnitTemplates.find((unit) => unit.unitId === draft.unitId) ?? hierarchyUnitTemplates[0];
+    setDraftHasUnsavedChanges(true);
     setDraft({
       ...createHierarchyPanelFromTemplate(guild.id, botId, template),
       id: draft.id,
@@ -3564,7 +3580,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
             <CardDescription>Painel fixo com membros agrupados por cargos, atualizado automaticamente quando a hierarquia muda.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || !guild} onClick={() => setDraft(createNewHierarchyPanel(guild?.id ?? "", botId, panels.length))} size="sm" type="button" variant="outline">Novo painel</Button>
+            <Button disabled={!canManage || !guild} onClick={() => { setDraftHasUnsavedChanges(true); setDraft(createNewHierarchyPanel(guild?.id ?? "", botId, panels.length)); }} size="sm" type="button" variant="outline">Novo painel</Button>
             <Button disabled={!canManage || !guild || saving} onClick={() => void registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
@@ -3575,6 +3591,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       <CardContent className="space-y-4">
         {error ? <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
         {message ? <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
+        {draftDirty ? <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">Alteracoes ainda nao salvas neste painel.</div> : null}
         {missingHierarchyRoles.length ? (
           <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
             <p className="font-semibold">Cargos cadastrados nao encontrados no servidor.</p>
@@ -3591,7 +3608,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 </button>
               ) : null}
               {panels.map((panel) => (
-                <button className={`w-full rounded-lg border p-3 text-left ${draft.id === panel.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 bg-black/30"}`} key={panel.id} onClick={() => setDraft(panel)} type="button">
+                <button className={`w-full rounded-lg border p-3 text-left ${draft.id === panel.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 bg-black/30"}`} key={panel.id} onClick={() => { setDraftHasUnsavedChanges(false); setDraft(panel); }} type="button">
                   <p className="text-sm font-semibold text-white">{panel.name}</p>
                   <p className="mt-1 text-xs text-zinc-500">{panel.hierarchies.length} hierarquias · {panel.enabled ? "ativo" : "desativado"}</p>
                 </button>
