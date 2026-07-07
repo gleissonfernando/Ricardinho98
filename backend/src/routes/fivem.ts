@@ -30,6 +30,7 @@ import {
   FIVEM_HIERARCHY_MODULE_ID,
   getFivemHierarchyDashboard,
   listActiveFivemHierarchyPanels,
+  listFivemHierarchyPanels,
   registerDefaultFivemHierarchyPanels,
   requestFivemHierarchyPanelPublish,
   recordFivemHierarchySync,
@@ -218,7 +219,7 @@ const hierarchyPanelSchema = z.object({
   footerText: z.string().max(200).nullable().optional(),
   globalFooterIconUrl: z.string().max(2048).nullable().optional(),
   globalFooterText: z.string().max(200).nullable().optional(),
-  hierarchies: z.array(hierarchyEntrySchema).max(50).optional(),
+  hierarchies: z.array(hierarchyEntrySchema).max(200).optional(),
   id: z.string().max(80).optional(),
   imagePosition: z.enum(["top", "bottom", "thumbnail", "none"]).optional(),
   imageUrl: z.string().max(2048).nullable().optional(),
@@ -516,6 +517,57 @@ fivemRouter.get("/bot/hierarchy/configs", requireBot, async (req, res, next) => 
     const botId = await readRequiredBotId(req);
     await assertBotFivemHierarchyLicense(botId);
     return res.json({ panels: await listActiveFivemHierarchyPanels(botId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.get("/bot/hierarchy/:guildId/panels", requireBot, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    return res.json({ panels: await listFivemHierarchyPanels(guildId, botId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.post("/bot/hierarchy/:guildId/panels", requireBot, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    const input = hierarchyPanelSchema.parse(req.body);
+    const { id: _ignoredId, panelMessageId: _ignoredMessageId, ...createInput } = normalizeHierarchyPanelInput(input);
+    return res.status(201).json({ panel: await saveFivemHierarchyPanel(guildId, botId, createInput, botId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.patch("/bot/hierarchy/:guildId/panels/:panelId", requireBot, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const panelId = z.string().min(1).max(80).parse(req.params.panelId);
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    const input = hierarchyPanelSchema.partial().parse(req.body);
+    return res.json({ panel: await saveFivemHierarchyPanel(guildId, botId, { ...normalizeHierarchyPanelInput(input), id: panelId }, botId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+fivemRouter.delete("/bot/hierarchy/:guildId/panels/:panelId", requireBot, async (req, res, next) => {
+  try {
+    const guildId = guildIdSchema.parse(req.params.guildId);
+    const panelId = z.string().min(1).max(80).parse(req.params.panelId);
+    const botId = await readRequiredBotId(req);
+    await assertBotFivemHierarchyLicense(botId);
+    const panel = await deleteFivemHierarchyPanel(guildId, botId, panelId, botId);
+    if (!panel) throw createRouteError("Painel de hierarquia nao encontrado.", 404);
+    return res.json({ panel });
   } catch (error) {
     return next(error);
   }

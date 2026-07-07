@@ -1727,6 +1727,24 @@ export class ApiClient {
     return data.panels;
   }
 
+  async getFivemHierarchyPanels(guildId: string) {
+    const { data } = await this.http.get<{ panels: FivemHierarchyPanel[] }>(`/fivem/bot/hierarchy/${guildId}/panels`);
+    return data.panels;
+  }
+
+  async saveFivemHierarchyPanel(guildId: string, input: Partial<FivemHierarchyPanel>) {
+    const request = input.id
+      ? this.http.patch<{ panel: FivemHierarchyPanel }>(`/fivem/bot/hierarchy/${guildId}/panels/${encodeURIComponent(input.id)}`, input)
+      : this.http.post<{ panel: FivemHierarchyPanel }>(`/fivem/bot/hierarchy/${guildId}/panels`, input);
+    const { data } = await request;
+    return data.panel;
+  }
+
+  async deleteFivemHierarchyPanel(guildId: string, panelId: string) {
+    const { data } = await this.http.delete<{ panel: FivemHierarchyPanel }>(`/fivem/bot/hierarchy/${guildId}/panels/${encodeURIComponent(panelId)}`);
+    return data.panel;
+  }
+
   async updateFivemHierarchyPanelState(input: { expectedMessageId?: string | null; guildId: string; messageId?: string | null; panelId: string }) {
     const { data } = await this.http.post<{ panel: FivemHierarchyPanel | null }>("/fivem/bot/hierarchy/panel-state", input);
     return data.panel;

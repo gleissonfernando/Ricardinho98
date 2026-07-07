@@ -3452,7 +3452,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
 
   function hierarchyValidationError(panel: FivemHierarchyPanelType, requireChannel = false) {
     const selectedRoleIds = panel.hierarchies.map((item) => item.roleId).filter(Boolean);
-    if (!panel.hierarchies.length) return "Adicione pelo menos um cargo ao painel.";
     if (panel.hierarchies.some((item) => !item.name.trim())) return "Informe o nome exibido em todas as patentes.";
     if (new Set(selectedRoleIds).size !== selectedRoleIds.length) return "O mesmo cargo nao pode aparecer duas vezes no painel.";
     if (requireChannel && !panel.panelChannelId) return "Escolha o canal onde o painel sera publicado.";
@@ -3559,7 +3558,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
             <CardDescription>Painel fixo com membros agrupados por cargos, atualizado automaticamente quando a hierarquia muda.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || !guild} onClick={() => setDraft(createEmptyHierarchyPanel(guild?.id ?? "", botId))} size="sm" type="button" variant="outline">Novo painel</Button>
+            <Button disabled={!canManage || !guild} onClick={() => setDraft(createNewHierarchyPanel(guild?.id ?? "", botId, panels.length))} size="sm" type="button" variant="outline">Novo painel</Button>
             <Button disabled={!canManage || !guild || saving} onClick={() => void registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
@@ -3684,7 +3683,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 panelSlots={hierarchyBannerSlots(draft)}
               />
               <HierarchyPreview panel={draft} roles={roles} />
-              {draft.id !== "new" ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
+              {isPersistedHierarchyPanel(draft, panels) ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
           </div>
         )}
@@ -3748,6 +3747,22 @@ function createEmptyHierarchyPanel(guildId: string, botId?: string | null): Five
   return createHierarchyPanelFromTemplate(guildId, botId, hierarchyUnitTemplates[0]);
 }
 
+function createNewHierarchyPanel(guildId: string, botId: string | null | undefined, existingCount: number): FivemHierarchyPanelType {
+  const panel = createHierarchyPanelFromTemplate(guildId, botId, hierarchyUnitTemplates[0]);
+  const number = existingCount + 1;
+  return {
+    ...panel,
+    description: "Lista oficial de membros agrupados por cargos.",
+    enabled: false,
+    hierarchies: [],
+    id: "",
+    name: `Nova Hierarquia ${number}`,
+    panelMessageId: null,
+    title: `Hierarquia - Nova Categoria ${number}`,
+    unitId: `custom-${Date.now()}`
+  };
+}
+
 function createHierarchyPanelFromTemplate(guildId: string, botId: string | null | undefined, template: typeof hierarchyUnitTemplates[number]): FivemHierarchyPanelType {
   const now = new Date().toISOString();
   return {
@@ -3781,6 +3796,10 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
     useGlobalFooter: false,
     updatedAt: now
   };
+}
+
+function isPersistedHierarchyPanel(panel: FivemHierarchyPanelType, panels: FivemHierarchyPanelType[]) {
+  return Boolean(panel.id && panels.some((item) => item.id === panel.id));
 }
 
 function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {

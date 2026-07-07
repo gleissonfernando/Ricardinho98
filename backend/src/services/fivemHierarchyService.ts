@@ -92,7 +92,7 @@ export async function registerDefaultFivemHierarchyPanels(guildId: string, botId
 
 export async function listFivemHierarchyPanels(guildId: string, botId?: string | null) {
   const { fivemHierarchyPanels } = await getMongoCollections();
-  const rows = await fivemHierarchyPanels.find(scopeQuery(guildId, normalizeBotId(botId))).sort({ createdAt: -1 }).limit(50).toArray();
+  const rows = await fivemHierarchyPanels.find(scopeQuery(guildId, normalizeBotId(botId))).sort({ createdAt: -1 }).limit(500).toArray();
   return rows.map(toPanelDto);
 }
 
@@ -364,7 +364,7 @@ function normalizeHierarchies(values: Array<Partial<FivemHierarchyEntryDto> | Mo
       showWhenEmpty: item.showWhenEmpty !== false
     }))
     .sort((a, b) => a.order - b.order)
-    .slice(0, 50);
+    .slice(0, 200);
 }
 
 async function writeFivemHierarchyLog(input: Omit<MongoFivemHierarchyLog, "_id" | "createdAt">) {

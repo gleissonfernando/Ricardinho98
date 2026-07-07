@@ -3,8 +3,13 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  ModalBuilder,
   PermissionFlagsBits,
+  RoleSelectMenuBuilder,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
@@ -12,7 +17,10 @@ import {
   type GuildMember,
   type GuildTextBasedChannel,
   type Interaction,
-  type Message
+  type Message,
+  type ModalSubmitInteraction,
+  type RoleSelectMenuInteraction,
+  type StringSelectMenuInteraction
 } from "discord.js";
 import { isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
@@ -27,6 +35,9 @@ const hierarchyPanelVisuals = new Map<string, { expiresAt: number; visuals: Pane
 const hierarchyPanelMessages = new Map<string, Message<true>>();
 const HIERARCHY_REFRESH_PREFIX = "fivem_hierarchy:refresh";
 const HIERARCHY_CONFIG_PREFIX = "fivem_hierarchy:config";
+const HIERARCHY_MODAL_PREFIX = "fivem_hierarchy:modal";
+const HIERARCHY_SELECT_PREFIX = "fivem_hierarchy:select";
+const HIERARCHY_ROLE_PREFIX = "fivem_hierarchy:role";
 const HIERARCHY_VISUAL_CACHE_MS = 60_000;
 const HIERARCHY_AUTO_REFRESH_SECONDS = 5;
 const HIERARCHY_MEMBER_FETCH_TIMEOUT_MS = 4_500;
@@ -47,18 +58,12 @@ export const hierarchyCommand: BotCommand = {
     .setName("hierarquia")
     .setDescription("Gerencia os paineis automaticos de hierarquia.")
     .addSubcommand((command) => command.setName("config").setDescription("Abre a configuracao das hierarquias."))
-    .addSubcommand((command) => command.setName("sync").setDescription("Sincroniza agora todos os paineis de hierarquia."))
-    .addSubcommand((command) => command.setName("configurar").setDescription("Mostra onde configurar unidades, cargos e o painel."))
-    .addSubcommand((command) => command.setName("postar").setDescription("Posta ou edita uma unidade de hierarquia.").addStringOption((option) => option.setName("unidade").setDescription("DU, CBP, TRAFFIC, MARY, FAST, DAF ou SWAT").setRequired(true)))
-    .addSubcommand((command) => command.setName("atualizar").setDescription("Atualiza uma unidade de hierarquia.").addStringOption((option) => option.setName("unidade").setDescription("DU, CBP, TRAFFIC, MARY, FAST, DAF ou SWAT").setRequired(true)))
-    .addSubcommand((command) => command.setName("atualizar_todas").setDescription("Atualiza agora todos os paineis de hierarquia."))
-    .addSubcommand((command) => command.setName("preview").setDescription("Mostra uma preview privada da unidade.").addStringOption((option) => option.setName("unidade").setDescription("DU, CBP, TRAFFIC, MARY, FAST, DAF ou SWAT").setRequired(true)))
-    .addSubcommand((command) => command.setName("resetar").setDescription("Orienta o reset do modelo pela dashboard.").addStringOption((option) => option.setName("unidade").setDescription("Unidade que sera resetada na dashboard").setRequired(false))),
+    .addSubcommand((command) => command.setName("sync").setDescription("Sincroniza agora todos os paineis de hierarquia.")),
   moduleId: "fivem-hierarchy",
   async execute(interaction: ChatInputCommandInteraction, context: BotContext) {
     if (!interaction.guild) return;
     const subcommand = interaction.options.getSubcommand();
-    if (subcommand === "config" || subcommand === "configurar" || subcommand === "resetar") {
+    if (subcommand === "config") {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         await interaction.reply({ content: "Voce precisa de permissao para gerenciar o servidor.", ephemeral: true });
         return;
@@ -67,36 +72,15 @@ export const hierarchyCommand: BotCommand = {
       return;
     }
     await interaction.deferReply({ ephemeral: true });
-    const unit = interaction.options.getString("unidade")?.trim().toLowerCase() ?? null;
-    const syncAll = subcommand === "sync" || subcommand === "atualizar_todas";
-    if (syncAll && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    if (subcommand === "sync" && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.editReply("Voce precisa de permissao para gerenciar o servidor.");
       return;
     }
-    const selectedPanel = syncAll ? null : await findHierarchyPanel(interaction.guild.id, context, unit);
-    if (!syncAll && (!selectedPanel || !canEditHierarchyPanel(interaction.member as GuildMember, selectedPanel, interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) === true))) {
-      await interaction.editReply("Voce nao possui permissao para editar esta hierarquia.");
-      return;
-    }
-    if (subcommand === "preview") {
-      const panel = selectedPanel;
-      if (!panel) {
-        await interaction.editReply("Unidade de hierarquia nao encontrada ou desativada.");
-        return;
-      }
-      const members = await fetchHierarchyMembers(interaction.guild);
-      if (!members) {
-        await interaction.editReply("Nao foi possivel consultar todos os membros. O painel nao foi alterado.");
-        return;
-      }
-      await interaction.editReply(createHierarchyPayload(interaction.guild, panel, panel.imageUrl ? { imageEnabled: true, imagePosition: panel.imagePosition === "thumbnail" ? "side" : panel.imagePosition, imageUrl: panel.imageUrl } : null, [], members));
-      return;
-    }
-    await refreshHierarchyPanelsForGuild(interaction.guild, context, syncAll ? null : unit, {
+    await refreshHierarchyPanelsForGuild(interaction.guild, context, null, {
       actorId: interaction.user.id,
       allowCreate: true
     });
-    await interaction.editReply(syncAll ? "Todos os paineis de hierarquia foram atualizados." : "Painel de hierarquia atualizado.");
+    await interaction.editReply("Todos os paineis de hierarquia foram atualizados.");
   }
 };
 
@@ -128,16 +112,41 @@ export function startFivemHierarchyService(client: Client<true>, context: BotCon
 }
 
 export async function handleFivemHierarchyInteraction(interaction: Interaction, context: BotContext) {
-  if (!interaction.isButton() || (!interaction.customId.startsWith(`${HIERARCHY_REFRESH_PREFIX}:`) && !interaction.customId.startsWith(`${HIERARCHY_CONFIG_PREFIX}:`)) || !interaction.guild) {
+  if (
+    !interaction.guild
+    || !(
+      (interaction.isButton() && (interaction.customId.startsWith(`${HIERARCHY_REFRESH_PREFIX}:`) || interaction.customId.startsWith(`${HIERARCHY_CONFIG_PREFIX}:`)))
+      || (interaction.isModalSubmit() && interaction.customId.startsWith(`${HIERARCHY_MODAL_PREFIX}:`))
+      || (interaction.isStringSelectMenu() && interaction.customId.startsWith(`${HIERARCHY_SELECT_PREFIX}:`))
+      || (interaction.isRoleSelectMenu() && interaction.customId.startsWith(`${HIERARCHY_ROLE_PREFIX}:`))
+    )
+  ) {
     return false;
   }
 
-  if (interaction.customId.startsWith(`${HIERARCHY_CONFIG_PREFIX}:`)) {
+  if (interaction.isButton() && interaction.customId.startsWith(`${HIERARCHY_CONFIG_PREFIX}:`)) {
     await handleHierarchyConfigButton(interaction, context);
     return true;
   }
 
-  await handleHierarchyRefreshButton(interaction, context);
+  if (interaction.isModalSubmit()) {
+    await handleHierarchyConfigModal(interaction, context);
+    return true;
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    await handleHierarchyConfigSelect(interaction, context);
+    return true;
+  }
+
+  if (interaction.isRoleSelectMenu()) {
+    await handleHierarchyRoleSelect(interaction, context);
+    return true;
+  }
+
+  if (interaction.isButton()) {
+    await handleHierarchyRefreshButton(interaction, context);
+  }
   return true;
 }
 
@@ -805,6 +814,11 @@ async function handleHierarchyConfigButton(interaction: ButtonInteraction, conte
     return;
   }
 
+  if (action === "create") {
+    await interaction.showModal(hierarchyCreateModal());
+    return;
+  }
+
   if (action === "refresh_all") {
     await interaction.deferReply({ ephemeral: true });
     await refreshHierarchyPanelsForGuild(interaction.guild!, context, null, {
@@ -817,36 +831,255 @@ async function handleHierarchyConfigButton(interaction: ButtonInteraction, conte
 
   if (action === "list") {
     await interaction.deferReply({ ephemeral: true });
-    const panels = (await loadActiveHierarchyPanels(context)).filter((panel) => panel.guildId === interaction.guildId);
+    const panels = await context.api.getFivemHierarchyPanels(interaction.guildId!);
     await interaction.editReply(panels.length
       ? panels.map((panel) => `• ${panel.name} | ID: \`${panel.id}\` | Canal: ${panel.panelChannelId ? `<#${panel.panelChannelId}>` : "não configurado"} | Cargos: ${panel.hierarchies.length}`).join("\n")
       : "Nenhuma hierarquia ativa encontrada para este servidor.");
     return;
   }
 
-  await interaction.reply({
-    content: [
-      "Esta ação usa a mesma estrutura da dashboard para evitar configuração duplicada.",
-      "Abra a aba **Hierarquia** na dashboard para cadastrar, editar cargos, permissões, painel, exclusão e config geral.",
-      "Depois de salvar, use **Atualizar Painéis** aqui ou o botão de publicar/atualizar na dashboard."
-    ].join("\n"),
-    ephemeral: true
+  if (action === "edit_name" || action === "edit_panel" || action === "add_role" || action === "delete" || action === "refresh_one") {
+    await interaction.deferReply({ ephemeral: true });
+    const panels = await context.api.getFivemHierarchyPanels(interaction.guildId!);
+    if (!panels.length) {
+      await interaction.editReply("Nenhuma hierarquia cadastrada neste servidor. Use **Cadastrar Hierarquia** primeiro.");
+      return;
+    }
+    await interaction.editReply({
+      components: [buildHierarchyPanelSelect(action, panels)],
+      content: "Selecione a hierarquia que deseja alterar."
+    });
+    return;
+  }
+
+  if (action.startsWith("confirm_delete:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const panelId = action.slice("confirm_delete:".length);
+    await context.api.deleteFivemHierarchyPanel(interaction.guildId!, panelId);
+    await interaction.editReply("Hierarquia excluída.");
+    return;
+  }
+
+  await interaction.reply({ content: "Ação de hierarquia não reconhecida.", ephemeral: true });
+}
+
+async function handleHierarchyConfigSelect(interaction: StringSelectMenuInteraction, context: BotContext) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "Você não tem permissão para modificar esta hierarquia.", ephemeral: true });
+    return;
+  }
+
+  const action = interaction.customId.slice(`${HIERARCHY_SELECT_PREFIX}:`.length);
+  const panelId = interaction.values[0];
+  const panels = await context.api.getFivemHierarchyPanels(interaction.guildId!);
+  const panel = panels.find((item) => item.id === panelId);
+  if (!panel) {
+    await interaction.update({ components: [], content: "Hierarquia não encontrada." });
+    return;
+  }
+
+  if (action === "edit_name") {
+    await interaction.showModal(hierarchyNameModal(panel));
+    return;
+  }
+
+  if (action === "edit_panel") {
+    await interaction.showModal(hierarchyPanelModal(panel));
+    return;
+  }
+
+  if (action === "add_role") {
+    await interaction.update({
+      components: [new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(`${HIERARCHY_ROLE_PREFIX}:add:${panel.id}`)
+          .setPlaceholder("Selecione o cargo que entra nesta hierarquia")
+          .setMinValues(1)
+          .setMaxValues(1)
+      )],
+      content: `Selecione o cargo para adicionar em **${panel.name}**.`
+    });
+    return;
+  }
+
+  if (action === "delete") {
+    await interaction.update({
+      components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:confirm_delete:${panel.id}`).setLabel("Confirmar exclusão").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:list`).setLabel("Cancelar").setStyle(ButtonStyle.Secondary)
+      )],
+      content: `Confirme a exclusão da hierarquia **${panel.name}**.`
+    });
+    return;
+  }
+
+  if (action === "refresh_one") {
+    await interaction.update({ components: [], content: `Atualizando **${panel.name}**...` });
+    await syncHierarchyPanel(interaction.guildId!, panel.id, interaction.guild!, context, {
+      actorId: interaction.user.id,
+      allowCreate: true
+    }, panel);
+    await interaction.editReply(`Hierarquia **${panel.name}** atualizada.`);
+  }
+}
+
+async function handleHierarchyRoleSelect(interaction: RoleSelectMenuInteraction, context: BotContext) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "Você não tem permissão para modificar esta hierarquia.", ephemeral: true });
+    return;
+  }
+
+  const [action, panelId] = interaction.customId.slice(`${HIERARCHY_ROLE_PREFIX}:`.length).split(":");
+  if (action !== "add" || !panelId) {
+    await interaction.reply({ content: "Ação de cargo inválida.", ephemeral: true });
+    return;
+  }
+
+  const roleId = interaction.values[0];
+  if (!roleId) {
+    await interaction.update({ components: [], content: "Nenhum cargo selecionado." });
+    return;
+  }
+  const role = await interaction.guild!.roles.fetch(roleId).catch(() => null);
+  const panels = await context.api.getFivemHierarchyPanels(interaction.guildId!);
+  const panel = panels.find((item) => item.id === panelId);
+  if (!panel || !role) {
+    await interaction.update({ components: [], content: "Hierarquia ou cargo não encontrado." });
+    return;
+  }
+
+  if (panel.hierarchies.some((item) => item.roleId === role.id)) {
+    await interaction.update({ components: [], content: "Esse cargo já está cadastrado nesta hierarquia." });
+    return;
+  }
+
+  const saved = await context.api.saveFivemHierarchyPanel(interaction.guildId!, {
+    id: panel.id,
+    hierarchies: [
+      ...panel.hierarchies,
+      {
+        active: true,
+        color: null,
+        description: null,
+        emoji: null,
+        emptyText: "Nenhum membro encontrado com este cargo.",
+        id: `hierarquia-${Date.now()}`,
+        limit: null,
+        name: role.name,
+        order: panel.hierarchies.length + 1,
+        roleId: role.id,
+        showWhenEmpty: true
+      }
+    ]
   });
+  await interaction.update({ components: [], content: `Cargo <@&${role.id}> cadastrado em **${saved.name}**.` });
+}
+
+async function handleHierarchyConfigModal(interaction: ModalSubmitInteraction, context: BotContext) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "Você não tem permissão para modificar esta hierarquia.", ephemeral: true });
+    return;
+  }
+
+  const [action, panelId] = interaction.customId.slice(`${HIERARCHY_MODAL_PREFIX}:`.length).split(":");
+  await interaction.deferReply({ ephemeral: true });
+
+  if (action === "create") {
+    const name = readModalField(interaction, "name", 100) || "Nova Hierarquia";
+    const title = readModalField(interaction, "title", 120) || `Hierarquia - ${name}`;
+    const description = readModalField(interaction, "description", 1200) || "Lista oficial de membros agrupados por cargos.";
+    const color = normalizeModalColor(readModalField(interaction, "color", 7));
+    const panelChannelId = normalizeModalSnowflake(readModalField(interaction, "channelId", 32));
+    const saved = await context.api.saveFivemHierarchyPanel(interaction.guildId!, {
+      color,
+      description,
+      enabled: true,
+      hierarchies: [],
+      name,
+      panelChannelId,
+      title,
+      unitId: `custom-${Date.now()}`
+    });
+    await interaction.editReply(`Hierarquia **${saved.name}** criada. Use **Cadastrar Cargos** para adicionar cargos.`);
+    return;
+  }
+
+  if (!panelId) {
+    await interaction.editReply("Hierarquia inválida.");
+    return;
+  }
+
+  if (action === "edit_name") {
+    const name = readModalField(interaction, "name", 100);
+    if (!name) {
+      await interaction.editReply("Informe um nome válido.");
+      return;
+    }
+    const saved = await context.api.saveFivemHierarchyPanel(interaction.guildId!, { id: panelId, name, title: `Hierarquia - ${name}` });
+    await interaction.editReply(`Nome atualizado para **${saved.name}**.`);
+    return;
+  }
+
+  if (action === "edit_panel") {
+    const title = readModalField(interaction, "title", 120);
+    const description = readModalField(interaction, "description", 1200);
+    const color = normalizeModalColor(readModalField(interaction, "color", 7));
+    const panelChannelId = normalizeModalSnowflake(readModalField(interaction, "channelId", 32));
+    const saved = await context.api.saveFivemHierarchyPanel(interaction.guildId!, {
+      id: panelId,
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      color,
+      panelChannelId
+    });
+    await interaction.editReply(`Painel **${saved.name}** atualizado.`);
+  }
+}
+
+function hierarchyCreateModal() {
+  return new ModalBuilder()
+    .setCustomId(`${HIERARCHY_MODAL_PREFIX}:create`)
+    .setTitle("Cadastrar Hierarquia")
+    .addComponents(
+      modalInput("name", "Nome da hierarquia", "Exemplo: Alto Comando", true, TextInputStyle.Short, 100),
+      modalInput("title", "Título do painel", "Exemplo: Hierarquia - Alto Comando", false, TextInputStyle.Short, 120),
+      modalInput("description", "Descrição do painel", "Texto exibido no topo do painel", false, TextInputStyle.Paragraph, 1200),
+      modalInput("channelId", "ID do canal do painel", "Cole o ID do canal ou deixe vazio", false, TextInputStyle.Short, 32),
+      modalInput("color", "Cor hexadecimal", "#22c55e", false, TextInputStyle.Short, 7)
+    );
+}
+
+function hierarchyNameModal(panel: FivemHierarchyPanel) {
+  return new ModalBuilder()
+    .setCustomId(`${HIERARCHY_MODAL_PREFIX}:edit_name:${panel.id}`)
+    .setTitle("Editar Nome")
+    .addComponents(modalInput("name", "Nome da hierarquia", panel.name, true, TextInputStyle.Short, 100, panel.name));
+}
+
+function hierarchyPanelModal(panel: FivemHierarchyPanel) {
+  return new ModalBuilder()
+    .setCustomId(`${HIERARCHY_MODAL_PREFIX}:edit_panel:${panel.id}`)
+    .setTitle("Editar Painel")
+    .addComponents(
+      modalInput("title", "Título", "Título do painel", false, TextInputStyle.Short, 120, panel.title),
+      modalInput("description", "Descrição", "Descrição do painel", false, TextInputStyle.Paragraph, 1200, panel.description ?? ""),
+      modalInput("channelId", "ID do canal", "Cole o ID do canal ou deixe vazio", false, TextInputStyle.Short, 32, panel.panelChannelId ?? ""),
+      modalInput("color", "Cor hexadecimal", "#22c55e", false, TextInputStyle.Short, 7, panel.color)
+    );
 }
 
 function hierarchyConfigPanelPayload(panelCount: number, missingRoleLabels: string[]) {
   const rows = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_create`).setEmoji("➕").setLabel("Cadastrar Hierarquia").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_roles`).setEmoji("🎖️").setLabel("Cadastrar Cargos").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_name`).setEmoji("✏️").setLabel("Editar Nome").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_panel`).setEmoji("🖼️").setLabel("Editar Painel").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:create`).setEmoji("➕").setLabel("Cadastrar Hierarquia").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:add_role`).setEmoji("🎖️").setLabel("Cadastrar Cargos").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:edit_name`).setEmoji("✏️").setLabel("Editar Nome").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:edit_panel`).setEmoji("🖼️").setLabel("Editar Painel").setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:refresh_all`).setEmoji("🔄").setLabel("Atualizar Painéis").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_delete`).setEmoji("🗑️").setLabel("Excluir Hierarquia").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_general`).setEmoji("⚙️").setLabel("Config Geral").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:dashboard_permissions`).setEmoji("🔐").setLabel("Permissões").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:refresh_one`).setEmoji("🔁").setLabel("Atualizar Uma").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:delete`).setEmoji("🗑️").setLabel("Excluir Hierarquia").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`${HIERARCHY_CONFIG_PREFIX}:list`).setEmoji("📋").setLabel("Ver Hierarquias").setStyle(ButtonStyle.Secondary)
     )
   ];
@@ -856,7 +1089,7 @@ function hierarchyConfigPanelPayload(panelCount: number, missingRoleLabels: stri
     actions: rows,
     description: [
       `Hierarquias ativas encontradas: **${panelCount}**.`,
-      "A criação e edição completa ficam centralizadas na dashboard para bot e painel usarem o mesmo banco.",
+      "Crie, edite, cadastre cargos, exclua e atualize os paineis por aqui. A dashboard usa o mesmo banco.",
       missingRoleLabels.length
         ? `\nCargos não encontrados:\n${missingRoleLabels.slice(0, 10).map((item) => `• ${item}`).join("\n")}`
         : "\nTodos os cargos cadastrados foram encontrados."
@@ -864,6 +1097,45 @@ function hierarchyConfigPanelPayload(panelCount: number, missingRoleLabels: stri
     moduleId: "fivem-hierarchy",
     title: "Configuração de Hierarquia"
   });
+}
+
+function buildHierarchyPanelSelect(action: string, panels: FivemHierarchyPanel[]) {
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`${HIERARCHY_SELECT_PREFIX}:${action}`)
+      .setPlaceholder("Selecione a hierarquia")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(panels.slice(0, 25).map((panel) => ({
+        description: `${panel.hierarchies.length} cargo(s) | ${panel.enabled ? "ativo" : "inativo"}`.slice(0, 100),
+        label: panel.name.slice(0, 100),
+        value: panel.id
+      })))
+  );
+}
+
+function modalInput(id: string, label: string, placeholder: string, required: boolean, style: TextInputStyle, maxLength: number, value?: string) {
+  const input = new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setMaxLength(maxLength)
+    .setPlaceholder(placeholder.slice(0, 100))
+    .setRequired(required)
+    .setStyle(style);
+  if (value) input.setValue(value.slice(0, maxLength));
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+}
+
+function readModalField(interaction: ModalSubmitInteraction, fieldId: string, maxLength: number) {
+  return interaction.fields.getTextInputValue(fieldId).trim().slice(0, maxLength);
+}
+
+function normalizeModalColor(value: string) {
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#22c55e";
+}
+
+function normalizeModalSnowflake(value: string) {
+  return /^\d{5,32}$/.test(value) ? value : null;
 }
 
 function getMissingHierarchyRoleIds(guild: Guild, panel: FivemHierarchyPanel) {
