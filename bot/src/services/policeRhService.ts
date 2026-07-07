@@ -63,6 +63,7 @@ type PoliceRhConfig = {
   adornoFooterImageUrl: string;
   adornoImagePosition: PanelVisualPosition;
   adornoImageUrl: string;
+  adornoReviewMode: "panel" | "channel";
   adornoTitle: string;
   adornoDescription: string;
   adornoFooterText: string;
@@ -183,6 +184,10 @@ export async function handlePoliceRhInteraction(interaction: Interaction, contex
   }
   if (interaction.isModalSubmit() && action === "adorno_submit") {
     await publishAdornmentRequest(interaction, context, config);
+    return true;
+  }
+  if (interaction.isButton() && (action === "adorno_approve" || action === "adorno_reject")) {
+    await handleAdornmentReviewAction(interaction, context, config, action === "adorno_approve" ? "approved" : "rejected");
     return true;
   }
   if (interaction.isButton() && ["approve", "reject", "close"].includes(action ?? "")) {
@@ -313,25 +318,74 @@ async function publishAdornmentRequest(interaction: ModalSubmitInteraction, cont
     requestedAt: new Date(),
     userId: interaction.user.id
   };
-  await channel.send(adornmentPanelPayload(config, panelInput, true)).catch(() => channel.send(adornmentPanelPayload(config, panelInput, false)));
+  const token = adornmentActionToken(interaction.user.id, adornmentNumber);
+  if (config.adornoReviewMode === "channel") {
+    const reviewChannel = await createAdornmentReviewChannel(interaction, config, panelInput);
+    if (!reviewChannel) return;
+    await reviewChannel.send(adornmentPanelPayload(config, panelInput, true, token, "pending")).catch(() => reviewChannel.send(adornmentPanelPayload(config, panelInput, false, token, "pending")));
+    await interaction.editReply(`✅ Solicitação de adorno enviada para <#${reviewChannel.id}>.`);
+  } else {
+    await channel.send(adornmentPanelPayload(config, panelInput, true, token, "pending")).catch(() => channel.send(adornmentPanelPayload(config, panelInput, false, token, "pending")));
+    await interaction.editReply("✅ Solicitação de adorno enviada.");
+  }
   await writeLog(context, interaction.guild!.id, interaction.user.id, "police-rh.adorno.created", "🏅 Solicitação de adorno publicada.", {
     adornmentNumber,
     channelId: channel.id,
     imageUrl
   });
-  await interaction.editReply("✅ Solicitação de adorno enviada.");
 }
 
-function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber: string; displayName: string; imageUrl: string; requestedAt: Date; userId: string }, includePreview: boolean) {
+async function createAdornmentReviewChannel(interaction: ModalSubmitInteraction, config: PoliceRhConfig, input: { adornmentNumber: string; displayName: string; imageUrl: string; requestedAt: Date; userId: string }) {
+  if (!config.adornoCategoryId) {
+    await interaction.editReply("Configure a categoria dos canais de adorno antes de usar o modo por canal.");
+    return null;
+  }
+  const category = await interaction.guild!.channels.fetch(config.adornoCategoryId).catch(() => null);
+  if (!category || category.type !== ChannelType.GuildCategory) {
+    await interaction.editReply("A categoria dos canais de adorno nao foi encontrada.");
+    return null;
+  }
+  const approverRoleIds = uniqueIds([...config.adornoApproverRoleIds, ...config.adornoResponsibleRoleIds]);
+  if (!approverRoleIds.length) {
+    await interaction.editReply("Configure ao menos um cargo aprovador/responsavel de adorno.");
+    return null;
+  }
+  const me = interaction.guild!.members.me ?? await interaction.guild!.members.fetchMe().catch(() => null);
+  return interaction.guild!.channels.create({
+    name: safeChannelName(`adorno-${input.displayName}-${input.adornmentNumber}`),
+    parent: category.id,
+    topic: `${PREFIX}|adorno|${input.userId}|${Date.now()}|${encodeURIComponent(input.adornmentNumber)}`.slice(0, 1024),
+    type: ChannelType.GuildText,
+    permissionOverwrites: [
+      { id: interaction.guild!.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: input.userId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+      ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...approverRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }))
+    ],
+    reason: `Solicitacao de adorno criada por ${interaction.user.tag}`
+  }).catch(async () => {
+    await interaction.editReply("Nao foi possivel criar o canal privado do adorno.");
+    return null;
+  });
+}
+
+function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber: string; displayName: string; imageUrl: string; requestedAt: Date; userId: string }, includePreview: boolean, token: string, status: "pending" | "approved" | "rejected") {
   const logoUrl = config.adornoImageUrl || config.adornoBannerUrl || config.adornoFooterImageUrl;
   const header = `**${config.adornoTitle || "North Police Department"}**`;
+  const locked = status !== "pending";
+  const statusLabel = status === "approved" ? "✅ Aprovado" : status === "rejected" ? "❌ Recusado" : "⏳ Pendente";
   const fields = [
     `**Nome**\n${input.displayName}`,
     `**ID**\n${input.userId}`,
     `**Número do Adorno**\n${input.adornmentNumber}`,
     `**Solicitante**\n<@${input.userId}>`,
+    `**Status**\n${statusLabel}`,
     `**Link do comprovante do adorno**\n[Clique aqui para abrir](${input.imageUrl})`
   ];
+  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}:adorno_approve:${token}`).setEmoji("✅").setLabel("Aprovar Adorno").setStyle(ButtonStyle.Success).setDisabled(locked),
+    new ButtonBuilder().setCustomId(`${PREFIX}:adorno_reject:${token}`).setEmoji("❌").setLabel("Recusar Adorno").setStyle(ButtonStyle.Danger).setDisabled(locked)
+  );
   const components: any[] = [
     logoUrl
       ? { type: 9, components: [{ type: 10, content: `${header}\n# 🏅 Solicitação de Adorno` }], accessory: { type: 11, media: { url: logoUrl }, description: "Logo" } }
@@ -339,13 +393,49 @@ function adornmentPanelPayload(config: PoliceRhConfig, input: { adornmentNumber:
     ...fields.map((content) => ({ type: 10, content })),
     ...(includePreview ? [{ type: 12, items: [{ media: { url: input.imageUrl }, description: `Adorno ${input.adornmentNumber}` }] }] : []),
     { type: 14, divider: true, spacing: 1 },
-    { type: 10, content: `-# 🏅 ${config.adornoFooterText || "Solicitação enviada ao HCMD"} • ${formatAdornmentDate(input.requestedAt)}` }
+    { type: 10, content: `-# 🏅 ${config.adornoFooterText || "Solicitação enviada ao HCMD"} • ${formatAdornmentDate(input.requestedAt)}` },
+    actions
   ];
   return {
     allowedMentions: { parse: [], users: [input.userId] },
     components: [{ type: 17, accent_color: 0x22c55e, components }],
     flags: MessageFlags.IsComponentsV2 as const
   };
+}
+
+async function handleAdornmentReviewAction(interaction: ButtonInteraction, context: BotContext, config: PoliceRhConfig, status: "approved" | "rejected") {
+  if (!interaction.guild) return;
+  const token = interaction.customId.split(":")[2] ?? "";
+  const parsed = parseAdornmentActionToken(token);
+  if (!parsed) {
+    await interaction.reply({ content: "Solicitação de adorno inválida.", ephemeral: true });
+    return;
+  }
+  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  const approverRoleIds = uniqueIds([...config.adornoApproverRoleIds, ...config.adornoResponsibleRoleIds]);
+  const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || approverRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
+  if (!allowed) {
+    await interaction.reply({ content: "Apenas aprovadores/responsaveis de adorno podem executar esta acao.", ephemeral: true });
+    return;
+  }
+  const panelInput = {
+    adornmentNumber: parsed.adornmentNumber,
+    displayName: parsed.userId,
+    imageUrl: "",
+    requestedAt: new Date(),
+    userId: parsed.userId
+  };
+  await interaction.update(adornmentPanelPayload(config, panelInput, false, token, status));
+  const dmMessage = status === "approved" ? config.adornoDmApprovedMessage : config.adornoDmRejectedMessage;
+  const user = await interaction.client.users.fetch(parsed.userId).catch(() => null);
+  await user?.send(renderComponentsV2Panel({
+    accentColor: status === "approved" ? 0x22c55e : 0xef4444,
+    description: `${dmMessage}\n\n**Adorno:** ${parsed.adornmentNumber}\n**Responsavel:** <@${interaction.user.id}>`,
+    image: visual(config.adornoImageUrl || config.adornoBannerUrl || config.adornoFooterImageUrl, config.adornoImagePosition === "none" ? "side" : config.adornoImagePosition),
+    moduleId: MODULE_ID,
+    title: status === "approved" ? "✅ Adorno aprovado" : "❌ Adorno recusado"
+  })).catch(() => null);
+  await writeLog(context, interaction.guild.id, interaction.user.id, `police-rh.adorno.${status}`, `🏅 Solicitação de adorno ${status === "approved" ? "aprovada" : "recusada"}.`, { adornmentNumber: parsed.adornmentNumber, requesterId: parsed.userId }).catch(() => null);
 }
 
 function absenceRequestPanelPayload(config: PoliceRhConfig, fields: string[], userId: string, returnDate: string | null, status = "⏳ Pendente") {

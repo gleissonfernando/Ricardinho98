@@ -2914,6 +2914,8 @@ type PoliceReportsConfig = {
   panelChannelIds: string[];
   categoryId: string | null;
   categoryIds: string[];
+  highCommandCategoryId: string | null;
+  highCommandRoleIds: string[];
   archiveCategoryId: string | null;
   archiveCategoryIds: string[];
   logChannelId: string | null;
@@ -2945,8 +2947,11 @@ const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] =
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
 ];
 
+function normalizedName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintTypes"] = []) {
-  const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
   const matched = new Set<string>();
   const required = defaultPoliceReportComplaintTypes.map((fallback) => {
@@ -2958,12 +2963,24 @@ function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintType
   return [...required, ...custom];
 }
 
+function hasHighCommandComplaintType(types: PoliceReportsConfig["complaintTypes"]) {
+  return types.some((type) => {
+    const normalized = normalizedName(type.name);
+    return type.id === "denuncia-alto-comando"
+      || normalized.includes("alto comando")
+      || normalized.includes("high command")
+      || normalized.includes("hcmd");
+  });
+}
+
 const defaultPoliceReportsConfig: PoliceReportsConfig = {
   enabled: false,
   panelChannelId: null,
   panelChannelIds: [],
   categoryId: null,
   categoryIds: [],
+  highCommandCategoryId: null,
+  highCommandRoleIds: [],
   archiveCategoryId: null,
   archiveCategoryIds: [],
   logChannelId: null,
@@ -3213,6 +3230,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         setError("Selecione a categoria onde os canais temporarios serao criados.");
         return;
       }
+      if (config.enabled && hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
+        setError("Configure a categoria e os cargos do Alto Comando para as denuncias de Alto Comando.");
+        return;
+      }
       if (config.enabled && !config.archiveCategoryId) {
         setError("Selecione a categoria para onde as denuncias finalizadas serao movidas.");
         return;
@@ -3240,6 +3261,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
     }
     if (!config.panelChannelId || !config.categoryId || !config.archiveCategoryId) {
       setError("Configure o canal do painel, a categoria temporaria e a categoria de finalizacao antes de publicar.");
+      return;
+    }
+    if (hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
+      setError("Configure a categoria e os cargos do Alto Comando antes de publicar.");
       return;
     }
     setSaving(true);
@@ -3281,9 +3306,11 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         <div className="grid gap-3 md:grid-cols-2">
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
+          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria Alto Comando" onChange={(highCommandCategoryId) => patch({ highCommandCategoryId })} placeholder="Categoria exclusiva do Alto Comando" value={config.highCommandCategoryId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Destino apos finalizar" onChange={(archiveCategoryId) => patch({ archiveCategoryId })} placeholder="Categoria para mover o canal finalizado" value={config.archiveCategoryId} />
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
           <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds?.length ? config.responsibleRoleIds : config.responsibleRoleId ? [config.responsibleRoleId] : []} />
+          <MultiRoleSelect disabled={!canManage || loading} label="Cargos Alto Comando" onChange={(highCommandRoleIds) => patch({ highCommandRoleIds })} roles={roles} values={config.highCommandRoleIds} />
           <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
           <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
           <TicketField disabled={!canManage || loading} label="Cor" onChange={(color) => patch({ color })} type="color" value={config.color} />

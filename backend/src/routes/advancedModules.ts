@@ -77,7 +77,6 @@ const defaultPoliceReportComplaintTypes = [
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🛡️", order: 6 }
 ];
 function mergeDefaultPoliceReportTypes(types: Array<z.infer<typeof policeReportTypeSchema>>) {
-  const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
   const matched = new Set<string>();
   const required = defaultPoliceReportComplaintTypes.map((fallback) => {
@@ -88,12 +87,26 @@ function mergeDefaultPoliceReportTypes(types: Array<z.infer<typeof policeReportT
   const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
   return [...required, ...custom];
 }
+function normalizedName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+function hasHighCommandPoliceReportType(types: Array<z.infer<typeof policeReportTypeSchema>>) {
+  return types.some((type) => {
+    const normalized = normalizedName(type.name);
+    return type.id === "denuncia-alto-comando"
+      || normalized.includes("alto comando")
+      || normalized.includes("high command")
+      || normalized.includes("hcmd");
+  });
+}
 const policeReportsConfigSchema = z.object({
   enabled: z.boolean().default(false),
   panelChannelId: snowflakeSchema.nullable().default(null),
   panelChannelIds: z.array(snowflakeSchema).max(100).default([]),
   categoryId: snowflakeSchema.nullable().default(null),
   categoryIds: z.array(snowflakeSchema).max(100).default([]),
+  highCommandCategoryId: snowflakeSchema.nullable().default(null),
+  highCommandRoleIds: z.array(snowflakeSchema).max(100).default([]),
   archiveCategoryId: snowflakeSchema.nullable().default(null),
   archiveCategoryIds: z.array(snowflakeSchema).max(100).default([]),
   logChannelId: snowflakeSchema.nullable().default(null),
@@ -588,6 +601,9 @@ advancedModulesRouter.post("/:botId/:guildId/police-reports/publish", async (req
     }
     if (!config.archiveCategoryId) {
       return res.status(409).json({ message: "Configure a categoria para onde o canal sera enviado depois de finalizado." });
+    }
+    if (hasHighCommandPoliceReportType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
+      return res.status(409).json({ message: "Configure a categoria e os cargos do Alto Comando antes de publicar." });
     }
     emitRealtimeToRoom(devBotRealtimeRoom(botId), "police-reports:panel_update", { action: "publish", botId, guildId });
     return res.json({ ok: true });

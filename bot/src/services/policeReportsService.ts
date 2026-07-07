@@ -39,6 +39,8 @@ type PoliceReportsConfig = {
   thumbnailUrl: string;
   categoryId: string | null;
   categoryIds: string[];
+  highCommandCategoryId: string | null;
+  highCommandRoleIds: string[];
   archiveCategoryId: string | null;
   archiveCategoryIds: string[];
   logChannelId: string | null;
@@ -77,6 +79,14 @@ function mergeDefaultComplaintTypes(types: ComplaintType[]) {
     return existing ? { ...fallback, ...existing, id: fallback.id, name: fallback.name, order: fallback.order } : fallback;
   });
   return [...required, ...types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }))];
+}
+
+function isHighCommandComplaint(type: Pick<ComplaintType, "id" | "name">) {
+  const normalized = type.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return type.id === "denuncia-alto-comando"
+    || normalized.includes("alto comando")
+    || normalized.includes("high command")
+    || normalized.includes("hcmd");
 }
 
 export const policeReportsCommand: BotCommand = {
@@ -210,6 +220,8 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     thumbnailUrl: readString(raw.thumbnailUrl) ?? "",
     categoryId: readString(raw.categoryId),
     categoryIds: idList(raw.categoryIds, readString(raw.categoryId)),
+    highCommandCategoryId: readString(raw.highCommandCategoryId),
+    highCommandRoleIds: readStringArray(raw.highCommandRoleIds),
     archiveCategoryId: readString(raw.archiveCategoryId),
     archiveCategoryIds: idList(raw.archiveCategoryIds, readString(raw.archiveCategoryId)),
     logChannelId: readString(raw.logChannelId),
@@ -271,9 +283,10 @@ async function createTemporaryProcedureChannel(
     await interaction.reply({ content: "O Sistema de Denuncias IAB esta desativado.", ephemeral: true });
     return;
   }
-  const categoryId = firstId(config.categoryIds, config.categoryId);
+  const highCommandComplaint = isHighCommandComplaint(selected);
+  const categoryId = highCommandComplaint ? config.highCommandCategoryId || firstId(config.categoryIds, config.categoryId) : firstId(config.categoryIds, config.categoryId);
   if (!categoryId) {
-    await interaction.reply({ content: "O sistema precisa ser configurado na dashboard: selecione a categoria dos canais temporarios.", ephemeral: true });
+    await interaction.reply({ content: highCommandComplaint ? "O sistema precisa ser configurado na dashboard: selecione a categoria do Alto Comando." : "O sistema precisa ser configurado na dashboard: selecione a categoria dos canais temporarios.", ephemeral: true });
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Categoria temporaria nao configurada.", { selectedType: selected.id });
     return;
   }
@@ -288,9 +301,15 @@ async function createTemporaryProcedureChannel(
 
   const me = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
   const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
-  const missingRoles = responsibleRoleIds.filter((roleId) => !interaction.guild!.roles.cache.has(roleId));
+  const reviewerRoleIds = highCommandComplaint ? uniqueIds(config.highCommandRoleIds) : responsibleRoleIds;
+  if (highCommandComplaint && !reviewerRoleIds.length) {
+    await interaction.editReply("Configure ao menos um cargo do Alto Comando para receber este tipo de denuncia.");
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Cargos do Alto Comando nao configurados.", { selectedType: selected.id });
+    return;
+  }
+  const missingRoles = reviewerRoleIds.filter((roleId) => !interaction.guild!.roles.cache.has(roleId));
   if (missingRoles.length) {
-    await interaction.editReply("Um ou mais cargos responsaveis configurados nao existem mais no servidor.");
+    await interaction.editReply(highCommandComplaint ? "Um ou mais cargos do Alto Comando configurados nao existem mais no servidor." : "Um ou mais cargos responsaveis configurados nao existem mais no servidor.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_invalid", "Cargo responsavel nao encontrado.", { missingRoles });
     return;
   }
@@ -320,14 +339,14 @@ async function createTemporaryProcedureChannel(
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
         ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageWebhooks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] }] : []),
-        ...responsibleRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }))
+        ...reviewerRoleIds.map((roleId) => ({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }))
       ],
       reason: `Denuncia IAB criada por ${interaction.user.tag}`
     });
-    const mentions = [...(anonymous ? [] : [`<@${interaction.user.id}>`]), ...responsibleRoleIds.map((roleId) => `<@&${roleId}>`)];
+    const mentions = [...(anonymous ? [] : [`<@${interaction.user.id}>`]), ...reviewerRoleIds.map((roleId) => `<@&${roleId}>`)];
     if (mentions.length) {
       await channel.send({
-        allowedMentions: { roles: responsibleRoleIds, users: anonymous ? [] : [interaction.user.id] },
+        allowedMentions: { roles: reviewerRoleIds, users: anonymous ? [] : [interaction.user.id] },
         content: mentions.join(" ")
       });
     }
@@ -360,21 +379,22 @@ async function handleProcedureAction(
 ) {
   if (!interaction.guild || !interaction.channel || !("topic" in interaction.channel)) return;
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
-  const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || responsibleRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
-  if (!allowed) {
-    await interaction.reply({ content: "Apenas responsaveis configurados podem executar esta acao.", ephemeral: true });
-    return;
-  }
   const topic = parsePoliceReportTopic(String(interaction.channel.topic ?? ""));
   if (!topic) return;
+  const selected = config.complaintTypes.find((item) => item.id === topic.selectedId) ?? { id: topic.selectedId, name: "Denuncia", description: null, emoji: null, order: 0 };
+  const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
+  const reviewerRoleIds = isHighCommandComplaint(selected) ? uniqueIds(config.highCommandRoleIds) : responsibleRoleIds;
+  const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
+  if (!allowed) {
+    await interaction.reply({ content: isHighCommandComplaint(selected) ? "Apenas o Alto Comando configurado pode executar esta acao." : "Apenas responsaveis configurados podem executar esta acao.", ephemeral: true });
+    return;
+  }
   const { anonymous, selectedId } = topic;
   const requesterId = topic.requesterId ?? findRequesterId(interaction.channel, interaction.guild.members.me?.id);
   if (!requesterId) {
     await interaction.reply({ content: "Nao foi possivel identificar internamente o autor desta denuncia.", ephemeral: true });
     return;
   }
-  const selected = config.complaintTypes.find((item) => item.id === selectedId) ?? { id: selectedId, name: "Denuncia", description: null, emoji: null, order: 0 };
   const status = action === "assume" ? "Em analise" : action === "finish" ? "Finalizado" : action === "archive" ? "Arquivado" : "Em analise";
   await writeLog(context, interaction.guild.id, interaction.user.id, `police-reports.${action}`, `Procedimento ${status.toLowerCase()}.`, {
     channelId: interaction.channel.id,
