@@ -1596,9 +1596,11 @@ export async function getFivemHierarchy(guildId: string, botId?: string | null) 
 }
 
 export async function saveFivemHierarchyPanel(guildId: string, payload: Partial<FivemHierarchyPanel>, botId?: string | null) {
-  const request = payload.id
-    ? api.patch<{ panel: FivemHierarchyPanel }>(`/fivem/${guildId}/hierarchy/panels/${encodeURIComponent(payload.id)}`, payload, { params: botId ? { botId } : undefined })
-    : api.post<{ panel: FivemHierarchyPanel }>(`/fivem/${guildId}/hierarchy/panels`, payload, { params: botId ? { botId } : undefined });
+  const isNewPanel = !payload.id || payload.id.startsWith("local-new-");
+  const { id: _localId, panelMessageId: _localMessageId, ...createPayload } = payload;
+  const request = isNewPanel
+    ? api.post<{ panel: FivemHierarchyPanel }>(`/fivem/${guildId}/hierarchy/panels`, createPayload, { params: botId ? { botId } : undefined })
+    : api.patch<{ panel: FivemHierarchyPanel }>(`/fivem/${guildId}/hierarchy/panels/${encodeURIComponent(payload.id!)}`, payload, { params: botId ? { botId } : undefined });
   const { data } = await request;
   return data.panel;
 }

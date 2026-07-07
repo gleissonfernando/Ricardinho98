@@ -3379,6 +3379,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     setPanels(dashboard.panels);
     setDraft((current) => {
       if (options.resetDraft || !current) return dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
+      if (isLocalNewHierarchyPanel(current)) return current;
       return dashboard.panels.find((panel) => panel.id === current.id) ?? current;
     });
     if (liveOptions) {
@@ -3522,7 +3523,11 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     try {
       const result = await registerDefaultFivemHierarchyPanels(guild.id, botId);
       setPanels(result.panels);
-      setDraft((current) => current ? result.panels.find((panel) => panel.id === current.id) ?? result.panels[0] ?? current : result.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId));
+      setDraft((current) => {
+        if (current && isLocalNewHierarchyPanel(current)) return current;
+        if (current) return result.panels.find((panel) => panel.id === current.id) ?? current;
+        return result.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
+      });
       setMessage(result.created ? `${result.created} hierarquia(s) padrao cadastrada(s).` : "As hierarquias padrao ja estavam cadastradas.");
     } catch {
       setError("Nao foi possivel cadastrar as hierarquias padrao.");
@@ -3579,6 +3584,12 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
         {loading || !draft ? <div className="h-40 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/60" /> : (
           <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="space-y-2">
+              {isLocalNewHierarchyPanel(draft) ? (
+                <button className="w-full rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-left" type="button">
+                  <p className="text-sm font-semibold text-white">{draft.name}</p>
+                  <p className="mt-1 text-xs text-amber-200">Nova hierarquia ainda nao salva</p>
+                </button>
+              ) : null}
               {panels.map((panel) => (
                 <button className={`w-full rounded-lg border p-3 text-left ${draft.id === panel.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 bg-black/30"}`} key={panel.id} onClick={() => setDraft(panel)} type="button">
                   <p className="text-sm font-semibold text-white">{panel.name}</p>
@@ -3773,7 +3784,7 @@ function createNewHierarchyPanel(guildId: string, botId: string | null | undefin
     globalFooterIconUrl: null,
     globalFooterText: null,
     hierarchies: [],
-    id: "",
+    id: `local-new-${Date.now()}`,
     imagePosition: "none",
     imageUrl: null,
     linkedToFivem: false,
@@ -3822,7 +3833,11 @@ function createHierarchyPanelFromTemplate(guildId: string, botId: string | null 
 }
 
 function isPersistedHierarchyPanel(panel: FivemHierarchyPanelType, panels: FivemHierarchyPanelType[]) {
-  return Boolean(panel.id && panels.some((item) => item.id === panel.id));
+  return Boolean(panel.id && !isLocalNewHierarchyPanel(panel) && panels.some((item) => item.id === panel.id));
+}
+
+function isLocalNewHierarchyPanel(panel: Pick<FivemHierarchyPanelType, "id"> | null | undefined) {
+  return Boolean(panel?.id?.startsWith("local-new-"));
 }
 
 function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
