@@ -200,15 +200,16 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await interaction.reply({ content: "A Denúncia IAB não está liberada para este bot.", ephemeral: true }).catch(() => undefined);
     return true;
   }
-  const config = await loadConfig(interaction.guild.id, context);
-  if (!config) {
-    await interaction.reply({ content: "A configuracao deste painel nao esta disponivel.", ephemeral: true });
-    return true;
-  }
   if (interaction.isStringSelectMenu()) {
+    await ensureEphemeralReply(interaction);
+    const config = await loadConfig(interaction.guild.id, context, false);
+    if (!config) {
+      await respondEphemeral(interaction, "A configuracao deste painel nao esta disponivel.");
+      return true;
+    }
     const selected = config.complaintTypes.find((item) => item.id === interaction.values[0]);
     if (!selected) {
-      await interaction.reply({ content: "Este tipo de denuncia nao esta mais disponivel.", ephemeral: true });
+      await respondEphemeral(interaction, "Este tipo de denuncia nao esta mais disponivel.");
       return true;
     }
     const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
@@ -216,16 +217,34 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
       await createTemporaryProcedureChannel(interaction, context, config, selected, false);
       return true;
     }
-    await interaction.update(createPanelPayload(config, page));
+    await interaction.message.edit(createPanelPayload(config, page)).catch(() => undefined);
     await showIdentitySelection(interaction, selected);
     return true;
   }
   const action = interaction.customId.split(":")[1];
+  if (action === "page") {
+    await interaction.deferUpdate();
+    const config = await loadConfig(interaction.guild.id, context, false);
+    if (config) {
+      const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
+      await interaction.message.edit(createPanelPayload(config, page)).catch(() => undefined);
+    }
+    return true;
+  }
+  const shouldPreAck = action === "identity";
+  if (shouldPreAck) {
+    await ensureEphemeralReply(interaction);
+  }
+  const config = await loadConfig(interaction.guild.id, context, false);
+  if (!config) {
+    await respondEphemeral(interaction, "A configuracao deste painel nao esta disponivel.");
+    return true;
+  }
   if (action === "identity") {
     const [, , mode, selectedId] = interaction.customId.split(":");
     const selected = config.complaintTypes.find((item) => item.id === selectedId);
     if (!selected || (mode !== "anonymous" && mode !== "identified")) {
-      await interaction.reply({ content: "Esta opcao de denuncia nao esta mais disponivel.", ephemeral: true });
+      await respondEphemeral(interaction, "Esta opcao de denuncia nao esta mais disponivel.");
       return true;
     }
     await createTemporaryProcedureChannel(interaction, context, config, selected, mode === "anonymous");
@@ -233,11 +252,6 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
   }
   if (["submit", "submit_confirm", "submit_cancel", "assume", "accept", "approve", "validate", "alert", "ping", "request_info", "finish", "archive", "transcript", "close"].includes(action ?? "")) {
     await handleProcedureAction(interaction, context, config, action!);
-    return true;
-  }
-  if (action === "page") {
-    const page = Math.max(0, Number(interaction.customId.split(":")[2] ?? 0) || 0);
-    await interaction.update(createPanelPayload(config, page));
     return true;
   }
   await interaction.reply({ content: "Esta ação da Denúncia IAB não é mais válida. Publique o painel novamente.", ephemeral: true });
@@ -249,7 +263,7 @@ async function showIdentitySelection(interaction: StringSelectMenuInteraction, s
     new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji(IAB_EMOJI.identified).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji(IAB_EMOJI.anonymous).setStyle(ButtonStyle.Secondary)
   );
-  await interaction.followUp({
+  await respondEphemeral(interaction, {
     components: [{
       type: 17,
       accent_color: 0x7c3aed,
@@ -260,6 +274,31 @@ async function showIdentitySelection(interaction: StringSelectMenuInteraction, s
     }],
     flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
   });
+}
+
+type PoliceReportsComponentInteraction = ButtonInteraction | StringSelectMenuInteraction;
+
+async function ensureEphemeralReply(interaction: PoliceReportsComponentInteraction) {
+  if (interaction.deferred || interaction.replied) return;
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+}
+
+async function respondEphemeral(interaction: PoliceReportsComponentInteraction, payload: string | Record<string, unknown>) {
+  const body = typeof payload === "string"
+    ? { content: payload, flags: MessageFlags.Ephemeral }
+    : { flags: MessageFlags.Ephemeral, ...payload };
+
+  if (interaction.deferred && !interaction.replied) {
+    await interaction.editReply(body as never).catch(() => undefined);
+    return;
+  }
+
+  if (interaction.replied || interaction.deferred) {
+    await interaction.followUp(body as never).catch(() => undefined);
+    return;
+  }
+
+  await interaction.reply(body as never).catch(() => undefined);
 }
 
 async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allowCreate: boolean) {
@@ -281,7 +320,7 @@ async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allo
   if (message && message.id !== config.panelMessageId) await context.api.updatePoliceReportsPanelState(guild.id, message.id);
 }
 
-async function loadConfig(guildId: string, context: BotContext): Promise<PoliceReportsConfig | null> {
+async function loadConfig(guildId: string, context: BotContext, sanitizeImages = true): Promise<PoliceReportsConfig | null> {
   const botId = currentRuntimeBotId();
   if (!botId) return null;
   const runtime = await context.api.getBotGuildConfig(botId, guildId);
@@ -327,7 +366,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     footerVisual: enabledVisual(footerVisual) ?? panelImage(readString(raw.footerImageUrl) ?? "", "footer"),
     complaintTypes: mergeDefaultComplaintTypes(complaintTypes)
   };
-  return sanitizePoliceReportImages(config);
+  return sanitizeImages ? sanitizePoliceReportImages(config) : config;
 }
 
 async function sanitizePoliceReportImages(config: PoliceReportsConfig): Promise<PoliceReportsConfig> {
@@ -421,18 +460,18 @@ async function createTemporaryProcedureChannel(
 ) {
   if (!interaction.guild) return;
   if (!config.enabled) {
-    await interaction.reply({ content: "A Denúncia IAB esta desativada.", ephemeral: true });
+    await respondEphemeral(interaction, "A Denúncia IAB esta desativada.");
     return;
   }
   const highCommandComplaint = isHighCommandComplaint(selected);
   const categoryId = highCommandComplaint ? config.highCommandCategoryId || firstId(config.categoryIds, config.categoryId) : firstId(config.categoryIds, config.categoryId);
   if (!categoryId) {
-    await interaction.reply({ content: highCommandComplaint ? "O sistema precisa ser configurado na dashboard: selecione a categoria do Alto Comando." : "O sistema precisa ser configurado na dashboard: selecione a categoria dos canais temporarios.", ephemeral: true });
+    await respondEphemeral(interaction, highCommandComplaint ? "O sistema precisa ser configurado na dashboard: selecione a categoria do Alto Comando." : "O sistema precisa ser configurado na dashboard: selecione a categoria dos canais temporarios.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Categoria temporaria nao configurada.", { selectedType: selected.id });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ensureEphemeralReply(interaction);
   const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
     await interaction.editReply("A categoria configurada para denuncias nao foi encontrada.");
