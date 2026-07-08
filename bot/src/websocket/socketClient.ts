@@ -215,6 +215,13 @@ export type MaintenanceUpdatedEvent = {
   };
 };
 
+export type OperationalNoticeUpdatedEvent = {
+  action: string;
+  state: MaintenanceUpdatedEvent["state"] & {
+    message: string;
+  };
+};
+
 export type VoiceRecorderStartEvent = {
   actorId: string;
   actorTag?: string | null;
@@ -269,6 +276,7 @@ export class BotSocketClient {
   private tagVerificationConfigUpdatedHandler: ((payload: TagVerificationScopeEvent) => void) | null = null;
   private tagVerificationRunHandler: ((payload: TagVerificationScopeEvent) => Promise<TagVerificationRunResult>) | null = null;
   private maintenanceUpdatedHandler: ((payload: MaintenanceUpdatedEvent) => void) | null = null;
+  private operationalNoticeUpdatedHandler: ((payload: OperationalNoticeUpdatedEvent) => void) | null = null;
   private voiceRecorderStartHandler: ((payload: VoiceRecorderStartEvent) => void) | null = null;
   private voiceRecorderStopHandler: ((payload: VoiceRecorderStopEvent) => void) | null = null;
 
@@ -422,6 +430,10 @@ export class BotSocketClient {
 
     if (this.maintenanceUpdatedHandler) {
       this.socket.on("maintenance:updated", this.maintenanceUpdatedHandler);
+    }
+
+    if (this.operationalNoticeUpdatedHandler) {
+      this.socket.on("operational-notice:updated", this.operationalNoticeUpdatedHandler);
     }
 
     if (this.voiceRecorderStartHandler) {
@@ -695,6 +707,12 @@ export class BotSocketClient {
     this.maintenanceUpdatedHandler = handler;
     this.socket?.off("maintenance:updated");
     this.socket?.on("maintenance:updated", handler);
+  }
+
+  onOperationalNoticeUpdated(handler: (payload: OperationalNoticeUpdatedEvent) => void) {
+    this.operationalNoticeUpdatedHandler = handler;
+    this.socket?.off("operational-notice:updated");
+    this.socket?.on("operational-notice:updated", handler);
   }
 
   onVoiceRecorderStart(handler: (payload: VoiceRecorderStartEvent) => void) {

@@ -25,6 +25,7 @@ import { startGuildSettingsCache } from "../services/guildSettingsCache";
 import { startImageAntiSpamService } from "../services/imageAntiSpamService";
 import { startKickNotificationMonitor } from "../services/kickNotificationMonitor";
 import { startMaintenanceService } from "../services/maintenanceService";
+import { startOperationalNoticeService } from "../services/operationalNoticeService";
 import { startMissionToolsService } from "../services/missionToolsService";
 import { startManualPaymentService } from "../services/manualPaymentService";
 import { startPriceTableService } from "../services/priceTableService";
@@ -139,6 +140,7 @@ export async function handleReady(client: Client<true>, context: BotContext) {
   startDatabaseMaintenanceService(client, context);
   if (isBotModuleEnabled("logs")) startAutomatedLogService(client, context);
   startMaintenanceService(context);
+  startOperationalNoticeService(context);
 
   await syncEnabledGuildCommands(client, context);
 

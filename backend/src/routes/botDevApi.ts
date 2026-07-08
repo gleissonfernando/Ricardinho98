@@ -5,6 +5,7 @@ import { devBotRealtimeRoom, emitRealtimeToRoom } from "../realtime/events";
 import { authorizeBotCommand } from "../services/botCommandAuthorizationService";
 import { authorizeBotRuntimeModule, getBotGuildConfig, getBotApiPermissions, updateBotGuildModuleConfig, updateBotGuildModuleRuntimeStatus } from "../services/devBotService";
 import { getMaintenanceState } from "../services/maintenanceService";
+import { getOperationalNoticeState } from "../services/operationalNoticeService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
 
 export const botDevApiRouter = Router();
@@ -94,6 +95,16 @@ botDevApiRouter.get("/maintenance", async (_req, res, next) => {
   try {
     return res.json({
       maintenance: await getMaintenanceState()
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+botDevApiRouter.get("/operational-notice", async (_req, res, next) => {
+  try {
+    return res.json({
+      notice: await getOperationalNoticeState()
     });
   } catch (error) {
     return next(error);

@@ -50,6 +50,10 @@ export type MaintenanceState = {
   updatedByName: string | null;
 };
 
+export type OperationalNoticeState = MaintenanceState & {
+  message: string;
+};
+
 export type FivemActionArchitecture = "fac" | "police";
 export type FivemActionType = "fuga" | "tiro";
 export type FivemActionSettings = { id: string; botId: string; guildId: string; architecture: FivemActionArchitecture; enabled: boolean; categoryId: string | null; categoryIds: string[]; panelChannelId: string | null; panelChannelIds: string[]; actionChannelId: string | null; actionChannelIds: string[]; reportChannelId: string | null; reportChannelIds: string[]; logChannelId: string | null; logChannelIds: string[]; historyChannelId: string | null; historyChannelIds: string[]; createRoleIds: string[]; finishRoleIds: string[]; statsRoleIds: string[]; configRoleIds: string[]; panelMessageId: string | null; panelTitle: string; panelDescription: string; color: string; imageUrl: string | null; imagePosition: "top" | "center" | "bottom" | "none"; lastPanelRequestedAt: string | null; updatedAt: string };
@@ -1350,6 +1354,11 @@ export class ApiClient {
   async getMaintenanceState() {
     const { data } = await this.http.get<{ maintenance: MaintenanceState }>("/bot/maintenance");
     return data.maintenance;
+  }
+
+  async getOperationalNoticeState() {
+    const { data } = await this.http.get<{ notice: OperationalNoticeState }>("/bot/operational-notice");
+    return data.notice;
   }
 
   async authorizeRuntimeModule(guildId: string, moduleId: string) {

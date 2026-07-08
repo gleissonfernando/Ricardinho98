@@ -2819,6 +2819,28 @@ export type MaintenanceState = {
   updatedByName: string | null;
 };
 
+export type OperationalNoticeLog = {
+  id: string;
+  action: "enabled" | "disabled" | "manual_alert" | "updated";
+  active: boolean;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+  message: string;
+};
+
+export type OperationalNoticeState = {
+  active: boolean;
+  activatedAt: string | null;
+  affectedBots: number;
+  deactivatedAt: string | null;
+  logs: OperationalNoticeLog[];
+  message: string;
+  updatedAt: string;
+  updatedById: string | null;
+  updatedByName: string | null;
+};
+
 export type DevAccessRole = "owner" | "admin" | "dev";
 
 export type DevAccessEntry = {

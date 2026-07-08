@@ -68,6 +68,7 @@ import type {
   MissionToolsSettings,
   MissionToolsUserPanel,
   MaintenanceState,
+  OperationalNoticeState,
   OrvitechSale,
   OrvitechSaleStatus,
   OrvitechProduct,
@@ -2275,6 +2276,21 @@ export async function setMaintenanceMode(active: boolean) {
 export async function sendMaintenanceAlert() {
   const { data } = await api.post<{ maintenance: MaintenanceState }>("/dev/maintenance/alert");
   return data.maintenance;
+}
+
+export async function getOperationalNoticeState() {
+  const { data } = await api.get<{ notice: OperationalNoticeState }>("/dev/operational-notice");
+  return data.notice;
+}
+
+export async function setOperationalNotice(payload: { active?: boolean; message?: string }) {
+  const { data } = await api.patch<{ notice: OperationalNoticeState }>("/dev/operational-notice", payload);
+  return data.notice;
+}
+
+export async function sendOperationalNoticeAlert() {
+  const { data } = await api.post<{ notice: OperationalNoticeState }>("/dev/operational-notice/alert");
+  return data.notice;
 }
 
 export async function getDevAccessEntries() {

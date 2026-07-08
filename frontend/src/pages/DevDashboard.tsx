@@ -42,16 +42,19 @@ import {
   getDevBots,
   getDevFivemModules,
   getMaintenanceState,
+  getOperationalNoticeState,
   getLogs,
   sendMaintenanceAlert,
+  sendOperationalNoticeAlert,
   saveDevAccessEntry,
   setMaintenanceMode,
+  setOperationalNotice,
   updateDevBotModules,
   updateDevFivemModule
 } from "../lib/api";
 import { createDashboardSocket } from "../lib/socket";
 import { dashboardUrl } from "../lib/urls";
-import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState } from "../types";
+import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState, OperationalNoticeState } from "../types";
 
 type DevDashboardProps = {
   auth: AuthResponse;
@@ -541,19 +544,25 @@ function DevAccessPanel() {
 
 function MaintenancePanel() {
   const [maintenance, setMaintenance] = useState<MaintenanceState | null>(null);
+  const [notice, setNotice] = useState<OperationalNoticeState | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [alerting, setAlerting] = useState(false);
+  const [noticeSaving, setNoticeSaving] = useState(false);
+  const [noticeAlerting, setNoticeAlerting] = useState(false);
   const [bots, setBots] = useState<DevBot[]>([]);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getMaintenanceState(), getDevBots().catch(() => [])])
-      .then(([state, botItems]) => {
+    Promise.all([getMaintenanceState(), getOperationalNoticeState(), getDevBots().catch(() => [])])
+      .then(([state, noticeState, botItems]) => {
         if (!mounted) return;
         setMaintenance(state);
+        setNotice(noticeState);
+        setNoticeMessage(noticeState.message);
         setBots(botItems);
       })
       .finally(() => {
@@ -564,6 +573,13 @@ function MaintenancePanel() {
     socket.on("maintenance:updated", (payload: { state?: MaintenanceState; maintenance?: MaintenanceState }) => {
       const state = payload.state ?? payload.maintenance;
       if (state) setMaintenance(state);
+    });
+    socket.on("operational-notice:updated", (payload: { state?: OperationalNoticeState; notice?: OperationalNoticeState }) => {
+      const state = payload.state ?? payload.notice;
+      if (state) {
+        setNotice(state);
+        setNoticeMessage(state.message);
+      }
     });
     socket.on("dev:bot_updated", (bot: DevBot) => {
       setBots((current) => current.map((item) => item.id === bot.id ? bot : item));
@@ -599,6 +615,39 @@ function MaintenancePanel() {
       setMaintenance(await sendMaintenanceAlert());
     } finally {
       setAlerting(false);
+    }
+  }
+
+  async function handleNoticeToggle(active: boolean) {
+    setNoticeSaving(true);
+    try {
+      const next = await setOperationalNotice({ active, message: noticeMessage });
+      setNotice(next);
+      setNoticeMessage(next.message);
+    } finally {
+      setNoticeSaving(false);
+    }
+  }
+
+  async function handleNoticeSave() {
+    setNoticeSaving(true);
+    try {
+      const next = await setOperationalNotice({ message: noticeMessage });
+      setNotice(next);
+      setNoticeMessage(next.message);
+    } finally {
+      setNoticeSaving(false);
+    }
+  }
+
+  async function handleNoticeAlert() {
+    setNoticeAlerting(true);
+    try {
+      const next = await sendOperationalNoticeAlert();
+      setNotice(next);
+      setNoticeMessage(next.message);
+    } finally {
+      setNoticeAlerting(false);
     }
   }
 
@@ -695,6 +744,55 @@ function MaintenancePanel() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-sky-500/20 bg-zinc-950/80 hover:translate-y-0">
+        <CardHeader>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="text-white">Aviso operacional dos bots</CardTitle>
+              <CardDescription className="font-medium text-zinc-300">
+                Publica uma mensagem nos bots sem ativar manutenção, sem bloquear site, APIs ou interações.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge className={notice?.active ? "border-sky-400/30 bg-sky-500/15 text-sky-100" : "border-zinc-700 bg-zinc-900 text-zinc-300"} variant="muted">
+                {notice?.active ? "Aviso ativo" : "Aviso inativo"}
+              </Badge>
+              <Switch checked={Boolean(notice?.active)} disabled={loading || noticeSaving} onCheckedChange={(checked) => void handleNoticeToggle(checked)} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="block text-sm font-medium text-zinc-200">
+            Texto que o bot vai emitir
+            <textarea
+              className="mt-2 min-h-28 w-full rounded-md border border-zinc-800 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-sky-500/60 disabled:opacity-60"
+              disabled={loading || noticeSaving}
+              maxLength={1200}
+              onChange={(event) => setNoticeMessage(event.target.value)}
+              value={noticeMessage}
+            />
+          </label>
+          <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.07] p-4 text-sm font-semibold leading-6 text-zinc-100">
+            {noticeMessage || "Orviteck informa: os bots ficarão offline por 3 dias por troca de hospedagem."}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={loading || noticeSaving} onClick={() => void handleNoticeSave()} variant="outline">
+              {noticeSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+              Salvar texto
+            </Button>
+            <Button disabled={loading || noticeAlerting} onClick={() => void handleNoticeAlert()} variant="outline">
+              {noticeAlerting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+              Reenviar aviso
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MaintenanceMetric label="Bots que recebem" value={String(notice?.affectedBots ?? 0)} />
+            <MaintenanceMetric label="Última ativação" value={notice?.activatedAt ? formatDate(notice.activatedAt) : "Nunca"} />
+            <MaintenanceMetric label="Atualizado por" value={notice?.updatedByName ?? "Nenhum registro"} />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-purple-500/20 bg-zinc-950/80 hover:translate-y-0">
         <CardHeader>

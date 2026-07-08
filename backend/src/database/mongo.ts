@@ -2810,6 +2810,27 @@ export type MongoMaintenanceLog = {
   message: string;
 };
 
+export type MongoOperationalNoticeState = {
+  _id: "global";
+  active: boolean;
+  message: string;
+  activatedAt: Date | null;
+  deactivatedAt: Date | null;
+  updatedAt: Date;
+  updatedById: string | null;
+  updatedByName: string | null;
+};
+
+export type MongoOperationalNoticeLog = {
+  _id: string;
+  action: "enabled" | "disabled" | "manual_alert" | "updated";
+  active: boolean;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: Date;
+  message: string;
+};
+
 export type MongoDashboardAuditLog = {
   _id: string;
   action: string;
@@ -3017,6 +3038,8 @@ export async function getMongoCollections() {
     devPermissions: db.collection<MongoDevPermission>("DevPermission"),
     maintenanceState: db.collection<MongoMaintenanceState>("MaintenanceState"),
     maintenanceLogs: db.collection<MongoMaintenanceLog>("MaintenanceLog"),
+    operationalNoticeState: db.collection<MongoOperationalNoticeState>("OperationalNoticeState"),
+    operationalNoticeLogs: db.collection<MongoOperationalNoticeLog>("OperationalNoticeLog"),
     dashboardAuditLogs: db.collection<MongoDashboardAuditLog>("DashboardAuditLog"),
     panelImageSettings: db.collection<MongoPanelImageSettings>("panel_image_settings"),
     persistentImages: db.collection<MongoPersistentImage>("persistent_images")

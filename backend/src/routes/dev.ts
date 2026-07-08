@@ -45,6 +45,12 @@ import {
   setMaintenanceMode
 } from "../services/maintenanceService";
 import {
+  getOperationalNoticeState,
+  sendOperationalNoticeManualAlert,
+  setOperationalNotice,
+  updateOperationalNoticeMessage
+} from "../services/operationalNoticeService";
+import {
   canManageDevPermissions,
   deleteDevPermission,
   listDevPermissions,
@@ -356,6 +362,75 @@ devRouter.post("/maintenance/alert", async (_req, res, next) => {
     return res.json({
       maintenance
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+devRouter.get("/operational-notice", async (_req, res, next) => {
+  try {
+    return res.json({
+      notice: await getOperationalNoticeState()
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+devRouter.patch("/operational-notice", async (req, res, next) => {
+  try {
+    const auth = res.locals.dashboardAuth as DashboardAuth;
+    const input = z.object({
+      active: z.boolean().optional(),
+      message: z.string().trim().min(1).max(1200).optional()
+    }).parse(req.body ?? {});
+
+    const notice = input.active === undefined
+      ? await updateOperationalNoticeMessage({
+        actorId: auth.user.discordId,
+        actorName: auth.user.globalName || auth.user.username,
+        message: input.message ?? ""
+      })
+      : await setOperationalNotice({
+        active: input.active,
+        actorId: auth.user.discordId,
+        actorName: auth.user.globalName || auth.user.username,
+        message: input.message
+      });
+
+    await writeDevBotAudit(
+      auth,
+      auth.user.selectedGuildId ?? "global",
+      null,
+      input.active === undefined ? "operational_notice_updated" : input.active ? "operational_notice_enabled" : "operational_notice_disabled",
+      input.active === undefined ? "Texto do aviso operacional atualizado." : input.active ? "Aviso operacional dos bots ativado." : "Aviso operacional dos bots desativado.",
+      { operationalNotice: true }
+    );
+
+    return res.json({ notice });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+devRouter.post("/operational-notice/alert", async (_req, res, next) => {
+  try {
+    const auth = res.locals.dashboardAuth as DashboardAuth;
+    const notice = await sendOperationalNoticeManualAlert({
+      actorId: auth.user.discordId,
+      actorName: auth.user.globalName || auth.user.username
+    });
+
+    await writeDevBotAudit(
+      auth,
+      auth.user.selectedGuildId ?? "global",
+      null,
+      "operational_notice_manual_alert",
+      "Aviso operacional reenviado manualmente.",
+      { operationalNotice: true }
+    );
+
+    return res.json({ notice });
   } catch (error) {
     return next(error);
   }
