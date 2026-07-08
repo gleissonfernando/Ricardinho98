@@ -722,12 +722,15 @@ async function handleProcedureAction(
   await interaction.editReply("Ação da denúncia inválida ou expirada. Publique o painel novamente se necessário.");
 }
 
-function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintType, topic: PoliceReportTopic, userId: string) {
+function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintType, topic: PoliceReportTopic, userId: string, mentionRoleIds: string[] = [], notifyMention = false) {
   const createdAt = Math.floor(((topic.expiresAt ?? Date.now()) - config.maxChannelMinutes * 60_000) / 1000);
   const submittedAt = topic.submittedAt ? Math.floor(topic.submittedAt / 1000) : null;
   const acceptedAt = topic.acceptedAt ? Math.floor(topic.acceptedAt / 1000) : null;
   const closedAt = topic.closedAt ? Math.floor(topic.closedAt / 1000) : null;
   const locked = topic.status === "finished" || topic.status === "archived";
+  const topMention = topic.status === "draft" || !mentionRoleIds.length
+    ? null
+    : `**Equipe responsável:** ${mentionRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")}`;
   const actions = topic.status === "draft"
     ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Confirmar envio da denúncia").setEmoji(IAB_EMOJI.submit).setStyle(ButtonStyle.Danger)
@@ -739,7 +742,7 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
       new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji(IAB_EMOJI.archive).setStyle(ButtonStyle.Secondary).setDisabled(locked),
       new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji(IAB_EMOJI.finish).setStyle(ButtonStyle.Danger).setDisabled(locked)
     )];
-  return renderComponentsV2Panel({
+  const payload = renderComponentsV2Panel({
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     actions,
     description: topic.status === "draft"
@@ -764,9 +767,11 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
     image: config.channelVisual ?? config.panelVisual,
     footerIcon: config.footerVisual,
     footerText: `**NPD - IAB** · Procedimento aberto · <t:${createdAt}:f>`,
+    headerText: topMention ?? undefined,
     moduleId: MODULE_ID,
     title: topic.status === "draft" ? "Central de Denúncias — IAB" : "Registro de Denúncia"
   });
+  return notifyMention && mentionRoleIds.length ? { ...payload, allowedMentions: { roles: mentionRoleIds } } : payload;
 }
 
 async function submitPoliceReport(
@@ -802,15 +807,8 @@ async function submitPoliceReport(
     });
   }
 
-  if (mentionRoleIds.length) {
-    await channel.send({
-      allowedMentions: { roles: mentionRoleIds },
-      content: mentionRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")
-    }).catch(() => null);
-  }
-
   await setPoliceReportTopic(channel, next);
-  await updateProcedurePanel(interaction, config, selected, next, requesterId);
+  await updateProcedurePanel(interaction, config, selected, next, requesterId, mentionRoleIds, true);
   await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.submitted", "Denúncia enviada para análise.", {
     anonymous: topic.anonymous,
     channelId: channel.id,
@@ -827,11 +825,14 @@ async function updateProcedurePanel(
   config: PoliceReportsConfig,
   selected: ComplaintType,
   topic: PoliceReportTopic,
-  requesterId: string
+  requesterId: string,
+  mentionRoleIds: string[] = [],
+  notifyMention = false
 ) {
   if (!interaction.channel || !("messages" in interaction.channel)) return;
   const channel: any = interaction.channel;
-  const payload = createProcedurePanel(config, selected, topic, requesterId);
+  const effectiveMentionRoleIds = mentionRoleIds.length || topic.status === "draft" ? mentionRoleIds : mentionRoleIdsFor(config, selected);
+  const payload = createProcedurePanel(config, selected, topic, requesterId, effectiveMentionRoleIds, notifyMention);
   const panel = topic.panelMessageId ? await channel.messages.fetch(topic.panelMessageId).catch(() => null) : null;
   if (panel) {
     await panel.edit(payload).catch(() => null);
