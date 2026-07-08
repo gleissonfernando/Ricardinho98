@@ -556,7 +556,10 @@ async function captureGlobalSnapshot(botId: string) {
   const runtime = await getDevBotRuntimeConfig(botId);
   const guildIds = runtime?.guildIds?.length ? runtime.guildIds : runtime?.mainGuildId ? [runtime.mainGuildId] : [];
   const uniqueGuildIds = [...new Set(guildIds.filter((id) => /^\d{5,32}$/.test(id)))];
-  const guildSnapshots = await mapInBatches(uniqueGuildIds, 5, async (guildId) => captureGuildSnapshot(botId, guildId));
+  const [guildSnapshots, hostingInventory] = await Promise.all([
+    mapInBatches(uniqueGuildIds, 5, async (guildId) => captureGuildSnapshot(botId, guildId)),
+    captureHostingInventory(botId, uniqueGuildIds)
+  ]);
 
   const databaseCollections = await captureDatabaseCollections(botId, GLOBAL_SERVER_BACKUP_GUILD_ID, uniqueGuildIds);
   return {
@@ -571,14 +574,16 @@ async function captureGlobalSnapshot(botId: string) {
     stickers: [],
     webhooks: [],
     internalSettings: Object.fromEntries(guildSnapshots.map((snapshot: any) => [snapshot.source?.guildId, snapshot.internalSettings ?? {}]).filter(([guildId]) => Boolean(guildId))),
+    hostingInventory,
     databaseCollections,
     assetWarnings: []
   };
 }
 
 async function captureGuildSnapshot(botId: string, guildId: string) {
-  const [moduleConfig, databaseCollections] = await Promise.all([
+  const [moduleConfig, hostingInventory, databaseCollections] = await Promise.all([
     getBotGuildConfig(botId, guildId).catch(() => null),
+    captureHostingInventory(botId, [guildId]),
     captureDatabaseCollections(botId, guildId)
   ]);
 
@@ -593,8 +598,22 @@ async function captureGuildSnapshot(botId: string, guildId: string) {
     stickers: [],
     webhooks: [],
     internalSettings: moduleConfig?.modules ?? {},
+    hostingInventory,
     databaseCollections,
     assetWarnings: []
+  };
+}
+
+async function captureHostingInventory(botId: string, guildIds: string[]) {
+  const { botGuildConfigs, devBots } = await getMongoCollections();
+  const [bot, configs] = await Promise.all([
+    devBots.findOne({ _id: botId }),
+    botGuildConfigs.find({ botId, guildId: { $in: guildIds } }).sort({ guildId: 1 }).toArray()
+  ]);
+
+  return {
+    bots: sanitizeMongoDocuments(bot ? [bot] : []),
+    guildConfigs: sanitizeMongoDocuments(configs)
   };
 }
 
@@ -620,11 +639,12 @@ async function captureDatabaseCollections(botId: string, guildId: string, guildI
 function backupCollectionQuery(botId: string, guildId: string, guildIds: string[]) {
   if (guildId !== GLOBAL_SERVER_BACKUP_GUILD_ID) {
     return {
-      guildId,
       $or: [
-        { botId },
-        { botId: null },
-        { botId: { $exists: false } }
+        { _id: botId },
+        { botId, guildId },
+        { botId, guildId: { $exists: false } },
+        { guildId, botId: null },
+        { guildId, botId: { $exists: false } }
       ]
     };
   }
@@ -1375,6 +1395,11 @@ function countSnapshot(snapshot: any) {
   const moduleCount = Array.isArray(snapshot.guilds)
     ? snapshot.guilds.reduce((total: number, guildSnapshot: any) => total + Object.keys(guildSnapshot?.internalSettings ?? {}).length, 0)
     : Object.keys(snapshot.internalSettings ?? {}).length;
+  const hostingInventory = snapshot && typeof snapshot.hostingInventory === "object" && !Array.isArray(snapshot.hostingInventory)
+    ? snapshot.hostingInventory as { bots?: unknown; guildConfigs?: unknown }
+    : {};
+  const hostingDocuments = (Array.isArray(hostingInventory.bots) ? hostingInventory.bots.length : 0)
+    + (Array.isArray(hostingInventory.guildConfigs) ? hostingInventory.guildConfigs.length : 0);
   const databaseCollections = snapshot && typeof snapshot.databaseCollections === "object" && !Array.isArray(snapshot.databaseCollections)
     ? snapshot.databaseCollections as Record<string, { count?: unknown; documents?: unknown }>
     : {};
@@ -1386,7 +1411,7 @@ function countSnapshot(snapshot: any) {
   return {
     categories: channels.filter((channel: any) => channel.type === 4).length,
     channels: channels.filter((channel: any) => channel.type !== 4).length,
-    configurations: moduleCount + databaseDocuments,
+    configurations: moduleCount + hostingDocuments + databaseDocuments,
     modules: moduleCount,
     emojis: Array.isArray(snapshot.emojis) ? snapshot.emojis.length : 0,
     roles: Array.isArray(snapshot.roles) ? snapshot.roles.length : 0,
