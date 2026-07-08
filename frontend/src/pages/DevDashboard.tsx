@@ -597,7 +597,7 @@ function HostingBackupPanel({
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-white">Backup de Hospedagem</h2>
-          <p className="mt-1 text-sm text-zinc-400">Backup, importacao, exportacao e historico das configuracoes do ecossistema Orvitek.</p>
+          <p className="mt-1 text-sm text-zinc-400">Backup, importacao, exportacao e historico das configuracoes salvas no site.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectBot(event.target.value || null)} value={selectedBot?.id ?? ""}>
@@ -637,7 +637,7 @@ function HostingBackupPanel({
       <Card className="border-zinc-800/80 bg-zinc-950/75">
         <CardHeader className="p-5 sm:p-6">
           <CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5" /> Operacoes</CardTitle>
-          <CardDescription>Criar backup manual, importar JSON e ativar o agendamento automatico.</CardDescription>
+          <CardDescription>Criar backup manual das configs do site, importar JSON e ativar o agendamento automatico.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 p-5 pt-0 sm:grid-cols-2 lg:grid-cols-4 sm:p-6 sm:pt-0">
           <Button disabled={!selectedBot || !guildId || working === "create"} onClick={() => void handleCreateBackup()}>
@@ -663,7 +663,7 @@ function HostingBackupPanel({
       <Card className="border-zinc-800/80 bg-zinc-950/75">
         <CardHeader className="p-5 sm:p-6">
           <CardTitle>Historico de Backups</CardTitle>
-          <CardDescription>Restaurar e baixar continuam protegidos pelas permissoes do modulo.</CardDescription>
+          <CardDescription>Baixar e restaurar configs continuam protegidos pelas permissoes do modulo.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 p-5 pt-0 sm:p-6 sm:pt-0">
           {loading ? <div className="flex min-h-28 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div> : dashboard?.backups.length ? dashboard.backups.map((backup) => (

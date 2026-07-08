@@ -193,7 +193,7 @@ export async function saveServerBackupSettings(botId: string, guildId: string, i
   return getServerBackupSettings(botId, guildId);
 }
 
-export async function createServerBackup(input: { actorId: string | null; botId: string; botToken: string; guildId: string; kind: "manual" | "automatic" }) {
+export async function createServerBackup(input: { actorId: string | null; botId: string; botToken?: string | null; guildId: string; kind: "manual" | "automatic" }) {
   const now = new Date();
   const { serverBackupSnapshots } = await getMongoCollections();
   const interval = input.kind === "automatic" ? frequencyMs((await getServerBackupSettings(input.botId, input.guildId)).frequency) : 0;
@@ -236,12 +236,9 @@ export async function processQueuedServerBackupCapture(payload: Record<string, u
   const pending = await serverBackupSnapshots.findOne({ _id: snapshotId });
   if (!pending) throw new Error(`Snapshot ${snapshotId} nao encontrado.`);
   if (pending.status === "completed" || pending.status === "partial") return;
-  const botToken = await getDevBotToken(pending.botId);
-  if (!botToken) throw new Error("Token do bot nao configurado para criar backup.");
-
   try {
-    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 15, "Capturando servidores, modulos e configuracoes.");
-    const snapshot = await captureSnapshot(botToken, pending.botId, pending.guildId);
+    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 15, "Capturando configuracoes do site.");
+    const snapshot = await captureSnapshot(pending.botId, pending.guildId);
     await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 70, "Backup capturado. Validando integridade.");
     const counts = countSnapshot(snapshot);
     const assetWarnings = Array.isArray(snapshot.assetWarnings) ? snapshot.assetWarnings : [];
@@ -263,7 +260,7 @@ export async function processQueuedServerBackupCapture(payload: Record<string, u
       guildId: pending.guildId,
       userId: pending.createdBy,
       type: status === "completed" ? "server-backup.created" : "server-backup.created_partial",
-      message: `Backup ${status === "completed" ? "criado" : "criado com avisos"}: ${counts.roles} cargos, ${counts.channels} canais, ${counts.emojis} emojis e ${counts.stickers} stickers.`,
+      message: `Backup ${status === "completed" ? "criado" : "criado com avisos"}: ${counts.configurations ?? 0} configuracoes do site.`,
       metadata: { attempt: context.attempt, backupId: snapshotId, checksum, counts, snapshotVersion: SNAPSHOT_VERSION, warnings: assetWarnings }
     }).catch(() => null);
   } catch (error) {
@@ -305,22 +302,9 @@ async function runAutomaticServerBackupTick() {
         continue;
       }
 
-      const token = await getDevBotToken(settings.botId).catch(() => null);
-      if (!token) {
-        await createLog({
-          botId: settings.botId,
-          guildId: settings.guildId,
-          type: "server-backup.auto_failed",
-          message: "Backup automatico ignorado: token do bot nao configurado.",
-          metadata: { frequency: settings.frequency }
-        }).catch(() => null);
-        continue;
-      }
-
       await createServerBackup({
         actorId: null,
         botId: settings.botId,
-        botToken: token,
         guildId: settings.guildId,
         kind: "automatic"
       });
@@ -560,38 +544,19 @@ function failedRestoreResult(error: unknown): RestoreResult {
   };
 }
 
-async function captureSnapshot(botToken: string, botId: string, guildId: string) {
+async function captureSnapshot(botId: string, guildId: string) {
   if (guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
-    return captureGlobalSnapshot(botToken, botId);
+    return captureGlobalSnapshot(botId);
   }
 
-  return captureGuildSnapshot(botToken, botId, guildId);
+  return captureGuildSnapshot(botId, guildId);
 }
 
-async function captureGlobalSnapshot(botToken: string, botId: string) {
+async function captureGlobalSnapshot(botId: string) {
   const runtime = await getDevBotRuntimeConfig(botId);
   const guildIds = runtime?.guildIds?.length ? runtime.guildIds : runtime?.mainGuildId ? [runtime.mainGuildId] : [];
   const uniqueGuildIds = [...new Set(guildIds.filter((id) => /^\d{5,32}$/.test(id)))];
-  const guildSnapshots = await mapInBatches(uniqueGuildIds, 2, async (guildId) => {
-    try {
-      return await captureGuildSnapshot(botToken, botId, guildId);
-    } catch (error) {
-      return {
-        snapshotVersion: SNAPSHOT_VERSION,
-        capturedAt: new Date().toISOString(),
-        source: { botId, guildId },
-        guild: { id: guildId, name: guildId },
-        roles: [],
-        channels: [],
-        emojis: [],
-        stickers: [],
-        webhooks: [],
-        internalSettings: {},
-        databaseCollections: {},
-        assetWarnings: [`${guildId}: ${errorMessage(error)}`]
-      };
-    }
-  });
+  const guildSnapshots = await mapInBatches(uniqueGuildIds, 5, async (guildId) => captureGuildSnapshot(botId, guildId));
 
   const databaseCollections = await captureDatabaseCollections(botId, GLOBAL_SERVER_BACKUP_GUILD_ID, uniqueGuildIds);
   return {
@@ -600,58 +565,36 @@ async function captureGlobalSnapshot(botToken: string, botId: string) {
     source: { botId, guildId: GLOBAL_SERVER_BACKUP_GUILD_ID },
     guild: { id: GLOBAL_SERVER_BACKUP_GUILD_ID, name: "Todos os servidores" },
     guilds: guildSnapshots,
-    roles: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.roles) ? snapshot.roles : []),
-    channels: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.channels) ? snapshot.channels : []),
-    emojis: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.emojis) ? snapshot.emojis : []),
-    stickers: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.stickers) ? snapshot.stickers : []),
-    webhooks: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.webhooks) ? snapshot.webhooks : []),
+    roles: [],
+    channels: [],
+    emojis: [],
+    stickers: [],
+    webhooks: [],
     internalSettings: Object.fromEntries(guildSnapshots.map((snapshot: any) => [snapshot.source?.guildId, snapshot.internalSettings ?? {}]).filter(([guildId]) => Boolean(guildId))),
     databaseCollections,
-    assetWarnings: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.assetWarnings) ? snapshot.assetWarnings : [])
+    assetWarnings: []
   };
 }
 
-async function captureGuildSnapshot(botToken: string, botId: string, guildId: string) {
-  const [guild, roles, channels, emojis, stickers, webhooks, moduleConfig, databaseCollections] = await Promise.all([
-    discordGet(botToken, `/guilds/${guildId}?with_counts=true`),
-    discordGet(botToken, `/guilds/${guildId}/roles`),
-    discordGet(botToken, `/guilds/${guildId}/channels`),
-    discordGet(botToken, `/guilds/${guildId}/emojis`).catch(() => []),
-    discordGet(botToken, `/guilds/${guildId}/stickers`).catch(() => []),
-    discordGet(botToken, `/guilds/${guildId}/webhooks`).catch(() => []),
+async function captureGuildSnapshot(botId: string, guildId: string) {
+  const [moduleConfig, databaseCollections] = await Promise.all([
     getBotGuildConfig(botId, guildId).catch(() => null),
     captureDatabaseCollections(botId, guildId)
   ]);
-  const assetBudget = { remaining: MAX_EMBEDDED_ASSET_BYTES, warnings: [] as string[] };
-  const guildData = pick(guild, ["id", "name", "icon", "banner", "description", "verification_level", "default_message_notifications", "explicit_content_filter", "preferred_locale", "afk_timeout", "afk_channel_id", "system_channel_id", "rules_channel_id", "public_updates_channel_id"]);
-  const capturedEmojis = await mapInBatches(Array.isArray(emojis) ? emojis : [], 5, async (emoji) => {
-    const metadata = pick(emoji, ["id", "name", "animated", "available", "managed", "roles"]);
-    return attachAssetData(metadata, emojiAssetUrl(emoji), assetBudget, `emoji:${emoji.name ?? emoji.id}`);
-  });
-  const capturedStickers = await mapInBatches(Array.isArray(stickers) ? stickers : [], 5, async (sticker) => {
-    const metadata = pick(sticker, ["id", "name", "description", "tags", "type", "format_type", "available", "guild_id"]);
-    return attachAssetData(metadata, stickerAssetUrl(sticker), assetBudget, `sticker:${sticker.name ?? sticker.id}`);
-  });
-  if (typeof guild.icon === "string" && guild.icon) {
-    Object.assign(guildData, await captureNamedAsset(guildIconUrl(guildId, guild.icon), assetBudget, "icone do servidor", "iconData"));
-  }
-  if (typeof guild.banner === "string" && guild.banner) {
-    Object.assign(guildData, await captureNamedAsset(guildBannerUrl(guildId, guild.banner), assetBudget, "banner do servidor", "bannerData"));
-  }
 
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     capturedAt: new Date().toISOString(),
     source: { botId, guildId },
-    guild: guildData,
-    roles: Array.isArray(roles) ? roles.map((role) => pick(role, ["id", "name", "color", "colors", "hoist", "icon", "unicode_emoji", "position", "permissions", "managed", "mentionable", "tags"])) : [],
-    channels: Array.isArray(channels) ? channels.map((channel) => pick(channel, ["id", "type", "name", "position", "parent_id", "permission_overwrites", "topic", "nsfw", "rate_limit_per_user", "bitrate", "user_limit", "rtc_region", "video_quality_mode", "default_auto_archive_duration", "available_tags", "default_reaction_emoji", "default_thread_rate_limit_per_user", "default_sort_order", "default_forum_layout", "flags"])) : [],
-    emojis: capturedEmojis,
-    stickers: capturedStickers,
-    webhooks: Array.isArray(webhooks) ? webhooks.map((webhook) => pick(webhook, ["id", "type", "name", "channel_id", "avatar", "application_id"])) : [],
+    guild: { id: guildId, name: moduleConfig?.guildName ?? guildId },
+    roles: [],
+    channels: [],
+    emojis: [],
+    stickers: [],
+    webhooks: [],
     internalSettings: moduleConfig?.modules ?? {},
     databaseCollections,
-    assetWarnings: assetBudget.warnings
+    assetWarnings: []
   };
 }
 
@@ -1429,6 +1372,9 @@ function normalizeRestoreMode(mode: unknown): RestoreMode {
 
 function countSnapshot(snapshot: any) {
   const channels = Array.isArray(snapshot.channels) ? snapshot.channels : [];
+  const moduleCount = Array.isArray(snapshot.guilds)
+    ? snapshot.guilds.reduce((total: number, guildSnapshot: any) => total + Object.keys(guildSnapshot?.internalSettings ?? {}).length, 0)
+    : Object.keys(snapshot.internalSettings ?? {}).length;
   const databaseCollections = snapshot && typeof snapshot.databaseCollections === "object" && !Array.isArray(snapshot.databaseCollections)
     ? snapshot.databaseCollections as Record<string, { count?: unknown; documents?: unknown }>
     : {};
@@ -1440,8 +1386,8 @@ function countSnapshot(snapshot: any) {
   return {
     categories: channels.filter((channel: any) => channel.type === 4).length,
     channels: channels.filter((channel: any) => channel.type !== 4).length,
-    configurations: Object.keys(snapshot.internalSettings ?? {}).length + databaseDocuments,
-    modules: Object.keys(snapshot.internalSettings ?? {}).length,
+    configurations: moduleCount + databaseDocuments,
+    modules: moduleCount,
     emojis: Array.isArray(snapshot.emojis) ? snapshot.emojis.length : 0,
     roles: Array.isArray(snapshot.roles) ? snapshot.roles.length : 0,
     stickers: Array.isArray(snapshot.stickers) ? snapshot.stickers.length : 0
