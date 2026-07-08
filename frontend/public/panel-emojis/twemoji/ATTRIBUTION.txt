@@ -1,0 +1,4 @@
+Twemoji graphics used for dashboard emoji previews.
+Source: https://github.com/twitter/twemoji
+Graphics license: Creative Commons Attribution 4.0 International (CC-BY 4.0)
+Code license for Twemoji project: MIT

@@ -96,9 +96,9 @@ export async function prepareSafeBotWarning(interaction: ChatInputCommandInterac
       preview.note ? `**Observação:** ${preview.note}` : ""
     ].filter(Boolean).join("\n"));
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:confirm:${confirmationId}`).setLabel("Confirmar advertência").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`${PREFIX}:cancel:${confirmationId}`).setLabel("Cancelar").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${PREFIX}:history:${confirmationId}`).setLabel("Ver histórico").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:confirm:${confirmationId}`).setEmoji("⚠️").setLabel("Confirmar advertência").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PREFIX}:cancel:${confirmationId}`).setEmoji("↩️").setLabel("Cancelar").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${PREFIX}:history:${confirmationId}`).setEmoji("📋").setLabel("Ver histórico").setStyle(ButtonStyle.Primary)
   );
   await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
 }

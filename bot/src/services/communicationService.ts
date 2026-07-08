@@ -63,8 +63,8 @@ export async function showDmConfigPanel(interaction: ChatInputCommandInteraction
     `**Cor:** ${settings.color}`
   ], [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${DM_PREFIX}:toggle`).setLabel(settings.enabled ? "Desativar" : "Ativar").setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${DM_PREFIX}:test`).setLabel("Testar envio").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`${DM_PREFIX}:toggle`).setEmoji(settings.enabled ? "🛑" : "✅").setLabel(settings.enabled ? "Desativar" : "Ativar").setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`${DM_PREFIX}:test`).setEmoji("🧪").setLabel("Testar envio").setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`${DM_PREFIX}:roles`).setPlaceholder("Cargos autorizados").setMinValues(0).setMaxValues(10)),
     new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${DM_PREFIX}:logs`).setPlaceholder("Canal de logs").setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1))
@@ -90,10 +90,10 @@ export async function showSummonsConfigPanel(interaction: ChatInputCommandIntera
   ], [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:start`).setEmoji("📨").setLabel("Iniciar conversa").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:toggle`).setLabel(settings.enabled ? "Desativar" : "Ativar").setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:anonymity`).setLabel(settings.anonymityEnabled ? "Anonimato ativo" : "Anonimato inativo").setStyle(settings.anonymityEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:iab_visual`).setLabel("Visual IAB").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:test`).setLabel("Testar sistema").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:toggle`).setEmoji(settings.enabled ? "🛑" : "✅").setLabel(settings.enabled ? "Desativar" : "Ativar").setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:anonymity`).setEmoji("🎭").setLabel(settings.anonymityEnabled ? "Anonimato ativo" : "Anonimato inativo").setStyle(settings.anonymityEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:iab_visual`).setEmoji("🖼️").setLabel("Visual IAB").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:test`).setEmoji("🧪").setLabel("Testar sistema").setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:category`).setPlaceholder("Categoria dos canais").setChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1)),
     new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`${SUMMONS_PREFIX}:logs`).setPlaceholder("Canal de logs").setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1)),
@@ -549,8 +549,8 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord, o
   const disabled = options.disabled === true || ("status" in record && record.status !== "active" && record.status !== "creating");
   const status = disabled ? `Encerrada${options.actionLabel ? ` (${options.actionLabel})` : ""}` : "Aguardando resposta";
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success).setDisabled(disabled),
-    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setLabel("Arquivar Intimação").setStyle(ButtonStyle.Danger).setDisabled(disabled)
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setEmoji("✅").setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setEmoji("🗄️").setLabel("Arquivar Intimação").setStyle(ButtonStyle.Danger).setDisabled(disabled)
   );
   return renderComponentsV2Panel({
     accentColor: color(settings.color),

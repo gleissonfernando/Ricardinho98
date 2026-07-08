@@ -75,9 +75,9 @@ async function publishConfiguredFinancePanel(guild: Guild, context: BotContext, 
 
 function createMainPanel(settings: FivemFinanceSettings, balance: number) {
   const rows = [new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:add`).setLabel("Adicionar dinheiro").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${PREFIX}:remove`).setLabel("Retirar dinheiro").setStyle(ButtonStyle.Danger),
-    ...(settings.allowBalanceQuery ? [new ButtonBuilder().setCustomId(`${PREFIX}:balance`).setLabel("Consultar saldo").setStyle(ButtonStyle.Secondary)] : [])
+    new ButtonBuilder().setCustomId(`${PREFIX}:add`).setEmoji("💵").setLabel("Adicionar dinheiro").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PREFIX}:remove`).setEmoji("💸").setLabel("Retirar dinheiro").setStyle(ButtonStyle.Danger),
+    ...(settings.allowBalanceQuery ? [new ButtonBuilder().setCustomId(`${PREFIX}:balance`).setEmoji("💰").setLabel("Consultar saldo").setStyle(ButtonStyle.Secondary)] : [])
   )];
   return renderComponentsV2Panel({ accentColor: parseColor(settings.color), actions: rows, description: settings.panelDescription, fields: [`**Saldo atual:** ${money(balance)}`, "**Regras obrigatorias**\n- Envie sempre uma imagem do comprovante.\n- Informe o valor correto.\n- Todas as movimentacoes sao registradas automaticamente."], image: settings.bannerMode === "none" ? null : settings.panelImage, moduleId: "fivem-finance", title: settings.panelTitle });
 }
@@ -107,7 +107,7 @@ async function createTempChannel(guild: Guild, userId: string, settings: FivemFi
 
 function tempPanel(type: "add" | "remove", userId: string) {
   const action = type === "add" ? "entrada/adicionar dinheiro" : "saida/retirar dinheiro";
-  return { components: [{ type: 17, accent_color: type === "add" ? 0x22c55e : 0xef4444, components: [{ type: 10, content: `# Registro financeiro\n**Tipo:** ${action}\n**Usuario:** <@${userId}>\n\nInforme o valor pelo botao abaixo e envie uma imagem do comprovante neste canal. O registro so finaliza quando houver valor e imagem.` }, new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}:amount`).setLabel("Informar valor").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar registro").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`${PREFIX}:close`).setLabel("Fechar canal").setStyle(ButtonStyle.Secondary))] }], flags: MessageFlags.IsComponentsV2 as const };
+  return { components: [{ type: 17, accent_color: type === "add" ? 0x22c55e : 0xef4444, components: [{ type: 10, content: `# Registro financeiro\n**Tipo:** ${action}\n**Usuario:** <@${userId}>\n\nInforme o valor pelo botao abaixo e envie uma imagem do comprovante neste canal. O registro so finaliza quando houver valor e imagem.` }, new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}:amount`).setEmoji("🧾").setLabel("Informar valor").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setEmoji("✅").setLabel("Finalizar registro").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`${PREFIX}:close`).setEmoji("🔒").setLabel("Fechar canal").setStyle(ButtonStyle.Secondary))] }], flags: MessageFlags.IsComponentsV2 as const };
 }
 
 async function showAmountModal(interaction: ButtonInteraction) {

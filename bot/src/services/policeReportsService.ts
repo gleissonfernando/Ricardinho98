@@ -27,6 +27,20 @@ const PAGE_SIZE = 25;
 const IAB_WEBHOOK_NAME = "Human Resources - NPD";
 const PANEL_TITLE = "Denúncia IAB";
 const BUTTON_LABEL = "Abrir denuncia";
+const IAB_EMOJI = {
+  alert: "🔔",
+  anonymous: "🎭",
+  archive: "🗄️",
+  assume: "🙋",
+  identified: "🪪",
+  next: "➡️",
+  previous: "⬅️",
+  submit: "📨",
+  submitCancel: "↩️",
+  submitConfirm: "✅",
+  validate: "🛡️",
+  finish: "🔒"
+} as const;
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -214,8 +228,8 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
 
 async function showIdentitySelection(interaction: StringSelectMenuInteraction, selected: ComplaintType) {
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji("🪪").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji("🎭").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`${PREFIX}:identity:identified:${selected.id}`).setLabel("Denuncia Identificada").setEmoji(IAB_EMOJI.identified).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}:identity:anonymous:${selected.id}`).setLabel("Denuncia Anonima").setEmoji(IAB_EMOJI.anonymous).setStyle(ButtonStyle.Secondary)
   );
   await interaction.followUp({
     components: [{
@@ -362,8 +376,8 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
   const actions: unknown[] = [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)];
   if (pageCount > 1) {
     actions.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:page:${Math.max(0, page - 1)}`).setEmoji("⬅️").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-      new ButtonBuilder().setCustomId(`${PREFIX}:page:${Math.min(pageCount - 1, page + 1)}`).setEmoji("➡️").setStyle(ButtonStyle.Secondary).setDisabled(page === pageCount - 1)
+      new ButtonBuilder().setCustomId(`${PREFIX}:page:${Math.max(0, page - 1)}`).setEmoji(IAB_EMOJI.previous).setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`${PREFIX}:page:${Math.min(pageCount - 1, page + 1)}`).setEmoji(IAB_EMOJI.next).setStyle(ButtonStyle.Secondary).setDisabled(page === pageCount - 1)
     ));
   }
   return renderComponentsV2Panel({
@@ -522,8 +536,8 @@ async function handleProcedureAction(
         components: [
           { type: 10, content: "## Confirmar envio\nTem certeza que deseja enviar essa denúncia para análise?\n\nDepois de confirmar, você perderá acesso ao canal e a equipe responsável receberá o ticket." },
           new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`${PREFIX}:submit_confirm`).setLabel("Confirmar envio").setEmoji("✅").setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`${PREFIX}:submit_cancel`).setLabel("Cancelar").setEmoji("↩️").setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`${PREFIX}:submit_confirm`).setLabel("Confirmar envio").setEmoji(IAB_EMOJI.submitConfirm).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(`${PREFIX}:submit_cancel`).setLabel("Cancelar").setEmoji(IAB_EMOJI.submitCancel).setStyle(ButtonStyle.Secondary)
           )
         ]
       }],
@@ -714,14 +728,14 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
   const locked = topic.status === "finished" || topic.status === "archived";
   const actions = topic.status === "draft"
     ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Confirmar envio da denúncia").setEmoji("📨").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Confirmar envio da denúncia").setEmoji(IAB_EMOJI.submit).setStyle(ButtonStyle.Danger)
     )]
     : [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir Ticket").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
-      new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Validar denúncia").setEmoji("🛡️").setStyle(ButtonStyle.Primary).setDisabled(locked || topic.status === "validated"),
-      new ButtonBuilder().setCustomId(`${PREFIX}:alert`).setLabel("Alertar denunciante").setEmoji("🔔").setStyle(ButtonStyle.Secondary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji("🗄️").setStyle(ButtonStyle.Secondary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji("🔒").setStyle(ButtonStyle.Danger).setDisabled(locked)
+      new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir Ticket").setEmoji(IAB_EMOJI.assume).setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
+      new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Validar denúncia").setEmoji(IAB_EMOJI.validate).setStyle(ButtonStyle.Primary).setDisabled(locked || topic.status === "validated"),
+      new ButtonBuilder().setCustomId(`${PREFIX}:alert`).setLabel("Alertar denunciante").setEmoji(IAB_EMOJI.alert).setStyle(ButtonStyle.Secondary).setDisabled(locked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji(IAB_EMOJI.archive).setStyle(ButtonStyle.Secondary).setDisabled(locked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji(IAB_EMOJI.finish).setStyle(ButtonStyle.Danger).setDisabled(locked)
     )];
   return renderComponentsV2Panel({
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,

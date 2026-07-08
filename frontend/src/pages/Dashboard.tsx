@@ -2961,6 +2961,16 @@ const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] =
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
+const policeReportEmojiPresets = [
+  { code: "1f6e1", emoji: "🛡️", label: "Proteção" },
+  { code: "1f694", emoji: "🚔", label: "Polícia" },
+  { code: "1f6a8", emoji: "🚨", label: "Urgente" },
+  { code: "2696", emoji: "⚖️", label: "Justiça" },
+  { code: "1f50e", emoji: "🔎", label: "Investigação" },
+  { code: "1f4e3", emoji: "📣", label: "Ouvidoria" },
+  { code: "2b50", emoji: "⭐", label: "Alto comando" },
+  { code: "1f4dd", emoji: "📝", label: "Registro" }
+];
 
 function normalizedName(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -3413,6 +3423,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
                 <TicketField disabled={!canManage} label="Emoji" onChange={(emoji) => patchComplaintType(originalIndex, { emoji: emoji || null })} value={item.emoji ?? ""} />
                 <TicketField disabled={!canManage} label="Ordem" onChange={(order) => patchComplaintType(originalIndex, { order: Number(order) || 0 })} value={String(item.order)} />
                 <div className="flex items-end"><Button disabled={!canManage} onClick={() => removeComplaintType(originalIndex)} size="icon" title="Remover tipo" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button></div>
+                <PanelEmojiPicker disabled={!canManage} onSelect={(emoji) => patchComplaintType(originalIndex, { emoji })} selected={item.emoji} />
               </div>
             ))}
           {!config.complaintTypes.length ? <div className="rounded-md border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">Cadastre ao menos um tipo para liberar a publicacao.</div> : null}
@@ -6295,6 +6306,37 @@ function RoleSelect({
   value: string;
 }) {
   return <FivemResourceSelect disabled={disabled} label={label} onChange={(nextValue) => onChange(nextValue ?? "")} options={roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }))} placeholder="Nenhum" prefix="@" value={value || null} />;
+}
+
+function PanelEmojiPicker({
+  disabled,
+  onSelect,
+  selected
+}: {
+  disabled: boolean;
+  onSelect: (emoji: string) => void;
+  selected: string | null;
+}) {
+  return (
+    <div className="md:col-span-5">
+      <p className="mb-2 text-xs font-medium text-zinc-400">Emojis recomendados</p>
+      <div className="flex flex-wrap gap-2">
+        {policeReportEmojiPresets.map((preset) => (
+          <button
+            aria-label={`Usar emoji ${preset.label}`}
+            className={`flex h-10 w-10 items-center justify-center rounded-md border bg-zinc-950 transition hover:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50 ${selected === preset.emoji ? "border-violet-400 ring-1 ring-violet-400/50" : "border-zinc-800"}`}
+            disabled={disabled}
+            key={preset.emoji}
+            onClick={() => onSelect(preset.emoji)}
+            title={preset.label}
+            type="button"
+          >
+            <img alt="" className="h-6 w-6" src={`/panel-emojis/twemoji/${preset.code}.svg`} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function FivemChannelSelect({ channels, disabled, label, onChange, placeholder, prefix = "#", value }: {

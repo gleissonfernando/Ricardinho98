@@ -57,9 +57,9 @@ function createPanelPayload(table: PriceTable) {
   });
   const actions = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:quote:${table.id}`).setLabel(table.buttonText.quote).setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${PREFIX}:plans:${table.id}`).setLabel(table.buttonText.plans).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}:support:${table.id}`).setLabel(table.buttonText.support).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`${PREFIX}:quote:${table.id}`).setEmoji("💬").setLabel(table.buttonText.quote).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`${PREFIX}:plans:${table.id}`).setEmoji("📋").setLabel(table.buttonText.plans).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${PREFIX}:support:${table.id}`).setEmoji("🎧").setLabel(table.buttonText.support).setStyle(ButtonStyle.Primary)
     )
   ];
 
