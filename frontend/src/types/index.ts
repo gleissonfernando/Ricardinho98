@@ -1135,6 +1135,7 @@ export type FivemHierarchyEntry = {
 };
 
 export type FivemHierarchyPanel = {
+  allowedRoleIds: string[];
   autoUpdateEnabled: boolean;
   autoUpdateIntervalSeconds: number;
   botId: string | null;
@@ -1157,6 +1158,7 @@ export type FivemHierarchyPanel = {
   imagePosition: "top" | "bottom" | "thumbnail" | "none";
   imageUrl: string | null;
   linkedToFivem: boolean;
+  logChannelId: string | null;
   name: string;
   panelChannelId: string | null;
   panelMessageId: string | null;

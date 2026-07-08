@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -24,7 +24,6 @@ import {
   Mic2,
   Music2,
   PlayCircle,
-  Plus,
   SmilePlus,
   Plug,
   Radio,
@@ -48,14 +47,36 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "../components/layout/dashboard-layout";
 import type { ViewId } from "../components/layout/sidebar";
+import { ClipsPanel } from "../components/clips/ClipsPanel";
+import { FacAbsencePanel } from "../components/fivem/FacAbsencePanel";
+import { FivemActionsPanel } from "../components/fivem/FivemActionsPanel";
+import { PolicePatrolReportsPanel } from "../components/fivem/PolicePatrolReportsPanel";
+import { FivemFinancePanel } from "../components/fivem/FivemFinancePanel";
+import { FivemOrdersManager } from "../components/fivem/FivemOrdersPanel";
 import { FivemResourceMultiSelect, FivemResourceSelect } from "../components/fivem/FivemResourceSelect";
+import { GiveawayPanel } from "../components/giveaway/GiveawayPanel";
+import { LogsSettingsPanel } from "../components/LogsSettingsPanel";
+import { MissionToolsPanel } from "../components/mission-tools/MissionToolsPanel";
+import { MediaLibraryPanel } from "../components/media/MediaLibraryPanel";
+import { SiteAccessPanel } from "../components/moderation/SiteAccessPanel";
 import { PanelImageSettings } from "../components/panels/PanelImageSettings";
+import { ManualPaymentsPanel } from "../components/manual-payments/ManualPaymentsPanel";
+import { PriceTablesPanel } from "../components/price-tables/PriceTablesPanel";
+import { VoiceRecorderPanel } from "../components/moderation/VoiceRecorderPanel";
+import { AccountAgeSecurityPanel } from "../components/security/AccountAgeSecurityPanel";
+import { AntiBanPanel } from "../components/security/AntiBanPanel";
+import { SelfBotProtectionPanel } from "../components/security/SelfBotProtectionPanel";
+import { AutoRolesPanel } from "../components/roles/AutoRolesPanel";
+import { KickIntegrationPanel } from "../components/social/KickIntegrationPanel";
+import { LiveNotificationsPanel } from "../components/social/LiveNotificationsPanel";
+import { MemberSocialNetworkPanel } from "../components/social/MemberSocialNetworkPanel";
+import { XMonitorPanel } from "../components/social/XMonitorPanel";
+import { WelcomePanel } from "../components/welcome/WelcomePanel";
 import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
-import { cn } from "../lib/utils";
 import { createDashboardSocket } from "../lib/socket";
 import {
   downloadEmojiZip,
@@ -95,13 +116,9 @@ import {
   patchGuildSettings,
   publishFivemGoalPanel,
   publishFivemHierarchyPanel,
-  publishPoliceFlightPanel,
-  publishPoliceRhPanel,
-  publishPoliceReportsPanel,
   publishManualRegistrationPanel,
   publishRulesPanel,
   refreshApplicationEmojis,
-  registerDefaultFivemHierarchyPanels,
   removeAllApplicationEmojis,
   resendEmojiFromLibrary,
   saveAdvancedModuleConfig,
@@ -120,7 +137,6 @@ import {
   previewServerBackupRestore,
   restoreServerBackup,
   runTagVerificationNow,
-  uploadPoliceRhPanelImage,
   validateEmojiCloneBotToken
 } from "../lib/api";
 import type {
@@ -177,33 +193,6 @@ import type {
   TicketPanelOption,
   XAccount
 } from "../types";
-
-const ClipsPanel = lazy(() => import("../components/clips/ClipsPanel").then((module) => ({ default: module.ClipsPanel })));
-const FacAbsencePanel = lazy(() => import("../components/fivem/FacAbsencePanel").then((module) => ({ default: module.FacAbsencePanel })));
-const FivemActionsPanel = lazy(() => import("../components/fivem/FivemActionsPanel").then((module) => ({ default: module.FivemActionsPanel })));
-const CommunicationPanel = lazy(() => import("../components/communication/CommunicationPanel").then((module) => ({ default: module.CommunicationPanel })));
-const PolicePatrolReportsPanel = lazy(() => import("../components/fivem/PolicePatrolReportsPanel").then((module) => ({ default: module.PolicePatrolReportsPanel })));
-const PoliceCoursesPanel = lazy(() => import("../components/police/PoliceCoursesPanel").then((module) => ({ default: module.PoliceCoursesPanel })));
-const FivemFinancePanel = lazy(() => import("../components/fivem/FivemFinancePanel").then((module) => ({ default: module.FivemFinancePanel })));
-const FivemOrdersManager = lazy(() => import("../components/fivem/FivemOrdersPanel").then((module) => ({ default: module.FivemOrdersManager })));
-const GiveawayPanel = lazy(() => import("../components/giveaway/GiveawayPanel").then((module) => ({ default: module.GiveawayPanel })));
-const LogsSettingsPanel = lazy(() => import("../components/LogsSettingsPanel").then((module) => ({ default: module.LogsSettingsPanel })));
-const MissionToolsPanel = lazy(() => import("../components/mission-tools/MissionToolsPanel").then((module) => ({ default: module.MissionToolsPanel })));
-const MediaLibraryPanel = lazy(() => import("../components/media/MediaLibraryPanel").then((module) => ({ default: module.MediaLibraryPanel })));
-const SiteAccessPanel = lazy(() => import("../components/moderation/SiteAccessPanel").then((module) => ({ default: module.SiteAccessPanel })));
-const OpenPointNotificationPanel = lazy(() => import("../components/open-point/OpenPointNotificationPanel").then((module) => ({ default: module.OpenPointNotificationPanel })));
-const ManualPaymentsPanel = lazy(() => import("../components/manual-payments/ManualPaymentsPanel").then((module) => ({ default: module.ManualPaymentsPanel })));
-const PriceTablesPanel = lazy(() => import("../components/price-tables/PriceTablesPanel").then((module) => ({ default: module.PriceTablesPanel })));
-const VoiceRecorderPanel = lazy(() => import("../components/moderation/VoiceRecorderPanel").then((module) => ({ default: module.VoiceRecorderPanel })));
-const AccountAgeSecurityPanel = lazy(() => import("../components/security/AccountAgeSecurityPanel").then((module) => ({ default: module.AccountAgeSecurityPanel })));
-const AntiBanPanel = lazy(() => import("../components/security/AntiBanPanel").then((module) => ({ default: module.AntiBanPanel })));
-const SelfBotProtectionPanel = lazy(() => import("../components/security/SelfBotProtectionPanel").then((module) => ({ default: module.SelfBotProtectionPanel })));
-const AutoRolesPanel = lazy(() => import("../components/roles/AutoRolesPanel").then((module) => ({ default: module.AutoRolesPanel })));
-const KickIntegrationPanel = lazy(() => import("../components/social/KickIntegrationPanel").then((module) => ({ default: module.KickIntegrationPanel })));
-const LiveNotificationsPanel = lazy(() => import("../components/social/LiveNotificationsPanel").then((module) => ({ default: module.LiveNotificationsPanel })));
-const MemberSocialNetworkPanel = lazy(() => import("../components/social/MemberSocialNetworkPanel").then((module) => ({ default: module.MemberSocialNetworkPanel })));
-const XMonitorPanel = lazy(() => import("../components/social/XMonitorPanel").then((module) => ({ default: module.XMonitorPanel })));
-const WelcomePanel = lazy(() => import("../components/welcome/WelcomePanel").then((module) => ({ default: module.WelcomePanel })));
 
 type DashboardProps = {
   auth: AuthResponse;
@@ -495,6 +484,13 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "fivem-absence"
   },
   {
+    id: "police-absences",
+    title: "Ausencia Policial",
+    description: "Solicitacoes, analise, cargo temporario e historico de ausencia para oficiais.",
+    icon: CalendarClock,
+    view: "police-absence"
+  },
+  {
     id: "fivem-orders",
     title: "Encomendas FiveM",
     description: "Controle separado para pedidos, fila, producao, entrega e historico de encomendas.",
@@ -521,76 +517,6 @@ const moduleCatalog: ModuleDefinition[] = [
     description: "Controle separado de metas por membro, canais individuais, fotos e registros via Components V2.",
     icon: ListChecks,
     view: "fivem-goals"
-  },
-  {
-    id: "fivem-hierarchy",
-    title: "Hierarquia Policial",
-    description: "Painel automatico de hierarquia por cargos, com publicacao e atualizacao no Discord.",
-    icon: Users,
-    view: "fivem-hierarchy"
-  },
-  {
-    id: "police-actions",
-    title: "Acoes Policiais",
-    description: "Controle de acoes policiais com configuracao propria para a arquitetura da policia.",
-    icon: Activity,
-    view: "police-actions"
-  },
-  {
-    id: "police-patrol-reports",
-    title: "Relatorios Policiais",
-    description: "Sistema de relatorios de patrulhamento da Policia com canais temporarios e exportacao.",
-    icon: ShieldCheck,
-    view: "police-patrol-reports"
-  },
-  {
-    id: "police-reports",
-    title: "Denúncia IAB",
-    description: "Painel de denuncias internas com tipos configuraveis, canal temporario e auditoria.",
-    icon: ShieldAlert,
-    view: "police-reports"
-  },
-  {
-    id: "police-flight",
-    title: "Escalacao DAF",
-    description: "Painel policial em Components V2 para escala de piloto e atirador.",
-    icon: Radio,
-    view: "police-flight"
-  },
-  {
-    id: "police-rh",
-    title: "RH - Ausencias e Adornos",
-    description: "Gerencia ausencias, adornos, aprovacoes e imagens do RH policial.",
-    icon: CalendarClock,
-    view: "rh-ausencias-adornos"
-  },
-  {
-    id: "police-courses",
-    title: "Cursos / Treinamentos",
-    description: "Cadastro, publicacao e controle de participantes em cursos policiais.",
-    icon: ListChecks,
-    view: "police-courses"
-  },
-  {
-    id: "dm-system",
-    title: "Sistema de DM",
-    description: "Envio e gerenciamento de comunicacoes diretas pelo sistema policial.",
-    icon: AtSign,
-    view: "dm-system"
-  },
-  {
-    id: "summons-system",
-    title: "Intimacoes",
-    description: "Cria e acompanha intimacoes policiais com historico e controle de entrega.",
-    icon: ShieldAlert,
-    view: "summons-system"
-  },
-  {
-    id: "open-point-notification",
-    title: "Ponto Aberto",
-    description: "Notifica ponto aberto e centraliza avisos operacionais da policia.",
-    icon: Bell,
-    view: "open-point-notification"
   },
   {
     id: "verification",
@@ -662,13 +588,9 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-absence": "fivem-absences",
   "fivem-hierarchy": "fivem-hierarchy",
   "fivem-actions": "fivem-actions",
+  "police-absence": "police-absences",
   "police-actions": "police-actions",
   "police-patrol-reports": "police-patrol-reports",
-  "police-reports": "police-reports",
-  "police-flight": "police-flight",
-  "police-rh": "police-rh",
-  "police-courses": "police-courses",
-  "rh-ausencias-adornos": "police-rh",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -679,9 +601,6 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-finance": "fivem-finance",
   "fivem-goals": "fivem-goals",
   "manual-registration": "manual-registration",
-  "dm-system": "dm-system",
-  "open-point-notification": "open-point-notification",
-  "summons-system": "summons-system",
   "voice-recorder": "voice-recorder",
   music: "music",
   "self-bot-protection": "safe-bot",
@@ -711,28 +630,11 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
 
 const settingsModuleIds = new Set(["tickets", "avisos", "network", "server-generator"]);
 
-function readInitialDashboardView(): ViewId {
-  if (window.location.pathname === "/dashboard/rh-ausencias-adornos") {
-    return "rh-ausencias-adornos";
-  }
-
-  try {
-    const view = new URLSearchParams(window.location.search).get("view");
-    return view === "police-rh" || view === "rh-ausencias-adornos" ? "rh-ausencias-adornos" : "overview";
-  } catch {
-    return "overview";
-  }
-}
-
-function dashboardPathForView(view: ViewId) {
-  return view === "rh-ausencias-adornos" ? "/dashboard/rh-ausencias-adornos" : "/dashboard";
-}
-
 export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardProps) {
   const [dashboardProfile, setDashboardProfile] = useState<DashboardMeResponse | null>(null);
   const [dashboardProfileLoading, setDashboardProfileLoading] = useState(true);
   const [dashboardRouteError, setDashboardRouteError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<ViewId>(() => readInitialDashboardView());
+  const [activeView, setActiveView] = useState<ViewId>("overview");
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(
     auth.user.selectedGuildId ?? auth.guilds[0]?.id ?? CONFIGURED_GUILD_ID
@@ -788,10 +690,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
     selectedBot ? selectedBot.enabledModules.includes(moduleId) : canManageDashboard
   );
   const availableModules = useMemo(
-    () => moduleCatalog.filter((module) => (
-      enabledModules.includes(module.id)
-      || (module.id === "police-patrol-reports" && enabledModules.includes("patrol-reports"))
-    )),
+    () => moduleCatalog.filter((module) => enabledModules.includes(module.id)),
     [enabledModulesKey]
   );
 
@@ -1096,11 +995,6 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
     }
   }
 
-  function handleChangeView(view: ViewId) {
-    setActiveView(view);
-    window.history.pushState({}, "", dashboardPathForView(view));
-  }
-
   if (dashboardRouteError) {
     return <DashboardRouteError message={dashboardRouteError} />;
   }
@@ -1112,7 +1006,7 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
       dashboardUser={dashboardProfile?.user}
       enabledModules={enabledModules}
       guilds={scopedDashboardGuilds}
-      onChangeView={handleChangeView}
+      onChangeView={setActiveView}
       onLogout={onLogout}
       onSelectBot={handleSelectBot}
       onSelectGuild={handleSelectGuild}
@@ -1121,20 +1015,19 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
       status={displayedBotStatus}
       user={auth.user}
     >
-      <Suspense fallback={<DashboardPanelLoading />}>
-        <motion.div
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-5"
-          initial={{ opacity: 0, y: 14 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-        >
+      <motion.div
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-5"
+        initial={{ opacity: 0, y: 14 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
         <UserDashboardHeader
           bot={selectedBot}
           selectedGuild={selectedGuild}
           status={displayedBotStatus}
         />
 
-        {activeView !== "delete-channels" && activeView !== "fivem-hierarchy" && activeView !== "police-rh" && activeView !== "rh-ausencias-adornos" ? (
+        {activeView !== "delete-channels" ? (
           <PanelImageSettings
             botId={activeBotId}
             canManage={canManageDashboard}
@@ -1391,6 +1284,14 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             guild={selectedGuild}
           />
         ) : null}
+        {activeView === "police-absence" ? (
+          <FacAbsencePanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "police-absences", canManageDashboard)}
+            guild={selectedGuild}
+            variant="police"
+          />
+        ) : null}
         {activeView === "fivem-hierarchy" ? (
           <FivemHierarchyPanel
             botId={activeBotId}
@@ -1418,27 +1319,6 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
           <PolicePatrolReportsPanel
             botId={activeBotId}
             canManage={canManageModule(selectedBot, "police-patrol-reports", canManageDashboard)}
-            guild={selectedGuild}
-          />
-        ) : null}
-        {activeView === "police-reports" ? (
-          <PoliceReportsPanel
-            botId={activeBotId}
-            canManage={canManageModule(selectedBot, "police-reports", canManageDashboard)}
-            guild={selectedGuild}
-          />
-        ) : null}
-        {activeView === "police-flight" ? (
-          <PoliceFlightPanel
-            botId={activeBotId}
-            canManage={canManageModule(selectedBot, "police-flight", canManageDashboard)}
-            guild={selectedGuild}
-          />
-        ) : null}
-        {activeView === "police-courses" && selectedGuild ? (
-          <PoliceCoursesPanel
-            botId={activeBotId}
-            canManage={canManageModule(selectedBot, "police-courses", canManageDashboard)}
             guild={selectedGuild}
           />
         ) : null}
@@ -1491,18 +1371,6 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             guild={selectedGuild}
           />
         ) : null}
-        {activeView === "dm-system" ? (
-          <CommunicationPanel type="dm" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "dm-system", canManageDashboard)} />
-        ) : null}
-        {activeView === "summons-system" ? (
-          <CommunicationPanel type="summons" botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)} />
-        ) : null}
-        {activeView === "open-point-notification" ? (
-          <OpenPointNotificationPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "open-point-notification", canManageDashboard)} />
-        ) : null}
-        {activeView === "police-rh" || activeView === "rh-ausencias-adornos" ? (
-          <PoliceRhPanel botId={activeBotId} guild={selectedGuild} canManage={canManageModule(selectedBot, "police-rh", canManageDashboard)} />
-        ) : null}
         {activeView === "settings" ? (
           <SettingsView
             botId={activeBotId}
@@ -1521,20 +1389,8 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             tickets={tickets}
           />
         ) : null}
-        </motion.div>
-      </Suspense>
+      </motion.div>
     </DashboardLayout>
-  );
-}
-
-function DashboardPanelLoading() {
-  return (
-    <Card>
-      <CardContent className="flex min-h-[220px] items-center justify-center text-sm text-zinc-400">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Carregando painel
-      </CardContent>
-    </Card>
   );
 }
 
@@ -1759,7 +1615,7 @@ function GlobalBlacklistPanel({ botId, canManage, guild }: { botId?: string | nu
             <CardTitle className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-red-300" /> Blacklist Global</CardTitle>
             <CardDescription>Entrada automatica somente por eventos do SafeBot ou por acao manual autorizada.</CardDescription>
           </div>
-          <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
+          <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
             Salvar
           </Button>
@@ -2081,7 +1937,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
               <MultiRoleSelect disabled={disabled} label="Cargos autorizados" onChange={(values) => void patchSettings({ authorizedRoleIds: values })} roles={roles.filter((role) => !role.managed)} values={settings.authorizedRoleIds} />
             </div>
           </div>
-          <Button disabled={disabled || saving} onClick={() => createNow()}>
+          <Button disabled={disabled || saving} onClick={() => void createNow()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Criar backup agora
           </Button>
@@ -2108,8 +1964,8 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
                   {backup.statusMessage ? <p className="mt-2 text-xs text-amber-300">{backup.statusMessage}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={workingBackupId === backup.id} onClick={() => previewRestore(backup)} variant="secondary">{workingBackupId === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Restaurar</Button>
-                  <Button disabled={disabled || workingBackupId === backup.id} onClick={() => removeBackup(backup.id)} variant="destructive"><Trash2 className="h-4 w-4" />Apagar</Button>
+                  <Button disabled={workingBackupId === backup.id} onClick={() => void previewRestore(backup)} variant="secondary">{workingBackupId === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Restaurar</Button>
+                  <Button disabled={disabled || workingBackupId === backup.id} onClick={() => void removeBackup(backup.id)} variant="destructive"><Trash2 className="h-4 w-4" />Apagar</Button>
                 </div>
               </div>
             </div>
@@ -2155,7 +2011,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {serverBackupParts.map((part) => <AdvancedToggleField checked={selectedParts.includes(part.id)} disabled={!canManage} key={`send-${part.id}`} label={part.label} onChange={(checked) => togglePart(part.id, checked)} />)}
           </div>
-          <Button disabled={!canManage || !sendBackupId || !targetGuildId || workingBackupId === sendBackupId} onClick={() => previewSendRestore()} variant="secondary">
+          <Button disabled={!canManage || !sendBackupId || !targetGuildId || workingBackupId === sendBackupId} onClick={() => void previewSendRestore()} variant="secondary">
             {workingBackupId === sendBackupId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             Ver previa do destino
           </Button>
@@ -2168,7 +2024,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
             </div>
           ) : null}
           <AdvancedTextField disabled={!canManage || sendPreview?.canRestore === false} label="Confirmacao para servidor destino" onChange={setSendConfirmation} placeholder="Digite CONFIRMAR" value={sendConfirmation} />
-          <Button disabled={!canManage || !sendPreview?.canRestore || sendConfirmation !== "CONFIRMAR" || workingBackupId === sendBackupId} onClick={() => confirmSendRestore()} variant="destructive">
+          <Button disabled={!canManage || !sendPreview?.canRestore || sendConfirmation !== "CONFIRMAR" || workingBackupId === sendBackupId} onClick={() => void confirmSendRestore()} variant="destructive">
             {workingBackupId === sendBackupId ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
             Confirmar envio/restauracao
           </Button>
@@ -2199,7 +2055,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {serverBackupParts.map((part) => <AdvancedToggleField checked={selectedParts.includes(part.id)} disabled={!canManage} key={part.id} label={part.label} onChange={(checked) => togglePart(part.id, checked)} />)}
             </div>
-            <Button disabled={workingBackupId === selectedBackup.id || !selectedParts.length} onClick={() => previewRestore(selectedBackup)} variant="secondary">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Atualizar previa</Button>
+            <Button disabled={workingBackupId === selectedBackup.id || !selectedParts.length} onClick={() => void previewRestore(selectedBackup)} variant="secondary">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Atualizar previa</Button>
             {preview ? (
               <div className="rounded-lg border border-zinc-800 bg-black/40 p-4 text-sm text-zinc-300">
                 <p className="font-semibold text-white">Previa: {preview.summary.roles} cargos, {preview.summary.categories} categorias, {preview.summary.channels} canais, {preview.summary.emojis} emojis, {preview.summary.stickers} stickers e {preview.summary.settings} configuracoes.</p>
@@ -2208,7 +2064,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
               </div>
             ) : null}
             <AdvancedTextField disabled={!canManage || preview?.canRestore === false} label="Confirmacao" onChange={setConfirmation} placeholder="Digite CONFIRMAR" value={confirmation} />
-            <Button disabled={!canManage || !preview?.canRestore || confirmation !== "CONFIRMAR" || workingBackupId === selectedBackup.id} onClick={() => confirmRestore()} variant="destructive">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}Confirmar restauracao</Button>
+            <Button disabled={!canManage || !preview?.canRestore || confirmation !== "CONFIRMAR" || workingBackupId === selectedBackup.id} onClick={() => void confirmRestore()} variant="destructive">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}Confirmar restauracao</Button>
           </CardContent>
         </Card>
       ) : null}
@@ -2503,12 +2359,12 @@ function AdvancedSecurityModulePanel({
             voiceChannels={voiceChannels}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={disabled} onClick={() => saveConfig()}>
+            <Button disabled={disabled} onClick={() => void saveConfig()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar
             </Button>
             {moduleId === "tag-verification" ? (
-              <Button disabled={disabled || !enabled || runningNow} onClick={() => verifyTagNow()} variant="outline">
+              <Button disabled={disabled || !enabled || runningNow} onClick={() => void verifyTagNow()} variant="outline">
                 {runningNow ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Verificar agora
               </Button>
@@ -2922,527 +2778,6 @@ function FivemView({
   );
 }
 
-type PoliceReportsConfig = {
-  enabled: boolean;
-  allowAnonymous: boolean;
-  panelChannelId: string | null;
-  panelChannelIds: string[];
-  categoryId: string | null;
-  categoryIds: string[];
-  highCommandCategoryId: string | null;
-  highCommandRoleIds: string[];
-  archiveCategoryId: string | null;
-  archiveCategoryIds: string[];
-  logChannelId: string | null;
-  logChannelIds: string[];
-  responsibleRoleId: string | null;
-  responsibleRoleIds: string[];
-  maxChannelMinutes: number;
-  initialMessage: string;
-  procedureText: string;
-  panelImageUrl: string;
-  channelImageUrl: string;
-  footerImageUrl: string;
-  imagePosition: "banner" | "thumbnail" | "top" | "below_title" | "middle" | "bottom" | "side" | "footer" | "before_buttons" | "below_text" | "above_buttons" | "none";
-  panelTitle: string;
-  panelDescription: string;
-  buttonLabel: string;
-  color: string;
-  thumbnailUrl: string;
-  panelMessageId: string | null;
-  complaintTypes: Array<{ id: string; name: string; description: string | null; emoji: string | null; order: number }>;
-};
-
-const defaultPoliceReportComplaintTypes: PoliceReportsConfig["complaintTypes"] = [
-  { id: "denuncia-oficiais", name: "Denúncia de Oficiais", description: "Relatar conduta inadequada de oficiais.", emoji: "🛡️", order: 1 },
-  { id: "denuncia-alto-comando", name: "Denúncia de Alto Comando", description: "Relatar ocorrencias envolvendo alto comando.", emoji: "⭐", order: 2 },
-  { id: "corregedoria", name: "Corregedoria", description: "Encaminhamento direto para a corregedoria.", emoji: "⚖️", order: 3 },
-  { id: "ouvidoria", name: "Ouvidoria", description: "Enviar manifestacoes, duvidas ou solicitacoes.", emoji: "📣", order: 4 },
-  { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
-  { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
-];
-const policeReportEmojiPresets = [
-  { code: "1f6e1", emoji: "🛡️", label: "Proteção" },
-  { code: "1f694", emoji: "🚔", label: "Polícia" },
-  { code: "1f6a8", emoji: "🚨", label: "Urgente" },
-  { code: "2696", emoji: "⚖️", label: "Justiça" },
-  { code: "1f50e", emoji: "🔎", label: "Investigação" },
-  { code: "1f4e3", emoji: "📣", label: "Ouvidoria" },
-  { code: "2b50", emoji: "⭐", label: "Alto comando" },
-  { code: "1f4dd", emoji: "📝", label: "Registro" }
-];
-
-function normalizedName(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function mergeDefaultPoliceReportTypes(types: PoliceReportsConfig["complaintTypes"] = []) {
-  const officialAliases = new Set(["denuncia de oficial", "denuncia de oficiais"]);
-  const matched = new Set<string>();
-  const required = defaultPoliceReportComplaintTypes.map((fallback) => {
-    const existing = types.find((item) => item.id === fallback.id || normalizedName(item.name) === normalizedName(fallback.name) || (fallback.id === "denuncia-oficiais" && officialAliases.has(normalizedName(item.name))));
-    if (existing) matched.add(existing.id);
-    return existing ? { ...existing, id: fallback.id, name: fallback.name, emoji: fallback.emoji, order: fallback.order } : fallback;
-  });
-  const custom = types.filter((item) => !matched.has(item.id)).map((item, index) => ({ ...item, order: required.length + index + 1 }));
-  return [...required, ...custom];
-}
-
-function hasHighCommandComplaintType(types: PoliceReportsConfig["complaintTypes"]) {
-  return types.some((type) => {
-    const normalized = normalizedName(type.name);
-    return type.id === "denuncia-alto-comando"
-      || normalized.includes("alto comando")
-      || normalized.includes("high command")
-      || normalized.includes("hcmd");
-  });
-}
-
-const defaultPoliceReportsConfig: PoliceReportsConfig = {
-  enabled: false,
-  allowAnonymous: true,
-  panelChannelId: null,
-  panelChannelIds: [],
-  categoryId: null,
-  categoryIds: [],
-  highCommandCategoryId: null,
-  highCommandRoleIds: [],
-  archiveCategoryId: null,
-  archiveCategoryIds: [],
-  logChannelId: null,
-  logChannelIds: [],
-  responsibleRoleId: null,
-  responsibleRoleIds: [],
-  maxChannelMinutes: 1440,
-  initialMessage: "A equipe responsavel vai dar continuidade ao procedimento por este canal.",
-  procedureText: "Descreva o ocorrido com detalhes e aguarde a analise da equipe responsavel.",
-  panelImageUrl: "",
-  channelImageUrl: "",
-  footerImageUrl: "",
-  imagePosition: "banner",
-  panelTitle: "Denúncia IAB",
-  panelDescription: "Registre uma denuncia de forma segura e sigilosa.",
-  buttonLabel: "Abrir denuncia",
-  color: "#7c3aed",
-  thumbnailUrl: "",
-  panelMessageId: null,
-  complaintTypes: defaultPoliceReportComplaintTypes
-};
-
-function normalizePoliceReportsConfig(config: Partial<PoliceReportsConfig>): Partial<PoliceReportsConfig> {
-  const responsibleRoleId = config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? null;
-  return {
-    ...config,
-    buttonLabel: config.buttonLabel === "Selecionar denuncia" ? "Abrir denuncia" : config.buttonLabel,
-    panelTitle: config.panelTitle === "Sistema de Denuncias IAB" ? "Denúncia IAB" : config.panelTitle,
-    responsibleRoleId,
-    responsibleRoleIds: config.responsibleRoleIds ?? (responsibleRoleId ? [responsibleRoleId] : [])
-  };
-}
-
-type PoliceFlightConfig = {
-  enabled: boolean;
-  panelChannelId: string | null;
-  panelChannelIds: string[];
-  logChannelId: string | null;
-  logChannelIds: string[];
-  categoryId: string | null;
-  categoryIds: string[];
-  allowedRoleIds: string[];
-  pilotRoleIds: string[];
-  shooterRoleIds: string[];
-  closeRoleIds: string[];
-  adminRoleIds: string[];
-  titleText: string;
-  descriptionText: string;
-  pilotText: string;
-  shooterText: string;
-  enterButtonText: string;
-  closeButtonText: string;
-  enterButtonEmoji: string;
-  closeButtonEmoji: string;
-  embedColor: string;
-  allowReplaceOccupiedRole: boolean;
-  maxPilots: number;
-  maxShooters: number;
-};
-
-const defaultPoliceFlightConfig: PoliceFlightConfig = {
-  enabled: false,
-  panelChannelId: null,
-  panelChannelIds: [],
-  logChannelId: null,
-  logChannelIds: [],
-  categoryId: null,
-  categoryIds: [],
-  allowedRoleIds: [],
-  pilotRoleIds: [],
-  shooterRoleIds: [],
-  closeRoleIds: [],
-  adminRoleIds: [],
-  titleText: "🚁 PAINEL DE ESCALACAO DE VOO — DAF",
-  descriptionText: "Use Entrar na Escalacao para escolher Piloto ou Atirador.\nUse Encerrar Escalacao para finalizar apenas a sua propria escala.",
-  pilotText: "Responsavel pelo voo",
-  shooterText: "Responsavel pela cobertura",
-  enterButtonText: "Entrar na Escalacao",
-  closeButtonText: "Encerrar Escalacao",
-  enterButtonEmoji: "✈️",
-  closeButtonEmoji: "🔒",
-  embedColor: "#3b82f6",
-  allowReplaceOccupiedRole: false,
-  maxPilots: 1,
-  maxShooters: 1
-};
-
-function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
-  const [config, setConfig] = useState<PoliceFlightConfig>(defaultPoliceFlightConfig);
-  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
-  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    if (!botId || !guild) return;
-    setLoading(true);
-    Promise.all([getAdvancedModuleConfig(botId, guild.id, "police-flight"), getGuildLiveOptions(guild.id, botId)])
-      .then(([module, options]) => {
-        if (!active) return;
-        setConfig({ ...defaultPoliceFlightConfig, ...(module.config as Partial<PoliceFlightConfig>) });
-        setChannels(options.channels);
-        setRoles(options.roles);
-      })
-      .catch((error) => active && setMessage(readResponseMessage(error) ?? "Nao foi possivel carregar a Escalacao DAF."))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
-  }, [botId, guild?.id]);
-
-  function patch(value: Partial<PoliceFlightConfig>) {
-    setConfig((current) => ({ ...current, ...value }));
-  }
-
-  async function save() {
-    if (!botId || !guild) return;
-    setLoading(true);
-    setMessage(null);
-    try {
-      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-flight", { config: config as unknown as Record<string, unknown>, guildName: guild.name });
-      setConfig({ ...defaultPoliceFlightConfig, ...(saved.config as Partial<PoliceFlightConfig>) });
-      setMessage("Escalacao de voo salva.");
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Nao foi possivel salvar a Escalacao DAF.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function publish() {
-    if (!botId || !guild) return;
-    setLoading(true);
-    setMessage(null);
-    try {
-      await saveAdvancedModuleConfig(botId, guild.id, "police-flight", { config: config as unknown as Record<string, unknown>, guildName: guild.name });
-      const result = await publishPoliceFlightPanel(botId, guild.id);
-      setMessage(`Painel DAF publicado com sucesso em #${result.channelName}.`);
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Nao foi possivel publicar o painel DAF.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!guild) return <Card><CardContent className="p-6 text-sm text-zinc-500">Selecione um servidor.</CardContent></Card>;
-
-  return (
-    <div className="space-y-4">
-      {message ? <div className="rounded-md border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100">{message}</div> : null}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Radio className="h-5 w-5 text-sky-300" /> Escalacao de Voo DAF</CardTitle>
-          <CardDescription>Painel policial em Components V2 para Piloto e Atirador.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2">
-            <span className="text-sm font-medium text-zinc-200">Sistema ativo</span>
-            <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
-            <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Opcional" value={config.logChannelId} />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <TicketField disabled={!canManage || loading} label="Titulo" onChange={(titleText) => patch({ titleText })} value={config.titleText} />
-            <TicketField disabled={!canManage || loading} label="Cor do painel" onChange={(embedColor) => patch({ embedColor })} value={config.embedColor} />
-            <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(descriptionText) => patch({ descriptionText })} value={config.descriptionText} />
-            <TicketArea disabled={!canManage || loading} label="Texto do Piloto" onChange={(pilotText) => patch({ pilotText })} value={config.pilotText} />
-            <TicketArea disabled={!canManage || loading} label="Texto do Atirador" onChange={(shooterText) => patch({ shooterText })} value={config.shooterText} />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <TicketField disabled={!canManage || loading} label="Texto botao entrar" onChange={(enterButtonText) => patch({ enterButtonText })} value={config.enterButtonText} />
-            <TicketField disabled={!canManage || loading} label="Texto botao encerrar" onChange={(closeButtonText) => patch({ closeButtonText })} value={config.closeButtonText} />
-            <TicketField disabled={!canManage || loading} label="Emoji entrar" onChange={(enterButtonEmoji) => patch({ enterButtonEmoji })} value={config.enterButtonEmoji} />
-            <TicketField disabled={!canManage || loading} label="Emoji encerrar" onChange={(closeButtonEmoji) => patch({ closeButtonEmoji })} value={config.closeButtonEmoji} />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <MultiRoleSelect disabled={!canManage || loading} label="Cargos que podem usar" onChange={(allowedRoleIds) => patch({ allowedRoleIds })} roles={roles} values={config.allowedRoleIds} />
-            <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Piloto" onChange={(pilotRoleIds) => patch({ pilotRoleIds })} roles={roles} values={config.pilotRoleIds} />
-            <MultiRoleSelect disabled={!canManage || loading} label="Cargos de Atirador" onChange={(shooterRoleIds) => patch({ shooterRoleIds })} roles={roles} values={config.shooterRoleIds} />
-            <MultiRoleSelect disabled={!canManage || loading} label="Cargos administrativos" onChange={(closeRoleIds) => patch({ closeRoleIds })} roles={roles} values={config.closeRoleIds} />
-            <MultiRoleSelect disabled={!canManage || loading} label="Administradores" onChange={(adminRoleIds) => patch({ adminRoleIds })} roles={roles} values={config.adminRoleIds} />
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <TicketField disabled={!canManage || loading} label="Limite de pilotos" onChange={(value) => patch({ maxPilots: Math.max(1, Number(value) || 1) })} value={String(config.maxPilots)} />
-            <TicketField disabled={!canManage || loading} label="Limite de atiradores" onChange={(value) => patch({ maxShooters: Math.max(1, Number(value) || 1) })} value={String(config.maxShooters)} />
-            <label className="flex items-center gap-2 rounded-md border border-zinc-800 px-3 py-2 text-sm text-zinc-300">
-              <input checked={config.allowReplaceOccupiedRole} disabled={!canManage || loading} onChange={(event) => patch({ allowReplaceOccupiedRole: event.target.checked })} type="checkbox" />
-              Permitir substituir funcao ocupada
-            </label>
-          </div>
-          <PanelImageSettings botId={botId} canManage={canManage} guildId={guild.id} panelId="police-flight" panelLabel="Escalacao DAF" />
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || loading} onClick={() => save()} variant="outline">Salvar</Button>
-            <Button disabled={!canManage || loading || !config.enabled || !config.panelChannelId} onClick={() => publish()}>Enviar painel</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
-  const [config, setConfig] = useState<PoliceReportsConfig>(defaultPoliceReportsConfig);
-  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
-  const [categories, setCategories] = useState<GuildChannelOption[]>([]);
-  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!botId || !guild) return;
-    let active = true;
-    setLoading(true);
-    Promise.all([getAdvancedModuleConfig(botId, guild.id, "police-reports"), getGuildLiveOptions(guild.id, botId)])
-      .then(([module, options]) => {
-        if (!active) return;
-        const savedConfig = module.config as Partial<PoliceReportsConfig>;
-        setConfig({ ...defaultPoliceReportsConfig, ...normalizePoliceReportsConfig(savedConfig), complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
-        setChannels(options.channels);
-        setCategories((options.categories ?? []).map((category) => ({ ...category, parentId: null, type: "text" as const })));
-        setRoles(options.roles);
-      })
-      .catch(() => active && setError("Nao foi possivel carregar a Denúncia IAB."))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
-  }, [botId, guild?.id]);
-
-  function patch(value: Partial<PoliceReportsConfig>) {
-    setConfig((current) => ({ ...current, ...value }));
-  }
-
-  function addComplaintType() {
-    patch({ complaintTypes: [...config.complaintTypes, { id: `denuncia-${Date.now()}`, name: "", description: null, emoji: null, order: config.complaintTypes.length + 1 }] });
-  }
-
-  function patchComplaintType(index: number, value: Partial<PoliceReportsConfig["complaintTypes"][number]>) {
-    patch({ complaintTypes: config.complaintTypes.map((item, itemIndex) => itemIndex === index ? { ...item, ...value } : item) });
-  }
-
-  function removeComplaintType(index: number) {
-    patch({ complaintTypes: config.complaintTypes.filter((_, itemIndex) => itemIndex !== index).map((item, itemIndex) => ({ ...item, order: itemIndex + 1 })) });
-  }
-
-  async function save() {
-    if (!botId || !guild) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      if (config.enabled && !config.panelChannelId) {
-        setError("Selecione o canal onde o painel sera enviado.");
-        return;
-      }
-      if (config.enabled && !config.categoryId) {
-        setError("Selecione a categoria onde os canais temporarios serao criados.");
-        return;
-      }
-      if (config.enabled && !config.responsibleRoleId) {
-        setError("Selecione o cargo responsavel pelas denuncias da IAB.");
-        return;
-      }
-      if (config.enabled && hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
-        setError("Configure a categoria e os cargos do Alto Comando para as denuncias de Alto Comando.");
-        return;
-      }
-      if (config.enabled && !config.archiveCategoryId) {
-        setError("Selecione a categoria para onde as denuncias finalizadas serao movidas.");
-        return;
-      }
-      const module = await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
-      const savedConfig = module.config as Partial<PoliceReportsConfig>;
-      setConfig({ ...defaultPoliceReportsConfig, ...normalizePoliceReportsConfig(savedConfig), complaintTypes: mergeDefaultPoliceReportTypes(savedConfig.complaintTypes) });
-      setMessage("Configuracao do IAB salva.");
-    } catch {
-      setError("Nao foi possivel salvar a configuracao do IAB.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function publish() {
-    if (!botId || !guild) return;
-    if (!config.complaintTypes.length) {
-      setError("Cadastre ao menos um tipo de denuncia antes de publicar o painel.");
-      return;
-    }
-    if (config.complaintTypes.some((item) => !item.name.trim())) {
-      setError("Informe o nome de todos os tipos de denuncia.");
-      return;
-    }
-    if (!config.panelChannelId || !config.categoryId || !config.archiveCategoryId || !config.responsibleRoleId) {
-      setError("Configure o canal do painel, a categoria temporaria, a categoria de finalizacao e o cargo responsavel antes de publicar.");
-      return;
-    }
-    if (hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
-      setError("Configure a categoria e os cargos do Alto Comando antes de publicar.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await saveAdvancedModuleConfig(botId, guild.id, "police-reports", { config, guildName: guild.name });
-      await publishPoliceReportsPanel(botId, guild.id);
-      setMessage("Painel de denuncias enviado para atualizacao no Discord.");
-    } catch (cause) {
-      setError(readResponseMessage(cause) ?? "Nao foi possivel publicar o painel de denuncias.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card className="border-violet-500/15 bg-zinc-950/75">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-violet-300" /> Denúncia IAB</CardTitle>
-            <CardDescription>Configuração do painel de denúncias internas.</CardDescription>
-          </div>
-          <div className="flex items-center gap-3">
-            <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
-            <Button disabled={!canManage || !botId || !guild || loading || saving} onClick={() => save()} size="sm" type="button">
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar
-            </Button>
-            <Button disabled={!canManage || !botId || !guild || loading || saving || !config.complaintTypes.length} onClick={() => publish()} size="sm" type="button" variant="outline">
-              <Upload className="mr-2 h-4 w-4" />Publicar painel
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error ? <div className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
-        {message ? <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-black/30 px-3 py-2">
-            <div>
-              <p className="text-sm font-medium text-zinc-200">Permitir denúncia anônima</p>
-              <p className="text-xs text-zinc-500">Quando desativado, o painel de escolha de anonimato não aparece.</p>
-            </div>
-            <Switch checked={config.allowAnonymous} disabled={!canManage || loading} onCheckedChange={(allowAnonymous) => patch({ allowAnonymous })} />
-          </div>
-          <div className="rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-300">
-            <p className="font-medium text-zinc-200">Fluxo atual</p>
-            <p className="mt-1 text-xs text-zinc-500">{config.allowAnonymous ? "O denunciante escolhe entre identificado e anônimo antes de abrir o ticket." : "A denúncia abre como identificada direto, sem mostrar o painel de anonimato."}</p>
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal do painel" onChange={(panelChannelId) => patch({ panelChannelId })} placeholder="Selecione" value={config.panelChannelId} />
-          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria das denuncias" onChange={(categoryId) => patch({ categoryId })} placeholder="Selecione" value={config.categoryId} />
-          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria Alto Comando" onChange={(highCommandCategoryId) => patch({ highCommandCategoryId })} placeholder="Categoria exclusiva do Alto Comando" value={config.highCommandCategoryId} />
-          <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Destino apos finalizar" onChange={(archiveCategoryId) => patch({ archiveCategoryId })} placeholder="Categoria para mover o canal finalizado" value={config.archiveCategoryId} />
-          <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
-          <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis com acesso" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds.includes(config.responsibleRoleId ?? "") ? config.responsibleRoleId : responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds} />
-          <RoleSelect disabled={!canManage || loading} label="Cargo mencionado ao enviar denuncia" onChange={(responsibleRoleId) => patch({ responsibleRoleId: responsibleRoleId || null, responsibleRoleIds: responsibleRoleId && !config.responsibleRoleIds.includes(responsibleRoleId) ? [...config.responsibleRoleIds, responsibleRoleId] : config.responsibleRoleIds })} roles={roles} value={config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? ""} />
-          <MultiRoleSelect disabled={!canManage || loading} label="Cargos Alto Comando" onChange={(highCommandRoleIds) => patch({ highCommandRoleIds })} roles={roles} values={config.highCommandRoleIds} />
-          <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
-          <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
-          <TicketField disabled={!canManage || loading} label="Cor" onChange={(color) => patch({ color })} type="color" value={config.color} />
-          <TicketField disabled={!canManage || loading} label="Tempo maximo do canal (min)" onChange={(maxChannelMinutes) => patch({ maxChannelMinutes: Number(maxChannelMinutes) || 1440 })} value={String(config.maxChannelMinutes)} />
-          <TicketField disabled={!canManage || loading} label="Banner do painel principal" onChange={(panelImageUrl) => patch({ panelImageUrl, thumbnailUrl: panelImageUrl })} value={config.panelImageUrl || config.thumbnailUrl} />
-          <TicketField disabled={!canManage || loading} label="Banner do canal temporario" onChange={(channelImageUrl) => patch({ channelImageUrl })} value={config.channelImageUrl} />
-          <TicketField disabled={!canManage || loading} label="Imagem de rodape" onChange={(footerImageUrl) => patch({ footerImageUrl })} value={config.footerImageUrl} />
-          <label className="block text-xs font-medium text-zinc-400">
-            Posicao da imagem
-            <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none transition focus:border-purple-500/50 disabled:opacity-60" disabled={!canManage || loading} onChange={(event) => patch({ imagePosition: event.target.value as PoliceReportsConfig["imagePosition"] })} value={config.imagePosition}>
-              <option value="banner">Banner acima</option>
-              <option value="thumbnail">Lateral/thumbnail</option>
-              <option value="below_title">Abaixo do titulo</option>
-              <option value="middle">Meio do texto</option>
-              <option value="before_buttons">Acima dos botoes</option>
-              <option value="footer">Rodape</option>
-              <option value="none">Sem imagem</option>
-            </select>
-          </label>
-          <div className="md:col-span-2">
-            <TicketArea disabled={!canManage || loading} label="Descricao" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
-          </div>
-          <div className="md:col-span-2">
-            <TicketArea disabled={!canManage || loading} label="Mensagem inicial do canal" onChange={(initialMessage) => patch({ initialMessage })} value={config.initialMessage} />
-          </div>
-          <div className="md:col-span-2">
-            <TicketArea disabled={!canManage || loading} label="Texto explicativo do procedimento" onChange={(procedureText) => patch({ procedureText })} value={config.procedureText} />
-          </div>
-        </div>
-        {guild && botId ? (
-          <PanelImageSettings
-            botId={botId}
-            canManage={canManage}
-            guildId={guild.id}
-            panelLabel="Denúncia IAB"
-            panelSlots={[
-              { id: "police-reports", label: "Painel principal" },
-              { id: "police-reports-banner-2", label: "Imagem grande / canal temporario" },
-              { id: "police-reports-banner-3", label: "Rodape" }
-            ]}
-          />
-        ) : null}
-        <div className="space-y-3 border-t border-zinc-800 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-white">Tipos de denuncia</p>
-            <Button disabled={!canManage || loading} onClick={addComplaintType} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Adicionar tipo</Button>
-          </div>
-          {config.complaintTypes
-            .map((item, originalIndex) => ({ item, originalIndex }))
-            .sort((left, right) => left.item.order - right.item.order)
-            .map(({ item, originalIndex }) => (
-              <div className="grid gap-3 rounded-md border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1fr_1.4fr_100px_90px_auto]" key={item.id}>
-                <TicketField disabled={!canManage} label="Nome" onChange={(name) => patchComplaintType(originalIndex, { name })} value={item.name} />
-                <TicketField disabled={!canManage} label="Descricao (opcional)" onChange={(description) => patchComplaintType(originalIndex, { description: description || null })} value={item.description ?? ""} />
-                <TicketField disabled={!canManage} label="Emoji" onChange={(emoji) => patchComplaintType(originalIndex, { emoji: emoji || null })} value={item.emoji ?? ""} />
-                <TicketField disabled={!canManage} label="Ordem" onChange={(order) => patchComplaintType(originalIndex, { order: Number(order) || 0 })} value={String(item.order)} />
-                <div className="flex items-end"><Button disabled={!canManage} onClick={() => removeComplaintType(originalIndex)} size="icon" title="Remover tipo" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button></div>
-                <PanelEmojiPicker disabled={!canManage} onSelect={(emoji) => patchComplaintType(originalIndex, { emoji })} selected={item.emoji} />
-              </div>
-            ))}
-          {!config.complaintTypes.length ? <div className="rounded-md border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">Cadastre ao menos um tipo para liberar a publicacao.</div> : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-const hierarchyUnitTemplates = [
-  { unitId: "du", name: "DU", title: "Hierarquia - DU", description: "Lista oficial de membros da unidade DU", color: "#1d4ed8", ranks: ["Chief of Detectives", "Assistant Chief", "Detective III", "Detective II", "Detective I", "DU Probationary"] },
-  { unitId: "cbp", name: "CBP", title: "Hierarquia - CBP", description: "Lista oficial de membros da unidade CBP", color: "#16a34a", ranks: ["CBP Commander", "CBP Deputy Commander", "CBP Customs Coordinator", "CBP Defense Agent III", "CBP Defense Agent II", "CBP Defense Agent I", "CBP Probationary Agent"] },
-  { unitId: "traffic", name: "TRAFFIC", title: "Hierarquia - TRAFFIC", description: "Lista oficial de membros da unidade TRAFFIC", color: "#7c3aed", ranks: ["Chief Of Traffic Enforcement", "Assistant Chief", "Coordinator", "Traffic Senior", "Traffic Officer", "Traffic Probationary"] },
-  { unitId: "mary", name: "MARY", title: "Hierarquia - MARY", description: "Lista oficial de membros da unidade MARY", color: "#52525b", ranks: ["MARY Commander", "MARY Deputy Commander", "MARY Coordinator", "MARY Veteran", "MARY Senior", "MARY Officer", "MARY Probationary"] },
-  { unitId: "fast", name: "FAST", title: "Hierarquia - FAST", description: "Lista oficial de membros da unidade FAST", color: "#eab308", ranks: ["Commander FAST", "FAST Deputy Commander", "FAST Coordinator", "FAST Veteran", "FAST Senior", "FAST Officer", "FAST Probationary"] },
-  { unitId: "daf", name: "DAF", title: "Hierarquia - DAF", description: "Lista oficial de membros da unidade DAF", color: "#d4d4d8", ranks: ["Commander D.A.F", "DAF Deputy Commander", "DAF Coordinator", "DAF Veteran", "DAF Senior", "DAF Officer", "DAF Probationary"] },
-  { unitId: "swat", name: "SWAT", title: "Hierarquia - SWAT", description: "Lista oficial de membros da unidade SWAT", color: "#0f172a", ranks: ["COMMANDER", "DEPUTY COMMANDER", "COORDINATOR", "INSTRUCTOR", "OPERATOR", "PROBATORY"], swat: true }
-] as const;
-
 function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
   const [panels, setPanels] = useState<FivemHierarchyPanelType[]>([]);
   const [draft, setDraft] = useState<FivemHierarchyPanelType | null>(null);
@@ -3450,45 +2785,23 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   const [roles, setRoles] = useState<GuildRoleOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [draftDirty, setDraftDirty] = useState(false);
-  const draftDirtyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  function setDraftHasUnsavedChanges(value: boolean) {
-    draftDirtyRef.current = value;
-    setDraftDirty(value);
-  }
-
-  const refreshHierarchyDashboard = useCallback(async (options: { refreshOptions?: boolean; resetDraft?: boolean } = {}) => {
-    if (!guild) return;
-    const [dashboard, liveOptions] = await Promise.all([
-      getFivemHierarchy(guild.id, botId),
-      options.refreshOptions !== false ? getGuildLiveOptions(guild.id, botId) : Promise.resolve(null)
-    ]);
-    if (options.resetDraft) setDraftHasUnsavedChanges(false);
-    setPanels(dashboard.panels);
-    setDraft((current) => {
-      if (options.resetDraft || !current) return dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
-      if (draftDirtyRef.current || isLocalNewHierarchyPanel(current)) return current;
-      return dashboard.panels.find((panel) => panel.id === current.id) ?? current;
-    });
-    if (liveOptions) {
-      setChannels(liveOptions.channels);
-      setRoles(liveOptions.roles);
-    }
-  }, [botId, guild]);
 
   useEffect(() => {
     if (!guild) return;
     let active = true;
     setLoading(true);
-    refreshHierarchyDashboard({ resetDraft: true })
-      .then(() => {
+    Promise.all([getFivemHierarchy(guild.id, botId), getGuildLiveOptions(guild.id, botId)])
+      .then(([dashboard, options]) => {
         if (!active) return;
+        setPanels(dashboard.panels);
+        setDraft(dashboard.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId));
+        setChannels(options.channels);
+        setRoles(options.roles);
       })
       .catch(() => {
-        if (active) setError("Nao foi possivel carregar a hierarquia policial.");
+        if (active) setError("Nao foi possivel carregar Hierarquia FAQ.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -3496,43 +2809,13 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     return () => {
       active = false;
     };
-  }, [guild, refreshHierarchyDashboard]);
-
-  useEffect(() => {
-    if (!guild) return;
-    const socket = createDashboardSocket();
-    const refresh = (payload: { botId?: string | null; guildId?: string | null } = {}) => {
-      if (payload.guildId !== guild.id) return;
-      if ((payload.botId ?? null) !== (botId ?? null)) return;
-      void refreshHierarchyDashboard({ refreshOptions: false }).catch(() => undefined);
-    };
-    socket.on("fivem:hierarchy:synced", refresh);
-    socket.on("fivem:hierarchy:panel_update", refresh);
-    return () => {
-      socket.off("fivem:hierarchy:synced", refresh);
-      socket.off("fivem:hierarchy:panel_update", refresh);
-      socket.disconnect();
-    };
-  }, [botId, guild, refreshHierarchyDashboard]);
+  }, [botId, guild?.id]);
 
   function patchDraft(patch: Partial<FivemHierarchyPanelType>) {
-    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? { ...current, ...patch } : current);
   }
 
-  function patchHierarchyName(name: string) {
-    setDraftHasUnsavedChanges(true);
-    setDraft((current) => {
-      if (!current) return current;
-      const description = isInheritedHierarchyDescription(current.description, current.name)
-        ? `Lista oficial de membros da unidade ${name}`
-        : current.description;
-      return { ...current, description, name };
-    });
-  }
-
   function patchHierarchy(index: number, patch: Partial<FivemHierarchyPanelType["hierarchies"][number]>) {
-    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
       hierarchies: current.hierarchies.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item)
@@ -3540,15 +2823,13 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   }
 
   function addHierarchy() {
-    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
-      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: defaultHierarchyEmoji(current.hierarchies.length), emptyText: "Nenhum membro encontrado com este cargo.", id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
+      hierarchies: [...current.hierarchies, { active: true, color: null, description: null, emoji: "👤", emptyText: null, id: `hierarquia-${Date.now()}`, limit: null, name: "", order: current.hierarchies.length + 1, roleId: "", showWhenEmpty: true }]
     } : current);
   }
 
   function removeHierarchy(index: number) {
-    setDraftHasUnsavedChanges(true);
     setDraft((current) => current ? {
       ...current,
       hierarchies: current.hierarchies
@@ -3559,7 +2840,8 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
 
   function hierarchyValidationError(panel: FivemHierarchyPanelType, requireChannel = false) {
     const selectedRoleIds = panel.hierarchies.map((item) => item.roleId).filter(Boolean);
-    if (panel.hierarchies.some((item) => !item.name.trim())) return "Informe o nome exibido em todas as patentes.";
+    if (!panel.hierarchies.length) return "Adicione pelo menos um cargo ao painel.";
+    if (panel.hierarchies.some((item) => !item.roleId || !item.name.trim())) return "Escolha o cargo e informe o que ele representa em todas as linhas.";
     if (new Set(selectedRoleIds).size !== selectedRoleIds.length) return "O mesmo cargo nao pode aparecer duas vezes no painel.";
     if (requireChannel && !panel.panelChannelId) return "Escolha o canal onde o painel sera publicado.";
     return null;
@@ -3576,8 +2858,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const saved = await saveFivemHierarchyPanel(guild.id, draft, botId);
       setPanels((current) => [saved, ...current.filter((panel) => panel.id !== saved.id)]);
       setDraft(saved);
-      setDraftHasUnsavedChanges(false);
-      setMessage("Hierarquia policial salva.");
+      setMessage("Hierarquia FAQ salva.");
     } catch {
       setError("Nao foi possivel salvar o painel de hierarquia.");
     } finally {
@@ -3596,7 +2877,6 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
       const saved = await saveFivemHierarchyPanel(guild.id, draft, botId);
       setPanels((current) => [saved, ...current.filter((panel) => panel.id !== saved.id && panel.id !== draft.id)]);
       setDraft(saved);
-      setDraftHasUnsavedChanges(false);
       await publishFivemHierarchyPanel(guild.id, saved.id, botId);
       setMessage("Hierarquia salva e publicada no Discord.");
     } catch {
@@ -3608,15 +2888,14 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
 
   async function removePanel() {
     if (!guild || !draft || draft.id === "new") return;
-    if (!window.confirm("Excluir este painel de hierarquia policial?")) return;
+    if (!window.confirm("Excluir este painel de Hierarquia FAQ?")) return;
     setSaving(true);
     try {
       await deleteFivemHierarchyPanel(guild.id, draft.id, botId);
       const next = panels.filter((panel) => panel.id !== draft.id);
       setPanels(next);
       setDraft(next[0] ?? createEmptyHierarchyPanel(guild.id, botId));
-      setDraftHasUnsavedChanges(false);
-      setMessage("Painel de hierarquia excluido.");
+      setMessage("Painel FAQ excluido.");
     } catch {
       setError("Nao foi possivel excluir o painel.");
     } finally {
@@ -3624,87 +2903,29 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
     }
   }
 
-  async function registerDefaultPanels() {
-    if (!guild) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await registerDefaultFivemHierarchyPanels(guild.id, botId);
-      setPanels(result.panels);
-      setDraft((current) => {
-        if (current && (draftDirtyRef.current || isLocalNewHierarchyPanel(current))) return current;
-        if (current) return result.panels.find((panel) => panel.id === current.id) ?? current;
-        return result.panels[0] ?? createEmptyHierarchyPanel(guild.id, botId);
-      });
-      setMessage(result.created ? `${result.created} hierarquia(s) padrao cadastrada(s).` : "As hierarquias padrao ja estavam cadastradas.");
-    } catch {
-      setError("Nao foi possivel cadastrar as hierarquias padrao.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function resetDraftToTemplate() {
-    if (!guild || !draft) return;
-    const template = hierarchyUnitTemplates.find((unit) => unit.unitId === draft.unitId) ?? hierarchyUnitTemplates[0];
-    setDraftHasUnsavedChanges(true);
-    setDraft({
-      ...createHierarchyPanelFromTemplate(guild.id, botId, template),
-      id: draft.id,
-      createdAt: draft.createdAt,
-      panelChannelId: draft.panelChannelId,
-      panelMessageId: draft.panelMessageId,
-      updatedAt: draft.updatedAt
-    });
-  }
-
-  const configuredRoleIds = new Set(roles.map((role) => role.id));
-  const missingHierarchyRoles = draft?.hierarchies
-    .filter((item) => item.roleId && !configuredRoleIds.has(item.roleId))
-    .map((item) => `${item.name} (${item.roleId})`) ?? [];
-  const persistedDraft = draft ? isPersistedHierarchyPanel(draft, panels) : false;
-  const hierarchyBlockLimit = 200;
-  const canAddHierarchyBlock = canManage && Boolean(draft) && (draft?.hierarchies.length ?? 0) < hierarchyBlockLimit;
-
   return (
     <Card className="border-emerald-500/10 bg-zinc-950/75">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-emerald-300" /> Sistema de Hierarquia</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-emerald-300" /> Hierarquia Policial</CardTitle>
             <CardDescription>Painel fixo com membros agrupados por cargos, atualizado automaticamente quando a hierarquia muda.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || !guild} onClick={() => { setDraftHasUnsavedChanges(true); setDraft(createNewHierarchyPanel(guild?.id ?? "", botId, panels.length)); }} size="sm" type="button" variant="outline">Novo painel</Button>
-            <Button disabled={!canManage || !guild || saving} onClick={() => registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
-            <Button disabled={!canManage || !draft || saving} onClick={() => savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
-            <Button disabled={!canManage || !draft || saving} onClick={() => publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
-            <Button disabled={!canManage || !draft || saving} onClick={resetDraftToTemplate} size="sm" type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Resetar modelo</Button>
+            <Button disabled={!canManage || !guild} onClick={() => setDraft(createEmptyHierarchyPanel(guild?.id ?? "", botId))} size="sm" type="button" variant="outline">Novo painel</Button>
+            <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
+            <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {error ? <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
         {message ? <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</div> : null}
-        {draftDirty ? <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">Alteracoes ainda nao salvas neste painel.</div> : null}
-        {missingHierarchyRoles.length ? (
-          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-            <p className="font-semibold">Cargos cadastrados nao encontrados no servidor.</p>
-            <p className="mt-1 text-xs">{missingHierarchyRoles.slice(0, 12).join(", ")}{missingHierarchyRoles.length > 12 ? "..." : ""}</p>
-          </div>
-        ) : null}
         {loading || !draft ? <div className="h-40 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/60" /> : (
           <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="space-y-2">
-              {isLocalNewHierarchyPanel(draft) ? (
-                <button className="w-full rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-left" type="button">
-                  <p className="text-sm font-semibold text-white">{draft.name}</p>
-                  <p className="mt-1 text-xs text-amber-200">Nova hierarquia ainda nao salva</p>
-                </button>
-              ) : null}
               {panels.map((panel) => (
-                <button className={`w-full rounded-lg border p-3 text-left ${draft.id === panel.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 bg-black/30"}`} key={panel.id} onClick={() => { setDraftHasUnsavedChanges(false); setDraft(panel); }} type="button">
+                <button className={`w-full rounded-lg border p-3 text-left ${draft.id === panel.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 bg-black/30"}`} key={panel.id} onClick={() => setDraft(panel)} type="button">
                   <p className="text-sm font-semibold text-white">{panel.name}</p>
                   <p className="mt-1 text-xs text-zinc-500">{panel.hierarchies.length} hierarquias · {panel.enabled ? "ativo" : "desativado"}</p>
                 </button>
@@ -3712,58 +2933,18 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
             </div>
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <TicketField disabled={!canManage} label="Nome interno" onChange={patchHierarchyName} value={draft.name} />
+                <TicketField disabled={!canManage} label="Nome interno" onChange={(value) => patchDraft({ name: value })} value={draft.name} />
                 <TicketField disabled={!canManage} label="Titulo do painel" onChange={(value) => patchDraft({ title: value })} value={draft.title} />
                 <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal do painel" onChange={(value) => patchDraft({ panelChannelId: value })} placeholder="Selecione" value={draft.panelChannelId} />
+                <FivemChannelSelect channels={channels} disabled={!canManage} label="Canal de logs" onChange={(value) => patchDraft({ logChannelId: value })} placeholder="Sem logs" value={draft.logChannelId} />
                 <TicketField disabled={!canManage} label="Cor" onChange={(value) => patchDraft({ color: value })} type="color" value={draft.color} />
-                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                  Unidade ativa
-                  <Switch checked={draft.enabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ enabled: checked })} />
-                </label>
-                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                  Atualizacao automatica
-                  <Switch checked={draft.autoUpdateEnabled !== false} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ autoUpdateEnabled: checked })} />
-                </label>
-                <label className="block text-xs font-medium text-zinc-400">Intervalo automatico (segundos)
-                  <input className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} min={5} onChange={(event) => patchDraft({ autoUpdateIntervalSeconds: Math.max(5, Number(event.target.value) || 5) })} type="number" value={draft.autoUpdateIntervalSeconds ?? 5} />
-                </label>
-                <label className="block text-xs font-medium text-zinc-400">Formato dos membros
-                  <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ displayMode: event.target.value as FivemHierarchyPanelType["displayMode"] })} value={draft.displayMode}>
-                    <option value="mention">Mencao do usuario</option>
-                    <option value="display_name">Nome de exibicao</option>
-                    <option value="nickname">Nickname</option>
-                    <option value="name_with_id">Nome + ID funcional</option>
-                  </select>
-                </label>
-                <TicketField disabled={!canManage} label="Texto quando vazio" onChange={(value) => patchDraft({ emptyText: value || "Nenhum membro encontrado com este cargo." })} value={draft.emptyText} />
-                <FivemResourceMultiSelect
-                  disabled={!canManage}
-                  label="Cargos que podem editar este painel"
-                  onChange={(editorRoleIds) => patchDraft({ editorRoleIds })}
-                  options={roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }))}
-                  prefix="@"
-                  values={draft.editorRoleIds}
-                />
-                <label className="block text-xs font-medium text-zinc-400">Imagem do painel
+                <label className="block text-xs font-medium text-zinc-400">Imagem
                   <select className="mt-1 h-10 w-full rounded-md border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100" disabled={!canManage} onChange={(event) => patchDraft({ imagePosition: event.target.value as FivemHierarchyPanelType["imagePosition"] })} value={draft.imagePosition}>
                     <option value="none">Sem imagem</option>
                     <option value="top">Topo</option>
                     <option value="bottom">Rodape</option>
-                    <option value="thumbnail">Imagem lateral</option>
+                    <option value="thumbnail">Thumbnail</option>
                   </select>
-                </label>
-                <TicketField disabled={!canManage} label="URL da imagem lateral" onChange={(value) => patchDraft({ imageUrl: value || null })} value={draft.imageUrl ?? ""} />
-                <TicketField disabled={!canManage} label="Texto do rodape" onChange={(value) => patchDraft({ footerText: value || null })} value={draft.footerText ?? ""} />
-                <TicketField disabled={!canManage} label="Icone do rodape" onChange={(value) => patchDraft({ footerIconUrl: value || null })} value={draft.footerIconUrl ?? ""} />
-                <TicketField disabled={!canManage} label="Rodape global" onChange={(value) => patchDraft({ globalFooterText: value || null })} value={draft.globalFooterText ?? ""} />
-                <TicketField disabled={!canManage} label="Icone global" onChange={(value) => patchDraft({ globalFooterIconUrl: value || null })} value={draft.globalFooterIconUrl ?? ""} />
-                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                  Exibir rodape
-                  <Switch checked={draft.footerEnabled} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ footerEnabled: checked })} />
-                </label>
-                <label className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-black/30 px-3 py-2 text-sm text-zinc-200">
-                  Usar rodape global
-                  <Switch checked={draft.useGlobalFooter} disabled={!canManage} onCheckedChange={(checked) => patchDraft({ useGlobalFooter: checked, footerScope: checked ? "global" : "unit" })} />
                 </label>
                 <div className="md:col-span-2">
                   <TicketArea disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
@@ -3773,53 +2954,27 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-white">Cargos exibidos no painel</p>
-                    <p className="mt-1 text-xs text-zinc-500">Escolha um cargo do Discord e defina o nome da funcao que aparecera acima dos membros. {draft.hierarchies.length}/{hierarchyBlockLimit} blocos.</p>
+                    <p className="mt-1 text-xs text-zinc-500">Escolha um cargo do Discord e defina o nome da funcao que aparecera acima dos membros.</p>
                   </div>
-                  <Button disabled={!canAddHierarchyBlock} onClick={addHierarchy} size="sm" type="button" variant="outline">Adicionar cargo</Button>
+                  <Button disabled={!canManage} onClick={addHierarchy} size="sm" type="button" variant="outline">Adicionar cargo</Button>
                 </div>
                 {draft.hierarchies.map((item, index) => (
-                  <div className="grid gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1.2fr_1fr_80px_90px_1fr_auto]" key={item.id}>
+                  <div className="grid gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 md:grid-cols-[1.2fr_1fr_80px_90px_auto]" key={item.id}>
                     <RoleSelect disabled={!canManage} label="Cargo do Discord" onChange={(value) => patchHierarchy(index, { roleId: value })} roles={roles} value={item.roleId} />
                     <TicketField disabled={!canManage} label="Exibir como" onChange={(value) => patchHierarchy(index, { name: value })} value={item.name} />
                     <TicketField disabled={!canManage} label="Emoji" onChange={(value) => patchHierarchy(index, { emoji: value })} value={item.emoji ?? ""} />
                     <TicketField disabled={!canManage} label="Ordem" onChange={(value) => patchHierarchy(index, { order: Number(value) || index + 1 })} value={String(item.order)} />
-                    <div className="space-y-2">
-                      <TicketField disabled={!canManage} label="Texto vazio" onChange={(value) => patchHierarchy(index, { emptyText: value || null })} value={item.emptyText ?? ""} />
-                      <label className="flex items-center gap-2 text-xs text-zinc-300"><input checked={item.showWhenEmpty} disabled={!canManage} onChange={(event) => patchHierarchy(index, { showWhenEmpty: event.target.checked })} type="checkbox" />Mostrar vazia</label>
-                    </div>
                     <div className="flex items-end">
                       <Button disabled={!canManage} onClick={() => removeHierarchy(index)} size="icon" title="Remover cargo" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ))}
                 {!draft.hierarchies.length ? <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">Nenhum cargo configurado. Clique em Adicionar cargo para comecar.</div> : null}
-                <div className="flex justify-end">
-                  <Button disabled={!canAddHierarchyBlock} onClick={addHierarchy} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Adicionar mais um bloco</Button>
-                </div>
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-xs text-emerald-100">
                   Depois de salvar e publicar, quem receber ou perder um desses cargos entra ou sai automaticamente do painel no Discord.
                 </div>
               </div>
-              {persistedDraft ? (
-                <>
-                  <div className="rounded-lg border border-purple-500/20 bg-purple-500/[0.06] px-3 py-2 text-xs text-purple-100">
-                    Editando banners da hierarquia: <strong>{draft.name}</strong>. Cada banner salvo aqui fica vinculado ao ID interno <code className="rounded bg-black/30 px-1">{draft.id}</code> e nao aparece em outras unidades.
-                  </div>
-                  <PanelImageSettings
-                    botId={botId}
-                    canManage={canManage}
-                    guildId={guild?.id ?? null}
-                    panelLabel={`Hierarquia - ${draft.name}`}
-                    panelSlots={hierarchyBannerSlots(draft)}
-                  />
-                </>
-              ) : (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                  Salve esta nova hierarquia antes de configurar banners. Isso cria um ID proprio e evita vincular imagens ou configuracoes de outra hierarquia.
-                </div>
-              )}
-              <HierarchyPreview panel={draft} roles={roles} />
-              {persistedDraft ? <Button disabled={!canManage || saving} onClick={() => removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
+              {draft.id !== "new" ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
           </div>
         )}
@@ -3828,136 +2983,41 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
   );
 }
 
-function HierarchyPreview({ panel, roles }: { panel: FivemHierarchyPanelType; roles: GuildRoleOption[] }) {
-  const footer = panel.useGlobalFooter ? panel.globalFooterText : panel.footerText;
-  const updatedAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()).replace(",", " às");
-  const title = formatHierarchyPreviewTitle(panel);
-  return (
-    <section className="rounded-lg border border-zinc-800 bg-[#111214] p-4">
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Previa Components V2</p>
-          <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
-          <p className="mt-1 text-sm text-zinc-400">{panel.description || `Lista oficial de membros da unidade ${panel.name}`}</p>
-          <p className="mt-2 text-xs text-zinc-500">🔄 Atualizado automaticamente em: {updatedAt}</p>
-          <div className="mt-4 space-y-3 text-sm text-zinc-200">
-            {panel.hierarchies.filter((item) => item.active).sort((a, b) => a.order - b.order).map((item) => {
-              const role = roles.find((option) => option.id === item.roleId);
-              const empty = item.emptyText || panel.emptyText || "Nenhum membro encontrado com este cargo.";
-              return (
-                <div className="rounded-md border border-zinc-800 bg-black/25 px-3 py-2" key={item.id}>
-                  <p className="font-bold text-white">{[item.emoji, item.name].filter(Boolean).join(" ")}</p>
-                  <p className="mt-2 whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-zinc-300">{role ? `@${role.name}` : empty}</p>
-                </div>
-              );
-            })}
-          </div>
-          {panel.footerEnabled && footer ? <p className="mt-4 border-t border-zinc-700 pt-3 text-xs text-zinc-400">{footer}</p> : null}
-        </div>
-        {panel.imageUrl ? <img alt="" className="h-20 w-20 rounded-md object-cover" src={panel.imageUrl} /> : <div className="h-20 w-20 rounded-md border border-zinc-700 bg-zinc-900" />}
-      </div>
-    </section>
-  );
-}
-
-function formatHierarchyPreviewTitle(panel: FivemHierarchyPanelType) {
-  const normalized = (panel.title || `Hierarquia - ${panel.name}`).replace(/\s+-\s+/g, " — ");
-  return normalized.startsWith("📋") ? normalized : `📋 ${normalized}`;
-}
-
-function defaultHierarchyEmoji(index: number) {
-  return ["👑", "🛡️", "🎖️", "⭐", "⭐", "👮", "🧪"][index] ?? "•";
-}
-
-function hierarchyBannerSlots(panel: FivemHierarchyPanelType) {
-  if (!panel.id) return [];
-  return Array.from({ length: 8 }, (_, index) => {
-    const number = index + 1;
-    return {
-      id: index === 0 ? panel.id : `${panel.id}-banner-${number}`,
-      label: index === 0 ? `${panel.name} - Imagem principal` : `${panel.name} - Banner ${number}`
-    };
-  });
-}
-
 function createEmptyHierarchyPanel(guildId: string, botId?: string | null): FivemHierarchyPanelType {
-  return createHierarchyPanelFromTemplate(guildId, botId, hierarchyUnitTemplates[0]);
-}
-
-function createNewHierarchyPanel(guildId: string, botId: string | null | undefined, existingCount: number): FivemHierarchyPanelType {
-  const panel = createHierarchyPanelFromTemplate(guildId, botId, hierarchyUnitTemplates[0]);
-  const number = existingCount + 1;
-  return {
-    ...panel,
-    autoUpdateEnabled: true,
-    color: "#22c55e",
-    description: "Lista oficial de membros agrupados por cargos.",
-    editorRoleIds: [],
-    enabled: false,
-    footerEnabled: false,
-    footerIconUrl: null,
-    footerText: null,
-    globalFooterIconUrl: null,
-    globalFooterText: null,
-    hierarchies: [],
-    id: `local-new-${Date.now()}`,
-    imagePosition: "none",
-    imageUrl: null,
-    linkedToFivem: false,
-    name: `Nova Hierarquia ${number}`,
-    panelChannelId: null,
-    panelMessageId: null,
-    title: `Hierarquia - Nova Categoria ${number}`,
-    unitId: `custom-${Date.now()}`,
-    useGlobalFooter: false
-  };
-}
-
-function createHierarchyPanelFromTemplate(guildId: string, botId: string | null | undefined, template: typeof hierarchyUnitTemplates[number]): FivemHierarchyPanelType {
   const now = new Date().toISOString();
   return {
+    allowedRoleIds: [],
     autoUpdateEnabled: true,
-    autoUpdateIntervalSeconds: 5,
+    autoUpdateIntervalSeconds: 300,
     botId: botId ?? null,
-    color: template.color,
+    color: "#22c55e",
     createdAt: now,
-    description: template.description,
+    description: "Hierarquia atualizada automaticamente pelos cargos do servidor.",
     displayMode: "mention",
-    emptyText: "Nenhum membro encontrado com este cargo.",
+    emptyText: "Nenhum membro neste cargo.",
     enabled: true,
     editorRoleIds: [],
     footerEnabled: true,
     footerIconUrl: null,
-    footerScope: "unit",
-    footerText: "NPD • North Police Department",
+    footerScope: "global",
+    footerText: "Atualizado automaticamente",
     globalFooterIconUrl: null,
-    globalFooterText: "NPD • North Police Department",
+    globalFooterText: null,
     guildId,
-    hierarchies: template.ranks.map((name, index) => ({ active: true, color: null, description: null, emoji: defaultHierarchyEmoji(index), emptyText: "Nenhum membro encontrado com este cargo.", id: slugTicketOption(name, index), limit: null, name, order: index + 1, roleId: "", showWhenEmpty: true })),
-    id: `hierarchy-${template.unitId}`,
-    imagePosition: "thumbnail",
+    hierarchies: [],
+    id: "new",
+    imagePosition: "none",
     imageUrl: null,
     linkedToFivem: true,
-    name: template.name,
+    logChannelId: null,
+    name: "Hierarquia FAQ",
     panelChannelId: null,
     panelMessageId: null,
-    title: template.title,
-    unitId: template.unitId,
+    title: "Hierarquia Policial",
+    unitId: "default",
     useGlobalFooter: false,
     updatedAt: now
   };
-}
-
-function isPersistedHierarchyPanel(panel: FivemHierarchyPanelType, panels: FivemHierarchyPanelType[]) {
-  return Boolean(panel.id && !isLocalNewHierarchyPanel(panel) && panels.some((item) => item.id === panel.id));
-}
-
-function isLocalNewHierarchyPanel(panel: Pick<FivemHierarchyPanelType, "id"> | null | undefined) {
-  return Boolean(panel?.id?.startsWith("local-new-"));
-}
-
-function isInheritedHierarchyDescription(description: string | null | undefined, panelName: string) {
-  return hierarchyUnitTemplates.some((unit) => description === unit.description && unit.name !== panelName);
 }
 
 function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; canManage: boolean; guild: DashboardGuild | null }) {
@@ -4163,7 +3223,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
               <ListChecks className="mr-2 h-4 w-4" />
               Criar Meta
             </Button>
-            <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
+            <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Salvar Geral
             </Button>
@@ -4283,7 +3343,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                 <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-white">{draft.id === "new" ? "Criar meta" : "Editar meta"}</p>
-                    <Button disabled={!canManage || saving} onClick={() => saveDraft()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
+                    <Button disabled={!canManage || saving} onClick={() => void saveDraft()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
                   </div>
                   <TicketField disabled={!canManage} label="Nome" onChange={(value) => patchDraft({ name: value })} value={draft.name} />
                   <TicketField disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
@@ -4318,8 +3378,8 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                   <TicketField disabled={!canManage} label="Regras" onChange={(value) => patchDraft({ rules: value })} value={draft.rules ?? ""} />
                   {draft.id !== "new" ? (
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={!canManage || saving} onClick={() => removeDraft(false)} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir meta</Button>
-                      <Button disabled={!canManage || saving} onClick={() => removeDraft(true)} size="sm" type="button" variant="outline">Excluir com historico</Button>
+                      <Button disabled={!canManage || saving} onClick={() => void removeDraft(false)} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir meta</Button>
+                      <Button disabled={!canManage || saving} onClick={() => void removeDraft(true)} size="sm" type="button" variant="outline">Excluir com historico</Button>
                     </div>
                   ) : null}
                 </div>
@@ -4348,7 +3408,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                   <p className="text-sm font-semibold text-white">Painel de Solicitação de Canal de Meta</p>
                   <p className="mt-1 text-sm text-zinc-400">Use quando o Pedido Set estiver desligado ou quando quiser permitir solicitação manual do canal individual.</p>
                 </div>
-                <Button disabled={!canManage || saving || !settings.enabled || !settings.requestPanelChannelId} onClick={() => publishRequestPanel()} size="sm" type="button">
+                <Button disabled={!canManage || saving || !settings.enabled || !settings.requestPanelChannelId} onClick={() => void publishRequestPanel()} size="sm" type="button">
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                   Enviar/Atualizar painel
                 </Button>
@@ -4480,9 +3540,9 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Metas por membro com fotos e registros via Components V2.", id: "fivem-goals", permissions: "Admin FiveM", title: "Metas" },
     { builtIn: true, description: "Painel automatico de hierarquia policial por cargos.", id: "fivem-hierarchy", permissions: "Admin Policia", title: "Hierarquia Policial" },
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
+    { builtIn: true, description: "Solicitacoes e aprovacao de ausencias para oficiais.", id: "police-absences", permissions: "Admin Policia", title: "Ausencia Policial" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
-    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
-    { builtIn: true, description: "Denuncias internas com sigilo e acompanhamento da corregedoria.", id: "police-reports", permissions: "Admin Policia, IAB", title: "Denúncia IAB" }
+    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -4492,7 +3552,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     .filter((module) => {
       if (mode === "orders") return module.id === "fivem-orders";
       if (mode === "goals") return module.id === "fivem-goals";
-      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && module.id !== "police-actions" && module.id !== "police-patrol-reports" && module.id !== "police-reports";
+      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && module.id !== "police-absences" && module.id !== "police-actions" && module.id !== "police-patrol-reports";
     })
     .map((module) => ({
       description: module.description,
@@ -4515,8 +3575,8 @@ function fivemIconForModule(moduleId: string) {
     "fivem-drugs": Boxes,
     "fivem-hierarchy": Users,
     "fivem-orders": ListChecks,
-    "police-actions": Activity,
-    "police-reports": ShieldAlert
+    "police-absences": CalendarClock,
+    "police-actions": Activity
   };
 
   return icons[moduleId] ?? Boxes;
@@ -4596,15 +3656,9 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "fivem-goals",
       "fivem-hierarchy",
       "fivem-actions",
+      "police-absences",
       "police-actions",
       "police-patrol-reports",
-      "police-reports",
-      "police-flight",
-      "police-rh",
-      "police-courses",
-      "dm-system",
-      "summons-system",
-      "open-point-notification",
       "fivem-fac"
     ].includes(moduleId);
   }
@@ -4619,10 +3673,6 @@ function isModuleReleasedForBot(bot: DashboardBot, moduleId: string) {
 
   const released = new Set(bot.enabledModules);
 
-  if (moduleId === "police-patrol-reports") {
-    return released.has("police-patrol-reports") || released.has("patrol-reports");
-  }
-
   if (moduleId === "fivem") {
     return [...released].some((enabledModule) => enabledModule === "fivem" || enabledModule.startsWith("fivem-"));
   }
@@ -4631,8 +3681,8 @@ function isModuleReleasedForBot(bot: DashboardBot, moduleId: string) {
     return released.has("fivem-fac") || released.has("fivem-absences");
   }
 
-  if (moduleId === "police-rh") {
-    return released.has("police-rh") || released.has("fivem-absences") || released.has("fivem-fac");
+  if (moduleId === "police-absences") {
+    return released.has("police-absences");
   }
 
   if (moduleId === "fivem-drugs") {
@@ -5245,11 +4295,11 @@ function RulesView({
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={!canManage || saving || publishing} onClick={() => saveRules()} variant="secondary">
+            <Button disabled={!canManage || saving || publishing} onClick={() => void saveRules()} variant="secondary">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar
             </Button>
-            <Button disabled={!canManage || saving || publishing || !draft.rulesChannelId} onClick={() => publishPanel()}>
+            <Button disabled={!canManage || saving || publishing || !draft.rulesChannelId} onClick={() => void publishPanel()}>
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Publicar painel
             </Button>
@@ -5362,10 +4412,10 @@ function DeleteChannelsPanel({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button disabled={loading || deleting} onClick={() => loadChannels()} variant="secondary">
+          <Button disabled={loading || deleting} onClick={() => void loadChannels()} variant="secondary">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Atualizar lista
           </Button>
-          <Button disabled={loading || deleting || !selectedIds.length} onClick={() => handleDelete()} variant="destructive">
+          <Button disabled={loading || deleting || !selectedIds.length} onClick={() => void handleDelete()} variant="destructive">
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Apagar selecionados ({selectedIds.length})
           </Button>
         </div>
@@ -5790,8 +4840,8 @@ function ManualRegistrationPanel({
             <CardDescription>Painel, sets solicitaveis, modal, aprovacao, cargos e logs em Components V2.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || !settings?.enabled || (!settings.panelChannelId && !settings.panelCategoryId) || saving || loading} onClick={() => publishSetPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Enviar painel</Button>
-            <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
+            <Button disabled={!canManage || !settings?.enabled || (!settings.panelChannelId && !settings.panelCategoryId) || saving || loading} onClick={() => void publishSetPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Enviar painel</Button>
+            <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Salvar
             </Button>
@@ -5825,7 +4875,7 @@ function ManualRegistrationPanel({
                 <TicketField disabled={!canManage} label="Nome do personagem" onChange={setCharacterName} value={characterName} />
                 <TicketField disabled={!canManage} label="ID in-game" onChange={setGameId} value={gameId} />
               </div>
-              <Button disabled={!canManage || saving || !selectedMemberId || !manualRoleId || !goalCategoryId || !characterName.trim() || !gameId.trim()} onClick={() => registerMember()} type="button"><UserPlus className="mr-2 h-4 w-4" />Cadastrar e criar canal</Button>
+              <Button disabled={!canManage || saving || !selectedMemberId || !manualRoleId || !goalCategoryId || !characterName.trim() || !gameId.trim()} onClick={() => void registerMember()} type="button"><UserPlus className="mr-2 h-4 w-4" />Cadastrar e criar canal</Button>
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <MetricCard icon={ListChecks} label="Pedidos" value={String(submissions.length)} />
@@ -5966,7 +5016,7 @@ function ManualRegistrationPanel({
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={submission.status === "approved" ? "success" : submission.status === "rejected" ? "danger" : "muted"}>{submission.status}</Badge>
-                    <Button disabled={!canManage || saving} onClick={() => removeSubmission(submission)} size="icon" title="Excluir cadastro" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
+                    <Button disabled={!canManage || saving} onClick={() => void removeSubmission(submission)} size="icon" title="Excluir cadastro" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
@@ -6108,7 +5158,7 @@ function TicketPanelConfigurator({
             <CardTitle className="flex items-center gap-2"><TicketIcon className="h-5 w-5 text-purple-300" /> Painel visual do ticket</CardTitle>
             <CardDescription>Texto, cor, menu e emojis que aparecem no painel publicado pelo bot.</CardDescription>
           </div>
-          <Button disabled={disabled} onClick={() => save()} size="sm" type="button">
+          <Button disabled={disabled} onClick={() => void save()} size="sm" type="button">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
             Salvar
           </Button>
@@ -6306,37 +5356,6 @@ function RoleSelect({
   value: string;
 }) {
   return <FivemResourceSelect disabled={disabled} label={label} onChange={(nextValue) => onChange(nextValue ?? "")} options={roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }))} placeholder="Nenhum" prefix="@" value={value || null} />;
-}
-
-function PanelEmojiPicker({
-  disabled,
-  onSelect,
-  selected
-}: {
-  disabled: boolean;
-  onSelect: (emoji: string) => void;
-  selected: string | null;
-}) {
-  return (
-    <div className="md:col-span-5">
-      <p className="mb-2 text-xs font-medium text-zinc-400">Emojis recomendados</p>
-      <div className="flex flex-wrap gap-2">
-        {policeReportEmojiPresets.map((preset) => (
-          <button
-            aria-label={`Usar emoji ${preset.label}`}
-            className={`flex h-10 w-10 items-center justify-center rounded-md border bg-zinc-950 transition hover:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50 ${selected === preset.emoji ? "border-violet-400 ring-1 ring-violet-400/50" : "border-zinc-800"}`}
-            disabled={disabled}
-            key={preset.emoji}
-            onClick={() => onSelect(preset.emoji)}
-            title={preset.label}
-            type="button"
-          >
-            <img alt="" className="h-6 w-6" src={`/panel-emojis/twemoji/${preset.code}.svg`} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function FivemChannelSelect({ channels, disabled, label, onChange, placeholder, prefix = "#", value }: {
@@ -6716,22 +5735,22 @@ function ApplicationEmojisView({
               <CardDescription>Sincroniza emojis do servidor para a aba Emojis da aplicação no Developer Portal.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!canManage || syncing || !sourceGuildId} onClick={() => handleSync()} size="sm" type="button">
+              <Button disabled={!canManage || syncing || !sourceGuildId} onClick={() => void handleSync()} size="sm" type="button">
                 {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                 Sincronizar Emojis
               </Button>
-              <Button disabled={loading || syncing} onClick={() => handleRefreshRemote()} size="sm" type="button" variant="outline">
+              <Button disabled={loading || syncing} onClick={() => void handleRefreshRemote()} size="sm" type="button" variant="outline">
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Atualizar Emojis
               </Button>
-              <Button disabled={loading || syncing} onClick={() => refreshList()} size="sm" type="button" variant="outline">
+              <Button disabled={loading || syncing} onClick={() => void refreshList()} size="sm" type="button" variant="outline">
                 Atualizar Lista
               </Button>
-              <Button disabled={!items.length} onClick={() => handleDownload()} size="sm" type="button" variant="outline">
+              <Button disabled={!items.length} onClick={() => void handleDownload()} size="sm" type="button" variant="outline">
                 {downloadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {downloadProgress !== null ? `Cancelar (${downloadProgress || "..."}%)` : "Baixar Emojis"}
               </Button>
-              <Button disabled={!canManage || loading || syncing || !items.length} onClick={() => handleRemoveAll()} size="sm" type="button" variant="destructive">
+              <Button disabled={!canManage || loading || syncing || !items.length} onClick={() => void handleRemoveAll()} size="sm" type="button" variant="destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Remover Todos
               </Button>
@@ -7288,7 +6307,7 @@ function ServerClonerView({
             <Button
               className="mt-4 w-full gap-2 bg-purple-600 text-white hover:bg-purple-500"
               disabled={!canManage || saving || loading}
-              onClick={() => savePlan()}
+              onClick={() => void savePlan()}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar plano
@@ -8083,13 +7102,13 @@ function EmojiCloneSettingsPanel({
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={disabled || bulkLoading !== "idle"} onClick={() => handleValidateFakeToken()} size="sm" type="button">
+                <Button disabled={disabled || bulkLoading !== "idle"} onClick={() => void handleValidateFakeToken()} size="sm" type="button">
                   {bulkLoading === "validating" ? "Validando..." : "Validar token"}
                 </Button>
-                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted} onClick={() => handleFetchFakeEmojis()} size="sm" type="button" variant="outline">
+                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted} onClick={() => void handleFetchFakeEmojis()} size="sm" type="button" variant="outline">
                   {bulkLoading === "fetching" ? "Buscando..." : "Buscar Emojis"}
                 </Button>
-                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted || !fakeEmojis.some((emoji) => emoji.selected)} onClick={() => handleCloneFakeSelected()} size="sm" type="button" variant="outline">
+                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted || !fakeEmojis.some((emoji) => emoji.selected)} onClick={() => void handleCloneFakeSelected()} size="sm" type="button" variant="outline">
                   {bulkLoading === "cloning" ? "Clonando..." : "Clonar Emojis Selecionados"}
                 </Button>
                 <Button onClick={handleClearFakeTest} size="sm" type="button" variant="outline">
@@ -8207,11 +7226,11 @@ function EmojiCloneSettingsPanel({
                 <option value="false">Estaticos</option>
                 <option value="true">Animados</option>
               </select>
-              <Button disabled={libraryLoading} onClick={() => refreshEmojiLibrary()} size="sm" type="button" variant="outline">
+              <Button disabled={libraryLoading} onClick={() => void refreshEmojiLibrary()} size="sm" type="button" variant="outline">
                 {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               </Button>
               {botId ? (
-                <Button disabled={!library.length} onClick={() => handleLibraryDownload()} size="sm" type="button" variant="outline">
+                <Button disabled={!library.length} onClick={() => void handleLibraryDownload()} size="sm" type="button" variant="outline">
                   {libraryDownloadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {libraryDownloadProgress !== null ? `Cancelar (${libraryDownloadProgress || "..."}%)` : "Baixar Emojis"}
                 </Button>
@@ -8245,7 +7264,7 @@ function EmojiCloneSettingsPanel({
                   <Button
                     className="mt-3 w-full"
                     disabled={disabled || !destinationGuildId || resendingId === item.id}
-                    onClick={() => handleResendLibraryEmoji(item)}
+                    onClick={() => void handleResendLibraryEmoji(item)}
                     size="sm"
                     type="button"
                     variant="outline"
@@ -8366,7 +7385,7 @@ function EmojiCloneSettingsPanel({
                   ].join(" ")}
                   disabled={disabled}
                   key={bot.id}
-                  onClick={() => savePatch({ emojiCloneAllowedBotIds: toggleValue(selectedBotIds, bot.clientId) })}
+                  onClick={() => void savePatch({ emojiCloneAllowedBotIds: toggleValue(selectedBotIds, bot.clientId) })}
                   type="button"
                 >
                   <span className="min-w-0">
@@ -8394,7 +7413,7 @@ function EmojiCloneSettingsPanel({
                   ].join(" ")}
                   disabled={disabled}
                   key={role.id}
-                  onClick={() => savePatch({ emojiCloneAllowedRoleIds: toggleValue(settings?.emojiCloneAllowedRoleIds ?? [], role.id) })}
+                  onClick={() => void savePatch({ emojiCloneAllowedRoleIds: toggleValue(settings?.emojiCloneAllowedRoleIds ?? [], role.id) })}
                   type="button"
                 >
                   <span className="truncate text-sm text-zinc-200">@{role.name}</span>
@@ -9250,635 +8269,6 @@ function readResponseMessage(error: unknown) {
   return typeof response?.data?.message === "string" ? response.data.message : null;
 }
 
-function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canManage: boolean; guild: DashboardGuild | null }) {
-  const [config, setConfig] = useState<PoliceRhConfig>(defaultPoliceRhConfig);
-  const [channels, setChannels] = useState<GuildChannelOption[]>([]);
-  const [categories, setCategories] = useState<GuildCategoryOption[]>([]);
-  const [roles, setRoles] = useState<GuildRoleOption[]>([]);
-  const [tab, setTab] = useState<PoliceRhTab>("general");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [imageUploading, setImageUploading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!botId || !guild) return;
-    let mounted = true;
-    setLoading(true);
-    setMessage(null);
-
-    Promise.all([
-      getAdvancedModuleConfig(botId, guild.id, "police-rh"),
-      getGuildLiveOptions(guild.id, botId)
-    ])
-      .then(([module, options]) => {
-        if (!mounted) return;
-        setConfig(normalizePoliceRhConfig(module.config));
-        setChannels(options.channels);
-        setCategories(options.categories ?? []);
-        setRoles(options.roles.filter((role) => role.id !== guild.id));
-      })
-      .catch((error) => {
-        if (mounted) setMessage(readResponseMessage(error) ?? "Não foi possível carregar o sistema RH, Ausência e Adorno.");
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [botId, guild?.id]);
-
-  function patch(patchValue: Partial<PoliceRhConfig>) {
-    setConfig((current) => ({ ...current, ...patchValue }));
-  }
-
-  async function save() {
-    if (!botId || !guild) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
-        config,
-        guildName: guild.name
-      });
-      setConfig(normalizePoliceRhConfig(saved.config));
-      setMessage("Configurações do RH, Ausência e Adorno salvas.");
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Não foi possível salvar o sistema RH, Ausência e Adorno.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function publish() {
-    if (!botId || !guild) return;
-    setPublishing(true);
-    setMessage(null);
-    try {
-      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
-        config,
-        guildName: guild.name
-      });
-      setConfig(normalizePoliceRhConfig(saved.config));
-      await publishPoliceRhPanel(botId, guild.id);
-      setMessage("Painel do RH enviado para atualização. Se já existir mensagem salva, o bot deve editar a mensagem existente.");
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Não foi possível publicar o painel do RH.");
-    } finally {
-      setPublishing(false);
-    }
-  }
-
-  async function uploadRhImage(file: File | null) {
-    if (!file || !botId || !guild) return;
-    setImageUploading(true);
-    setMessage(null);
-    try {
-      const uploaded = await uploadPoliceRhPanelImage(botId, guild.id, file);
-      setConfig(normalizePoliceRhConfig(uploaded.module.config));
-      setMessage("🖼️ Imagem enviada e salva no painel RH.");
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Não foi possível enviar a imagem do RH.");
-    } finally {
-      setImageUploading(false);
-    }
-  }
-
-  async function removeRhImage() {
-    if (!botId || !guild) return;
-    const nextConfig = { ...config, panelBannerUrl: "", panelFooterImageUrl: "", panelImageRemoved: true, panelImageUrl: "", panelImagePosition: "none" as const };
-    setImageUploading(true);
-    setMessage(null);
-    try {
-      const saved = await saveAdvancedModuleConfig(botId, guild.id, "police-rh", {
-        config: nextConfig,
-        guildName: guild.name
-      });
-      setConfig(normalizePoliceRhConfig(saved.config));
-      setMessage("🗑️ Imagem removida do painel RH.");
-    } catch (error) {
-      setMessage(readResponseMessage(error) ?? "Não foi possível remover a imagem do RH.");
-    } finally {
-      setImageUploading(false);
-    }
-  }
-
-  if (!botId || !guild) {
-    return <Card><CardContent className="py-10 text-center text-zinc-500">Selecione um bot e um servidor.</CardContent></Card>;
-  }
-
-  const disabled = !canManage || loading || saving || publishing || imageUploading;
-  const roleOptions = roles.map((role) => ({ color: role.color, disabled: role.managed, id: role.id, name: role.name }));
-  const channelOptions = channels.map((channel) => ({ id: channel.id, name: channel.name }));
-  const categoryOptions = categories.map((category) => ({ id: category.id, name: category.name }));
-  const selectedPanelChannel = config.panelChannelId || config.rhPanelChannelId || config.absencePanelChannelId || config.adornoPanelChannelId;
-
-  return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>RH - Ausências e Adornos</CardTitle>
-              <CardDescription>Modo dedicado para RH, solicitações de ausência, adornos, permissões, logs e painel Components V2.</CardDescription>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-zinc-300">{config.enabled ? "Ativado" : "Desativado"}</span>
-              <Switch checked={config.enabled} disabled={disabled} onCheckedChange={(enabled) => patch({ enabled })} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {message ? <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-200">{message}</div> : null}
-          {loading ? <div className="flex min-h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div> : (
-            <>
-              <PoliceRhTabs active={tab} onChange={setTab} />
-
-              {tab === "general" ? (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={Users} title="Configuração Geral" description="Estado geral do módulo, canal principal e identidade visual do painel Components V2.">
-                    <FivemResourceSelect disabled={disabled} label="Canal do painel principal" onChange={(panelChannelId) => patch({ panelChannelId, rhPanelChannelId: panelChannelId })} options={channelOptions} prefix="#" value={selectedPanelChannel} />
-                    <FivemResourceSelect disabled={disabled} label="Canal de logs geral do RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
-                    <PoliceRhField disabled={disabled} label="Título do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
-                    <PoliceRhTextarea disabled={disabled} label="Descrição do painel" onChange={(panelDescription) => patch({ panelDescription })} value={config.panelDescription} />
-                    <PoliceRhField disabled={disabled} label="Cor do painel" onChange={(panelColor) => patch({ panelColor })} type="color" value={config.panelColor} />
-                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
-                  </PoliceRhConfigSection>
-                  <PoliceRhPreview config={config} />
-                </section>
-              ) : null}
-
-              {tab === "absence" ? (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={CalendarClock} title="Sistema de Ausência" description="Solicitação com modal: início, retorno e motivo. Aprovação direto no canal configurado com botões Component V2.">
-                    <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de ausência ativo</span><Switch checked={config.absenceEnabled} disabled={disabled} onCheckedChange={(absenceEnabled) => patch({ absenceEnabled })} /></label>
-                    <FivemResourceSelect disabled={disabled} label="Canal que recebe solicitações de ausência" onChange={(absencePanelChannelId) => patch({ absencePanelChannelId })} options={channelOptions} prefix="#" value={config.absencePanelChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Canal de logs" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Cargo de ausência" onChange={(absenceRoleId) => patch({ absenceRoleId })} options={roleOptions} prefix="@" value={config.absenceRoleId} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Cargos aprovadores" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
-                    <PoliceRhField disabled={disabled} label="Título" onChange={(absenceTitle) => patch({ absenceTitle })} value={config.absenceTitle} />
-                    <PoliceRhTextarea disabled={disabled} label="Descrição" onChange={(absenceDescription) => patch({ absenceDescription })} value={config.absenceDescription} />
-                    <PoliceRhField disabled={disabled} label="Cor" onChange={(absenceColor) => patch({ absenceColor })} type="color" value={config.absenceColor} />
-                    <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(absenceImagePosition) => patch({ absenceImagePosition })} value={config.absenceImagePosition} />
-                  </PoliceRhConfigSection>
-                  <PoliceRhConfigSection icon={ShieldCheck} title="Mensagens automáticas" description="DMs Component V2 para aprovação, reprovação e retorno da ausência.">
-                    <PoliceRhTextarea disabled={disabled} label="DM ao aprovar" onChange={(absenceDmApprovedMessage) => patch({ absenceDmApprovedMessage })} value={config.absenceDmApprovedMessage} />
-                    <PoliceRhTextarea disabled={disabled} label="DM ao reprovar" onChange={(absenceDmRejectedMessage) => patch({ absenceDmRejectedMessage })} value={config.absenceDmRejectedMessage} />
-                    <PoliceRhTextarea disabled={disabled} label="DM ao finalizar na data de retorno" onChange={(absenceDmFinishedMessage) => patch({ absenceDmFinishedMessage })} value={config.absenceDmFinishedMessage} />
-                  </PoliceRhConfigSection>
-                </section>
-              ) : null}
-
-              {tab === "adornos" ? (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={ShieldCheck} title="Sistema de Adornos" description="Publicação direta da solicitação no canal configurado, sem canal temporário ou aprovação.">
-                    <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3 text-sm text-zinc-300"><span>Sistema de adorno ativo</span><Switch checked={config.adornoEnabled} disabled={disabled} onCheckedChange={(adornoEnabled) => patch({ adornoEnabled })} /></label>
-                    <FivemResourceSelect disabled={disabled} label="Canal do painel de adorno" onChange={(adornoPanelChannelId) => patch({ adornoPanelChannelId })} options={channelOptions} prefix="#" value={config.adornoPanelChannelId} />
-                    <PoliceRhField disabled={disabled} label="Nome do cabeçalho" onChange={(adornoTitle) => patch({ adornoTitle })} value={config.adornoTitle} />
-                    <PoliceRhField disabled={disabled} label="Logo / thumbnail" onChange={(adornoImageUrl) => patch({ adornoImageUrl })} value={config.adornoImageUrl} />
-                    <PoliceRhField disabled={disabled} label="Texto do rodapé" onChange={(adornoFooterText) => patch({ adornoFooterText })} value={config.adornoFooterText} />
-                  </PoliceRhConfigSection>
-                  <PoliceRhAdornmentPreview config={config} />
-                </section>
-              ) : null}
-
-              {tab === "panel" ? (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={Settings} title="🖼️ Imagem do painel RH" description="Upload e URL ficam salvos no mesmo registro usado pelo bot ao publicar o painel.">
-                    <div className="grid gap-3">
-                      <label className="grid gap-2 text-xs font-medium text-zinc-400">
-                        <span>Enviar imagem</span>
-                        <span className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm font-semibold text-zinc-200 transition hover:border-zinc-600">
-                          {imageUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                          {imageUploading ? "Enviando..." : "Enviar arquivo"}
-                          <input
-                            accept="image/gif,image/jpeg,image/png,image/webp"
-                            className="hidden"
-                            disabled={disabled}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] ?? null;
-                              event.currentTarget.value = "";
-                              void uploadRhImage(file);
-                            }}
-                            type="file"
-                          />
-                        </span>
-                      </label>
-                      <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageRemoved: false, panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
-                      <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
-                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={() => removeRhImage()} type="button" variant="outline">
-                        <Trash2 className="h-4 w-4" />
-                        Remover imagem
-                      </Button>
-                    </div>
-                    <PoliceRhField disabled={disabled} label="Texto do rodapé" onChange={(panelFooterText) => patch({ panelFooterText })} value={config.panelFooterText} />
-                    <PoliceRhField disabled={disabled} label="Imagem pequena do rodapé" onChange={(panelFooterImageUrl) => patch({ panelFooterImageUrl })} value={config.panelFooterImageUrl} />
-                    <PoliceRhField disabled={disabled} label="Imagem ausência" onChange={(absenceImageUrl) => patch({ absenceImageUrl })} value={config.absenceImageUrl} />
-                    <PoliceRhField disabled={disabled} label="Banner ausência" onChange={(absenceBannerUrl) => patch({ absenceBannerUrl })} value={config.absenceBannerUrl} />
-                    <PoliceRhField disabled={disabled} label="Imagem adorno" onChange={(adornoImageUrl) => patch({ adornoImageUrl })} value={config.adornoImageUrl} />
-                    <PoliceRhField disabled={disabled} label="Banner adorno" onChange={(adornoBannerUrl) => patch({ adornoBannerUrl })} value={config.adornoBannerUrl} />
-                  </PoliceRhConfigSection>
-                  <PoliceRhPreview config={config} />
-                </section>
-              ) : null}
-
-              {tab === "logs" ? (
-                <section className="grid gap-4 lg:grid-cols-3">
-                  <PoliceRhConfigSection icon={ScrollText} title="Logs" description="Canais onde as ações do sistema devem ser registradas.">
-                    <FivemResourceSelect disabled={disabled} label="Logs gerais RH" onChange={(rhLogChannelId) => patch({ rhLogChannelId })} options={channelOptions} prefix="#" value={config.rhLogChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Logs de ausência" onChange={(absenceLogChannelId) => patch({ absenceLogChannelId })} options={channelOptions} prefix="#" value={config.absenceLogChannelId} />
-                    <FivemResourceSelect disabled={disabled} label="Logs de adorno" onChange={(adornoLogChannelId) => patch({ adornoLogChannelId })} options={channelOptions} prefix="#" value={config.adornoLogChannelId} />
-                  </PoliceRhConfigSection>
-                </section>
-              ) : null}
-
-              {tab === "permissions" ? (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <PoliceRhConfigSection icon={LockKeyhole} title="Permissões" description="Quem pode configurar pela dashboard usa as permissões do painel. Aprovar/reprovar é definido por cargo.">
-                    <FivemResourceMultiSelect disabled={disabled} label="Cargos permitidos a usar RH" onChange={(rhAllowedRoleIds) => patch({ rhAllowedRoleIds })} options={roleOptions} prefix="@" values={config.rhAllowedRoleIds} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Responsáveis do RH" onChange={(rhResponsibleRoleIds) => patch({ rhResponsibleRoleIds })} options={roleOptions} prefix="@" values={config.rhResponsibleRoleIds} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Aprovadores de ausência" onChange={(absenceApproverRoleIds) => patch({ absenceApproverRoleIds })} options={roleOptions} prefix="@" values={config.absenceApproverRoleIds} />
-                    <FivemResourceMultiSelect disabled={disabled} label="Aprovadores de adorno" onChange={(adornoApproverRoleIds) => patch({ adornoApproverRoleIds })} options={roleOptions} prefix="@" values={config.adornoApproverRoleIds} />
-                  </PoliceRhConfigSection>
-                </section>
-              ) : null}
-
-              <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-                <Button disabled={disabled} onClick={() => save()} type="button">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Salvar configurações
-                </Button>
-                <Button disabled={disabled || !selectedPanelChannel} onClick={() => publish()} type="button" variant="outline">
-                  {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Publicar/atualizar painel
-                </Button>
-                <Badge variant={config.enabled ? "success" : "muted"}>{config.enabled ? "Módulo ativo" : "Módulo inativo"}</Badge>
-                {!selectedPanelChannel ? <Badge variant="muted">Configure um canal para publicar</Badge> : null}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-type PoliceRhTab = "general" | "absence" | "adornos" | "panel" | "logs" | "permissions";
-type PoliceRhImagePosition = "banner" | "thumbnail" | "top" | "below_title" | "middle" | "bottom" | "side" | "footer" | "before_buttons" | "below_text" | "above_buttons" | "none";
-const DEFAULT_POLICE_RH_PANEL_IMAGE_URL = "/rh/rh-default-banner.png";
-
-type PoliceRhConfig = {
-  adornoColor: string;
-  adornoDescription: string;
-  adornoDmApprovedMessage: string;
-  adornoApproverRoleIds: string[];
-  adornoBannerUrl: string;
-  adornoCategoryId: string | null;
-  adornoDmMessage: string;
-  adornoDmRejectedMessage: string;
-  adornoEnabled: boolean;
-  adornoFooterImageUrl: string;
-  adornoFooterText: string;
-  adornoImagePosition: PoliceRhImagePosition;
-  adornoImageUrl: string;
-  adornoLogChannelId: string | null;
-  adornoPanelChannelId: string | null;
-  adornoResponsibleRoleIds: string[];
-  adornoTitle: string;
-  absenceApproverRoleIds: string[];
-  absenceBannerUrl: string;
-  absenceCategoryId: string | null;
-  absenceColor: string;
-  absenceDescription: string;
-  absenceDmApprovedMessage: string;
-  absenceDmMessage: string;
-  absenceDmRejectedMessage: string;
-  absenceDmFinishedMessage: string;
-  absenceEnabled: boolean;
-  absenceFooterImageUrl: string;
-  absenceFooterText: string;
-  absenceImagePosition: PoliceRhImagePosition;
-  absenceImageUrl: string;
-  absenceLogChannelId: string | null;
-  absencePanelChannelId: string | null;
-  absenceRoleId: string | null;
-  absenceTitle: string;
-  enabled: boolean;
-  panelBannerUrl: string;
-  panelChannelId: string | null;
-  panelColor: string;
-  panelDescription: string;
-  panelFooterImageUrl: string;
-  panelFooterText: string;
-  panelImageRemoved: boolean;
-  panelImagePosition: PoliceRhImagePosition;
-  panelImageUrl: string;
-  panelMessageId: string | null;
-  panelTitle: string;
-  rhAllowedRoleIds: string[];
-  rhLogChannelId: string | null;
-  rhPanelChannelId: string | null;
-  rhResponsibleRoleIds: string[];
-};
-
-const defaultPoliceRhConfig: PoliceRhConfig = {
-  adornoColor: "#22c55e",
-  adornoDescription: "",
-  adornoDmApprovedMessage: "✅ Sua solicitação de adorno foi aprovada.",
-  adornoApproverRoleIds: [],
-  adornoBannerUrl: "",
-  adornoCategoryId: null,
-  adornoDmMessage: "🎖️ Sua solicitação de adorno foi atualizada pela equipe.",
-  adornoDmRejectedMessage: "❌ Sua solicitação de adorno foi recusada.",
-  adornoEnabled: true,
-  adornoFooterImageUrl: "",
-  adornoFooterText: "Solicitação enviada ao HCMD",
-  adornoImagePosition: "side",
-  adornoImageUrl: "",
-  adornoLogChannelId: null,
-  adornoPanelChannelId: null,
-  adornoResponsibleRoleIds: [],
-  adornoTitle: "North Police Department",
-  absenceApproverRoleIds: [],
-  absenceBannerUrl: "",
-  absenceCategoryId: null,
-  absenceColor: "#f59e0b",
-  absenceDescription: "📅 Informe a data de início, retorno e motivo da ausência.",
-  absenceDmApprovedMessage: "✅ Sua solicitação de ausência foi aprovada.\n⏰ Quando chegar a data de retorno, seu cargo de ausência será removido automaticamente.",
-  absenceDmMessage: "📋 Sua solicitação de ausência foi atualizada pela equipe.",
-  absenceDmRejectedMessage: "❌ Sua solicitação de ausência foi recusada.",
-  absenceDmFinishedMessage: "⏰ Sua ausência acabou. Você pode voltar ao RP/trabalho.",
-  absenceEnabled: true,
-  absenceFooterImageUrl: "",
-  absenceFooterText: "📝 Solicitação de ausência",
-  absenceImagePosition: "side",
-  absenceImageUrl: "",
-  absenceLogChannelId: null,
-  absencePanelChannelId: null,
-  absenceRoleId: null,
-  absenceTitle: "📝 Sistema de Ausência",
-  enabled: false,
-  panelBannerUrl: "",
-  panelChannelId: null,
-  panelColor: "#7c3aed",
-  panelDescription: "📋 Selecione uma das opções abaixo para abrir sua solicitação.\nCada pedido será analisado pela equipe responsável antes de ser processado.",
-  panelFooterImageUrl: "",
-  panelFooterText: "📌 RH - Sistema interno",
-  panelImageRemoved: false,
-  panelImagePosition: "top",
-  panelImageUrl: DEFAULT_POLICE_RH_PANEL_IMAGE_URL,
-  panelMessageId: null,
-  panelTitle: "🏢 RH - Ausências e Adornos",
-  rhAllowedRoleIds: [],
-  rhLogChannelId: null,
-  rhPanelChannelId: null,
-  rhResponsibleRoleIds: []
-};
-
-function PoliceRhTabs({ active, onChange }: { active: PoliceRhTab; onChange: (tab: PoliceRhTab) => void }) {
-  const tabs: Array<{ id: PoliceRhTab; label: string }> = [
-    { id: "general", label: "⚙️ Configuração Geral" },
-    { id: "absence", label: "📝 Ausência" },
-    { id: "adornos", label: "🎖️ Adornos" },
-    { id: "panel", label: "🖼️ Painel" },
-    { id: "logs", label: "📜 Logs" },
-    { id: "permissions", label: "🔐 Permissões" }
-  ];
-
-  return (
-    <div className="discord-scrollbar flex gap-2 overflow-x-auto border-b border-zinc-900 pb-3">
-      {tabs.map((item) => (
-        <button
-          className={cn(
-            "shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold transition",
-            active === item.id
-              ? "border-purple-500/35 bg-purple-500/15 text-white"
-              : "border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:border-purple-500/25 hover:text-zinc-100"
-          )}
-          key={item.id}
-          onClick={() => onChange(item.id)}
-          type="button"
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PoliceRhConfigSection({ children, description, icon: Icon, title }: { children: React.ReactNode; description: string; icon: typeof Bot; title: string }) {
-  return (
-    <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black text-zinc-300">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="font-semibold text-white">{title}</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function PoliceRhField({ disabled, label, onChange, type = "text", value }: { disabled: boolean; label: string; onChange: (value: string) => void; type?: string; value: string }) {
-  return (
-    <label className="grid gap-2 text-xs font-medium text-zinc-400">
-      <span>{label}</span>
-      <input className="h-10 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value)} type={type} value={value} />
-    </label>
-  );
-}
-
-function PoliceRhImagePositionSelect({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: PoliceRhImagePosition) => void; value: PoliceRhImagePosition }) {
-  const options: Array<{ label: string; value: PoliceRhImagePosition }> = [
-    { label: "Sem imagem", value: "none" },
-    { label: "Banner principal", value: "banner" },
-    { label: "Topo / cabeçalho", value: "top" },
-    { label: "Lateral direita", value: "side" },
-    { label: "Thumbnail", value: "thumbnail" },
-    { label: "Abaixo do título", value: "below_title" },
-    { label: "Meio do painel", value: "middle" },
-    { label: "Abaixo do texto", value: "below_text" },
-    { label: "Antes dos botões", value: "before_buttons" },
-    { label: "Rodapé", value: "footer" },
-    { label: "Final do painel", value: "bottom" }
-  ];
-
-  return (
-    <label className="grid gap-2 text-xs font-medium text-zinc-400">
-      <span>{label}</span>
-      <select className="h-10 rounded-lg border border-zinc-800 bg-[#09090b] px-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value as PoliceRhImagePosition)} value={value}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </label>
-  );
-}
-
-function PoliceRhTextarea({ disabled, label, onChange, value }: { disabled: boolean; label: string; onChange: (value: string) => void; value: string }) {
-  return (
-    <label className="grid gap-2 text-xs font-medium text-zinc-400">
-      <span>{label}</span>
-      <textarea className="min-h-24 rounded-lg border border-zinc-800 bg-[#09090b] p-3 text-sm text-zinc-100 outline-none focus:border-emerald-500/60 disabled:opacity-60" disabled={disabled} onChange={(event) => onChange(event.target.value)} value={value} />
-    </label>
-  );
-}
-
-function PoliceRhPreview({ config }: { config: PoliceRhConfig }) {
-  const imageUrl = config.panelImageUrl || config.panelBannerUrl;
-  const footerImageUrl = config.panelFooterImageUrl;
-  const imagePosition = config.panelImagePosition;
-  const showTop = imageUrl && (imagePosition === "top" || imagePosition === "banner");
-  const showBelowTitle = imageUrl && imagePosition === "below_title";
-  const showMiddle = imageUrl && imagePosition === "middle";
-  const showSide = imageUrl && (imagePosition === "side" || imagePosition === "thumbnail");
-  const showBeforeButtons = imageUrl && (imagePosition === "before_buttons" || imagePosition === "above_buttons" || imagePosition === "below_text");
-  const showFooter = imageUrl && imagePosition === "footer";
-  const showBottom = imageUrl && imagePosition === "bottom";
-
-  return (
-    <div className="rounded-lg border border-purple-500/20 bg-[#0b0b0f] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-white">Preview Component V2</p>
-          <p className="mt-1 text-xs text-zinc-500">Visual aproximado do painel principal. Botões e DMs usam a mesma base visual.</p>
-        </div>
-        <span className="h-5 w-5 rounded-full" style={{ backgroundColor: config.panelColor }} />
-      </div>
-      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-        {showTop ? <img alt="Preview topo" className="max-h-44 w-full object-cover" src={imageUrl} /> : null}
-        <div className="flex gap-4 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-white">{config.panelTitle}</p>
-            <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-300">{config.panelDescription}</p>
-            {showBelowTitle ? <img alt="Preview abaixo do título" className="mt-3 max-h-36 w-full rounded-lg object-cover" src={imageUrl} /> : null}
-            {showMiddle ? <img alt="Preview meio" className="mt-3 max-h-40 w-full rounded-lg object-cover" src={imageUrl} /> : null}
-            {showBeforeButtons ? <img alt="Preview antes dos botões" className="mt-3 max-h-36 w-full rounded-lg object-cover" src={imageUrl} /> : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-100">📝 Solicitar Ausência</span>
-              <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">🎖️ Solicitar Adorno</span>
-            </div>
-          </div>
-          {showSide ? <img alt="Preview lateral" className="h-24 w-24 shrink-0 rounded-lg object-cover" src={imageUrl} /> : null}
-        </div>
-        {(config.panelFooterText || footerImageUrl || showFooter) ? (
-          <div className="flex items-center gap-2 border-t border-zinc-800 px-4 py-3 text-xs font-semibold text-zinc-400">
-            {footerImageUrl ? <img alt="Rodapé" className="h-6 w-6 rounded object-cover" src={footerImageUrl} /> : null}
-            {showFooter ? <img alt="Imagem rodapé" className="h-6 w-6 rounded object-cover" src={imageUrl} /> : null}
-            <span>{config.panelFooterText}</span>
-          </div>
-        ) : null}
-        {showBottom ? <img alt="Preview final" className="max-h-36 w-full border-t border-zinc-800 object-cover" src={imageUrl} /> : null}
-      </div>
-    </div>
-  );
-}
-
-function PoliceRhAdornmentPreview({ config }: { config: PoliceRhConfig }) {
-  return (
-    <div className="rounded-lg border border-emerald-500/20 bg-[#0b0b0f] p-4">
-      <p className="mb-3 text-sm font-semibold text-white">Prévia da solicitação</p>
-      <div className="overflow-hidden rounded-md border border-zinc-800 bg-[#313338] p-4 text-sm text-zinc-200">
-        <div className="flex items-start justify-between gap-4">
-          <div><p className="font-semibold">{config.adornoTitle}</p><h3 className="mt-2 text-base font-bold">🏅 Solicitação de Adorno</h3></div>
-          {config.adornoImageUrl ? <img alt="Logo do sistema de adorno" className="h-20 w-20 rounded object-cover" src={config.adornoImageUrl} /> : null}
-        </div>
-        <div className="mt-4 space-y-3">
-          <p><b>Nome</b><br />Ofc. Yuri Mandella | 6293</p>
-          <p><b>ID</b><br />972921360382828614</p>
-          <p><b>Número do Adorno</b><br />61</p>
-          <p><b>Solicitante</b><br /><span className="rounded bg-indigo-500/20 px-1 text-indigo-200">@Ofc. Yuri Mandella | 6293</span></p>
-          <p><b>Link da foto do adorno</b><br /><span className="text-sky-300">Clique aqui para visualizar a imagem</span></p>
-          <div className="flex aspect-video items-center justify-center rounded border border-zinc-700 bg-zinc-900 text-xs text-zinc-500">Imagem grande do adorno</div>
-        </div>
-        <p className="mt-4 border-t border-zinc-700 pt-3 text-xs text-zinc-400">🏅 {config.adornoFooterText} • {new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
-      </div>
-    </div>
-  );
-}
-
-function normalizePoliceRhConfig(raw: Record<string, unknown>): PoliceRhConfig {
-  return {
-    ...defaultPoliceRhConfig,
-    enabled: raw.enabled === true,
-    panelChannelId: readNullableString(raw.panelChannelId),
-    panelMessageId: readNullableString(raw.panelMessageId),
-    panelTitle: readStringValue(raw.panelTitle) || defaultPoliceRhConfig.panelTitle,
-    panelDescription: readStringValue(raw.panelDescription) || defaultPoliceRhConfig.panelDescription,
-    panelImageRemoved: raw.panelImageRemoved === true,
-    panelImageUrl: raw.panelImageRemoved === true ? "" : readStringValue(raw.panelImageUrl) || defaultPoliceRhConfig.panelImageUrl,
-    panelBannerUrl: readStringValue(raw.panelBannerUrl),
-    panelFooterText: readStringValue(raw.panelFooterText) || defaultPoliceRhConfig.panelFooterText,
-    panelFooterImageUrl: readStringValue(raw.panelFooterImageUrl),
-    panelColor: readColorValue(raw.panelColor, defaultPoliceRhConfig.panelColor),
-    panelImagePosition: raw.panelImageRemoved === true ? "none" : readPoliceRhImagePosition(raw.panelImagePosition, defaultPoliceRhConfig.panelImagePosition),
-    rhAllowedRoleIds: readStringList(raw.rhAllowedRoleIds),
-    rhResponsibleRoleIds: readStringList(raw.rhResponsibleRoleIds),
-    rhLogChannelId: readNullableString(raw.rhLogChannelId),
-    rhPanelChannelId: readNullableString(raw.rhPanelChannelId),
-    absenceEnabled: raw.absenceEnabled !== false,
-    absencePanelChannelId: readNullableString(raw.absencePanelChannelId),
-    absenceCategoryId: readNullableString(raw.absenceCategoryId),
-    absenceLogChannelId: readNullableString(raw.absenceLogChannelId),
-    absenceRoleId: readNullableString(raw.absenceRoleId),
-    absenceApproverRoleIds: readStringList(raw.absenceApproverRoleIds),
-    absenceTitle: readStringValue(raw.absenceTitle) || defaultPoliceRhConfig.absenceTitle,
-    absenceDescription: readStringValue(raw.absenceDescription) || defaultPoliceRhConfig.absenceDescription,
-    absenceImageUrl: readStringValue(raw.absenceImageUrl),
-    absenceBannerUrl: readStringValue(raw.absenceBannerUrl),
-    absenceFooterText: readStringValue(raw.absenceFooterText) || defaultPoliceRhConfig.absenceFooterText,
-    absenceFooterImageUrl: readStringValue(raw.absenceFooterImageUrl),
-    absenceColor: readColorValue(raw.absenceColor, defaultPoliceRhConfig.absenceColor),
-    absenceImagePosition: readPoliceRhImagePosition(raw.absenceImagePosition, defaultPoliceRhConfig.absenceImagePosition),
-    absenceDmApprovedMessage: readStringValue(raw.absenceDmApprovedMessage) || defaultPoliceRhConfig.absenceDmApprovedMessage,
-    absenceDmRejectedMessage: readStringValue(raw.absenceDmRejectedMessage) || defaultPoliceRhConfig.absenceDmRejectedMessage,
-    absenceDmFinishedMessage: readStringValue(raw.absenceDmFinishedMessage) || defaultPoliceRhConfig.absenceDmFinishedMessage,
-    absenceDmMessage: readStringValue(raw.absenceDmMessage) || defaultPoliceRhConfig.absenceDmMessage,
-    adornoEnabled: raw.adornoEnabled !== false,
-    adornoPanelChannelId: readNullableString(raw.adornoPanelChannelId),
-    adornoCategoryId: readNullableString(raw.adornoCategoryId),
-    adornoLogChannelId: readNullableString(raw.adornoLogChannelId),
-    adornoResponsibleRoleIds: readStringList(raw.adornoResponsibleRoleIds),
-    adornoApproverRoleIds: readStringList(raw.adornoApproverRoleIds),
-    adornoTitle: readStringValue(raw.adornoTitle) || defaultPoliceRhConfig.adornoTitle,
-    adornoDescription: readStringValue(raw.adornoDescription) || defaultPoliceRhConfig.adornoDescription,
-    adornoImageUrl: readStringValue(raw.adornoImageUrl),
-    adornoBannerUrl: readStringValue(raw.adornoBannerUrl),
-    adornoFooterText: readStringValue(raw.adornoFooterText) || defaultPoliceRhConfig.adornoFooterText,
-    adornoFooterImageUrl: readStringValue(raw.adornoFooterImageUrl),
-    adornoColor: readColorValue(raw.adornoColor, defaultPoliceRhConfig.adornoColor),
-    adornoImagePosition: readPoliceRhImagePosition(raw.adornoImagePosition, defaultPoliceRhConfig.adornoImagePosition),
-    adornoDmApprovedMessage: readStringValue(raw.adornoDmApprovedMessage) || defaultPoliceRhConfig.adornoDmApprovedMessage,
-    adornoDmRejectedMessage: readStringValue(raw.adornoDmRejectedMessage) || defaultPoliceRhConfig.adornoDmRejectedMessage,
-    adornoDmMessage: readStringValue(raw.adornoDmMessage) || defaultPoliceRhConfig.adornoDmMessage
-  };
-}
-
-function readStringList(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
-}
-
-function readNullableString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function readStringValue(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function readColorValue(value: unknown, fallback: string) {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
-}
-
-function readPoliceRhImagePosition(value: unknown, fallback: PoliceRhImagePosition): PoliceRhImagePosition {
-  return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PoliceRhImagePosition : fallback;
-}
-
 function visualPanelIdForView(view: ViewId) {
   const aliases: Partial<Record<ViewId, string>> = {
     "self-bot-protection": "safe-bot",
@@ -9893,12 +8283,12 @@ function visualPanelIdForView(view: ViewId) {
 }
 
 function policePanelImageSlotsForView(view: ViewId) {
-  if (view !== "fivem-hierarchy" && view !== "police-actions" && view !== "police-patrol-reports" && view !== "police-reports") {
+  if (view !== "fivem-hierarchy" && view !== "police-actions" && view !== "police-patrol-reports") {
     return null;
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denúncia IAB" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },
@@ -9950,16 +8340,12 @@ function isViewAllowed(view: ViewId, enabledModules: string[]) {
     return enabledModules.includes("fivem-absences") || enabledModules.includes("fivem-fac");
   }
 
+  if (view === "police-absence") {
+    return enabledModules.includes("police-absences");
+  }
+
   if (view === "fivem-families") {
     return enabledModules.includes("fivem-orders") || enabledModules.includes("fivem-drugs") || enabledModules.includes("fivem-washing");
-  }
-
-  if (view === "police-patrol-reports") {
-    return enabledModules.includes("police-patrol-reports") || enabledModules.includes("patrol-reports");
-  }
-
-  if (view === "police-rh" || view === "rh-ausencias-adornos") {
-    return policeRhModuleEnabled(enabledModules);
   }
 
   const requiredModule = viewModuleIds[view];
@@ -9968,10 +8354,6 @@ function isViewAllowed(view: ViewId, enabledModules: string[]) {
 
 function liveModulesEnabled(enabledModules: string[]) {
   return enabledModules.includes("live") || enabledModules.includes("kick-integration");
-}
-
-function policeRhModuleEnabled(enabledModules: string[]) {
-  return enabledModules.includes("police-rh") || enabledModules.includes("fivem-absences") || enabledModules.includes("fivem-fac");
 }
 
 function ensureDashboardGuilds(guilds: DashboardGuild[]) {

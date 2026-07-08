@@ -1,23 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
-  ArchiveRestore,
-  AtSign,
   Boxes,
   BriefcaseBusiness,
   Building2,
   CalendarClock,
   Code2,
   Copy,
-  DatabaseBackup,
-  Download,
-  FileUp,
   LayoutDashboard,
   Loader2,
   PackagePlus,
   Pencil,
   Plus,
-  Radio,
   ScrollText,
   Settings,
   Shield,
@@ -39,32 +33,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Switch } from "../components/ui/switch";
 import {
   createDevFivemModule,
-  createServerBackup,
   deleteDevFivemModule,
   deleteDevAccessEntry,
-  deleteServerBackup,
-  downloadServerBackup,
   getDashboardMe,
   getDevAccessEntries,
   getDevBots,
   getDevFivemModules,
   getMaintenanceState,
-  getOperationalNoticeState,
   getLogs,
-  getServerBackupDashboard,
-  importServerBackup,
   sendMaintenanceAlert,
-  sendOperationalNoticeAlert,
   saveDevAccessEntry,
-  saveServerBackupSettings,
   setMaintenanceMode,
-  setOperationalNotice,
   updateDevBotModules,
   updateDevFivemModule
 } from "../lib/api";
 import { createDashboardSocket } from "../lib/socket";
 import { dashboardUrl } from "../lib/urls";
-import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState, OperationalNoticeState, ServerBackupDashboard, ServerBackupSnapshot } from "../types";
+import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState } from "../types";
 
 type DevDashboardProps = {
   auth: AuthResponse;
@@ -219,7 +204,6 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
             { id: "bot-menu" as const, label: "Menu do Bot" },
             { id: "cloning" as const, label: "Clonagem" },
             { id: "sales" as const, label: "Vendas" },
-            { id: "hosting-backup" as const, label: "Backup de Hospedagem" },
             { id: "fivem" as const, label: "FiveM" },
             { id: "police" as const, label: "Policia" },
             { id: "logs" as const, label: "Logs" },
@@ -246,15 +230,7 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
             onBotUpdated={handleBotUpdated}
             onDashboardSectionChange={(section) => handleChangeView(section)}
             onOpenView={(view, bot) => {
-              if (view === "rh-ausencias-adornos") {
-                window.location.replace("/dashboard/rh-ausencias-adornos");
-                return;
-              }
-              const url = new URL(dashboardUrl(bot?.slug));
-              if (view !== "overview") {
-                url.searchParams.set("view", view);
-              }
-              window.location.replace(url.toString());
+              if (view === "overview") window.location.replace(dashboardUrl(bot?.slug));
             }}
             onSelectBot={setSelectedBotId}
             selectedBotId={selectedBotId}
@@ -283,7 +259,6 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
           />
         ) : null}
 
-        {activeView === "hosting-backup" ? <HostingBackupPanel bots={profile.bots} selectedBotId={selectedBotId} onSelectBot={setSelectedBotId} onSelectGuild={setSelectedGuildId} /> : null}
         {activeView === "logs" ? <TechnicalLogsPanel botId={selectedBotId} guildId={selectedGuildId} /> : null}
         {activeView === "access" ? <DevAccessPanel /> : null}
         {activeView === "maintenance" ? <MaintenancePanel /> : null}
@@ -331,7 +306,6 @@ function DevSidebar({
     { icon: Settings, id: "bot-menu", label: "Menu do Bot" },
     { icon: Copy, id: "cloning", label: "Clonagem" },
     { icon: CreditCard, id: "sales", label: "Vendas OrviTech" },
-    { icon: DatabaseBackup, id: "hosting-backup", label: "Backup de Hospedagem" },
     { icon: Building2, id: "fivem", label: "FiveM" },
     { icon: ShieldCheck, id: "police", label: "Policia" },
     { icon: ScrollText, id: "logs", label: "Logs" },
@@ -422,344 +396,6 @@ function DevUserCard({ canViewDev, user }: { canViewDev: boolean; user: AuthResp
       </CardContent>
     </Card>
   );
-}
-
-function HostingBackupPanel({
-  bots,
-  onSelectBot,
-  onSelectGuild,
-  selectedBotId
-}: {
-  bots: DashboardBot[];
-  onSelectBot: (botId: string | null) => void;
-  onSelectGuild: (guildId: string | null) => void;
-  selectedBotId: string | null;
-}) {
-  const selectedBot = bots.find((bot) => bot.id === selectedBotId) ?? bots[0] ?? null;
-  const [scopeGuildId, setScopeGuildId] = useState("all");
-  const guildId = scopeGuildId;
-  const [dashboard, setDashboard] = useState<ServerBackupDashboard | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [working, setWorking] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedBotId && selectedBot) {
-      onSelectBot(selectedBot.id);
-    }
-  }, [onSelectBot, selectedBot?.id, selectedBotId]);
-
-  useEffect(() => {
-    if (!selectedBot || !guildId) {
-      setDashboard(null);
-      setMessage("Selecione um bot para criar o Backup de Hospedagem.");
-      return;
-    }
-
-    let mounted = true;
-    setLoading(true);
-    getServerBackupDashboard(selectedBot.id, guildId)
-      .then((nextDashboard) => {
-        if (mounted) setDashboard(nextDashboard);
-      })
-      .catch((error) => {
-        if (mounted) setMessage(readRequestMessage(error) ?? "Nao foi possivel carregar o Backup de Hospedagem.");
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [selectedBot?.id, guildId]);
-
-  useEffect(() => {
-    const socket = createDashboardSocket();
-    const refresh = () => {
-      if (!selectedBot || !guildId) return;
-      void getServerBackupDashboard(selectedBot.id, guildId).then(setDashboard).catch(() => undefined);
-    };
-    socket.on("server-backup:snapshot_updated", refresh);
-    socket.on("server-backup:restore_progress", refresh);
-    return () => {
-      socket.off("server-backup:snapshot_updated", refresh);
-      socket.off("server-backup:restore_progress", refresh);
-      socket.close();
-    };
-  }, [selectedBot?.id, guildId]);
-
-  const latest = dashboard?.backups[0] ?? null;
-  const hasPendingBackup = dashboard?.backups.some((backup) => backup.status === "pending") ?? false;
-  const latestReady = latest ? isExportableBackup(latest) : false;
-  const totalConfigurations = latest?.counts.configurations ?? latest?.counts.modules ?? 0;
-  const nextBackup = dashboard?.settings.autoEnabled && latest
-    ? nextBackupDate(latest.createdAt, dashboard.settings.frequency)
-    : null;
-
-  useEffect(() => {
-    if (!selectedBot || !guildId || !hasPendingBackup) return;
-
-    let cancelled = false;
-    const intervalId = window.setInterval(() => {
-      getServerBackupDashboard(selectedBot.id, guildId)
-        .then((nextDashboard) => {
-          if (!cancelled) setDashboard(nextDashboard);
-        })
-        .catch(() => undefined);
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [selectedBot?.id, guildId, hasPendingBackup]);
-
-  async function handleCreateBackup() {
-    if (!selectedBot || !guildId) return;
-    setWorking("create");
-    setMessage(null);
-    try {
-      const backup = await createServerBackup(selectedBot.id, guildId);
-      setDashboard((current) => current ? { ...current, backups: [backup, ...current.backups.filter((item) => item.id !== backup.id)] } : current);
-      setMessage("Backup manual criado e enviado para processamento.");
-    } catch (error) {
-      setMessage(readRequestMessage(error) ?? "Nao foi possivel criar o backup.");
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleImportBackup(file: File | null) {
-    if (!file || !selectedBot || !guildId) return;
-    setWorking("import");
-    setMessage(null);
-    try {
-      const payload = JSON.parse(await file.text()) as unknown;
-      const backup = await importServerBackup(selectedBot.id, guildId, payload);
-      setDashboard((current) => current ? { ...current, backups: [backup, ...current.backups] } : current);
-      setMessage("Backup importado e validado.");
-    } catch (error) {
-      setMessage(readRequestMessage(error) ?? "Arquivo JSON invalido ou backup corrompido.");
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleExportBackup(backup: ServerBackupSnapshot) {
-    if (!selectedBot || !guildId) return;
-    if (!isExportableBackup(backup)) {
-      setMessage("Aguarde o backup concluir antes de exportar. Enquanto o status estiver Processando, o arquivo JSON ainda nao foi gerado.");
-      return;
-    }
-    setWorking(`export:${backup.id}`);
-    try {
-      const blob = await downloadServerBackup(selectedBot.id, guildId, backup.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `orvitek-backup-${guildId}-${backup.id}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setMessage(readRequestMessage(error) ?? "Nao foi possivel exportar o backup.");
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleDeleteBackup(backup: ServerBackupSnapshot) {
-    if (!selectedBot || !guildId || !window.confirm("Excluir este backup do historico?")) return;
-    setWorking(`delete:${backup.id}`);
-    try {
-      await deleteServerBackup(selectedBot.id, guildId, backup.id);
-      setDashboard((current) => current ? { ...current, backups: current.backups.filter((item) => item.id !== backup.id) } : current);
-    } catch (error) {
-      setMessage(readRequestMessage(error) ?? "Nao foi possivel excluir o backup.");
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleToggleAuto(autoEnabled: boolean) {
-    if (!selectedBot || !guildId || !dashboard) return;
-    setWorking("settings");
-    try {
-      const settings = await saveServerBackupSettings(selectedBot.id, guildId, { autoEnabled });
-      setDashboard({ ...dashboard, settings });
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-white">Backup de Hospedagem</h2>
-          <p className="mt-1 text-sm text-zinc-400">Backup, importacao, exportacao e historico das configuracoes salvas no site.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectBot(event.target.value || null)} value={selectedBot?.id ?? ""}>
-            {bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}
-          </select>
-          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => {
-            setScopeGuildId(event.target.value || "all");
-            onSelectGuild(event.target.value === "all" ? null : event.target.value || null);
-          }} value={guildId ?? "all"}>
-            <option value="all">Todos os servidores</option>
-            {(selectedBot?.guildIds.length ? selectedBot.guildIds : selectedBot?.mainGuildId ? [selectedBot.mainGuildId] : []).map((id) => <option key={id} value={id}>{id}</option>)}
-          </select>
-        </div>
-      </section>
-
-      {message ? <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100">{message}</div> : null}
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <BackupMetric icon={CalendarClock} label="Ultima Data" value={latest ? formatDate(latest.createdAt) : "Sem backup"} />
-        <BackupMetric icon={Activity} label="Status Atual" value={latest ? backupStatusLabel(latest.status) : "Aguardando"} />
-        <BackupMetric icon={Boxes} label="Quantidade de Modulos" value={String(latest?.counts.modules ?? 0)} />
-        <BackupMetric icon={DatabaseBackup} label="Configuracoes" value={String(totalConfigurations)} />
-        <BackupMetric icon={Download} label="Tamanho do Backup" value={latest ? `${JSON.stringify(latest.counts).length} refs` : "0"} />
-        <BackupMetric icon={ShieldCheck} label="Integridade" value={latest?.integrity === "invalid" ? "Falha" : latest?.integrity === "valid" ? "Valida" : "Pendente"} />
-        <BackupMetric icon={ArchiveRestore} label="Proximo Backup" value={nextBackup ? formatDate(nextBackup) : "Manual"} />
-        <BackupMetric icon={Code2} label="Versao da Orvitek" value={`Snapshot v${latest?.snapshotVersion ?? 2}`} />
-      </section>
-
-      {latest ? (
-        <Card className="border-zinc-800/80 bg-zinc-950/75">
-          <CardContent className="p-4">
-            <BackupProgress backup={latest} />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="border-zinc-800/80 bg-zinc-950/75">
-        <CardHeader className="p-5 sm:p-6">
-          <CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5" /> Operacoes</CardTitle>
-          <CardDescription>Criar backup manual das configs do site, importar JSON e ativar o agendamento automatico.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 p-5 pt-0 sm:grid-cols-2 lg:grid-cols-4 sm:p-6 sm:pt-0">
-          <Button disabled={!selectedBot || !guildId || working === "create"} onClick={() => void handleCreateBackup()}>
-            {working === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
-            Criar Backup
-          </Button>
-          <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-4 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-900">
-            {working === "import" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-            Importar Backup
-            <input accept="application/json,.json" className="hidden" disabled={working === "import"} onChange={(event) => void handleImportBackup(event.target.files?.[0] ?? null)} type="file" />
-          </label>
-          <Button disabled={!latestReady || !selectedBot || !guildId} onClick={() => latest && void handleExportBackup(latest)} variant="outline">
-            <Download className="h-4 w-4" />
-            Exportar Backup
-          </Button>
-          <Button disabled={!dashboard || working === "settings"} onClick={() => void handleToggleAuto(!dashboard?.settings.autoEnabled)} variant={dashboard?.settings.autoEnabled ? "default" : "outline"}>
-            {working === "settings" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
-            {dashboard?.settings.autoEnabled ? "Automatico Ativo" : "Backup Automatico"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="border-zinc-800/80 bg-zinc-950/75">
-        <CardHeader className="p-5 sm:p-6">
-          <CardTitle>Historico de Backups</CardTitle>
-          <CardDescription>Baixar e restaurar configs continuam protegidos pelas permissoes do modulo.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 p-5 pt-0 sm:p-6 sm:pt-0">
-          {loading ? <div className="flex min-h-28 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div> : dashboard?.backups.length ? dashboard.backups.map((backup) => (
-            <div className="grid gap-3 rounded-lg border border-zinc-900 bg-black/35 p-4 lg:grid-cols-[minmax(0,1fr)_auto]" key={backup.id}>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={backup.status === "completed" ? "success" : backup.status === "failed" ? "danger" : "muted"}>{backupStatusLabel(backup.status)}</Badge>
-                  <Badge variant="muted">{backup.kind === "automatic" ? "Automatico" : "Manual"}</Badge>
-                  <span className="text-xs text-zinc-400">{formatDate(backup.createdAt)}</span>
-                </div>
-                <p className="mt-2 truncate text-sm font-bold text-white">{backup.guildName || backup.guildId}</p>
-                <p className="mt-1 break-all font-mono text-[11px] text-zinc-500">id={backup.id} hash={backup.checksum ?? "pendente"}</p>
-                <div className="mt-3 max-w-md">
-                  <BackupProgress backup={backup} compact />
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button disabled={!isExportableBackup(backup) || working === `export:${backup.id}`} onClick={() => void handleExportBackup(backup)} size="sm" variant="outline"><Download className="h-4 w-4" />Baixar</Button>
-                <Button disabled={working === `delete:${backup.id}`} onClick={() => void handleDeleteBackup(backup)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Excluir</Button>
-              </div>
-            </div>
-          )) : (
-            <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-zinc-800 text-sm text-zinc-500">
-              Nenhum backup encontrado.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function BackupMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <Card className="border-zinc-800/80 bg-zinc-950/75">
-      <CardContent className="p-4">
-        <Icon className="h-5 w-5 text-zinc-400" />
-        <p className="mt-3 truncate text-xs text-zinc-500">{label}</p>
-        <p className="mt-1 truncate text-lg font-semibold text-white">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BackupProgress({ backup, compact = false }: { backup: ServerBackupSnapshot; compact?: boolean }) {
-  const progress = backupProgress(backup);
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className={compact ? "text-xs font-semibold text-zinc-300" : "text-sm font-semibold text-white"}>
-          {backupProgressLabel(backup)}
-        </p>
-        <span className="font-mono text-xs font-semibold text-zinc-300">{progress}%</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-900 ring-1 ring-zinc-800">
-        <div
-          className={[
-            "h-full rounded-full transition-all duration-500",
-            backup.status === "failed" ? "bg-red-400" : backup.status === "pending" ? "bg-purple-300" : "bg-emerald-400"
-          ].join(" ")}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      {!compact && backup.statusMessage ? <p className="mt-2 text-xs text-zinc-400">{backup.statusMessage}</p> : null}
-    </div>
-  );
-}
-
-function backupStatusLabel(status: ServerBackupSnapshot["status"]) {
-  if (status === "completed") return "Concluido";
-  if (status === "partial") return "Parcial";
-  if (status === "failed") return "Erro";
-  return "Processando";
-}
-
-function backupProgress(backup: ServerBackupSnapshot) {
-  if (backup.status === "completed" || backup.status === "partial") return 100;
-  if (backup.status === "failed") return 100;
-  return Math.max(0, Math.min(99, Math.round(backup.progress ?? 0)));
-}
-
-function backupProgressLabel(backup: ServerBackupSnapshot) {
-  if (backup.status === "completed") return "Backup concluido";
-  if (backup.status === "partial") return "Backup concluido com avisos";
-  if (backup.status === "failed") return "Backup falhou";
-  return "Backup em andamento";
-}
-
-function isExportableBackup(backup: ServerBackupSnapshot) {
-  return backup.status === "completed" || backup.status === "partial";
-}
-
-function nextBackupDate(value: string, frequency: ServerBackupDashboard["settings"]["frequency"]) {
-  const base = new Date(value).getTime();
-  const hours = frequency === "6h" ? 6 : frequency === "12h" ? 12 : frequency === "weekly" ? 24 * 7 : frequency === "monthly" ? 24 * 30 : 24;
-  return new Date(base + hours * 60 * 60 * 1000).toISOString();
 }
 
 function DevAccessPanel() {
@@ -876,7 +512,7 @@ function DevAccessPanel() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={entry.role === "owner" ? "success" : "muted"}>{entry.role}</Badge>
-                  <Button disabled={saving} onClick={() => handleDelete(entry)} size="sm" variant="outline">
+                  <Button disabled={saving} onClick={() => void handleDelete(entry)} size="sm" variant="outline">
                     <Trash2 className="h-4 w-4" />
                     Remover
                   </Button>
@@ -896,25 +532,19 @@ function DevAccessPanel() {
 
 function MaintenancePanel() {
   const [maintenance, setMaintenance] = useState<MaintenanceState | null>(null);
-  const [notice, setNotice] = useState<OperationalNoticeState | null>(null);
-  const [noticeMessage, setNoticeMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [alerting, setAlerting] = useState(false);
-  const [noticeSaving, setNoticeSaving] = useState(false);
-  const [noticeAlerting, setNoticeAlerting] = useState(false);
   const [bots, setBots] = useState<DevBot[]>([]);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getMaintenanceState(), getOperationalNoticeState(), getDevBots().catch(() => [])])
-      .then(([state, noticeState, botItems]) => {
+    Promise.all([getMaintenanceState(), getDevBots().catch(() => [])])
+      .then(([state, botItems]) => {
         if (!mounted) return;
         setMaintenance(state);
-        setNotice(noticeState);
-        setNoticeMessage(noticeState.message);
         setBots(botItems);
       })
       .finally(() => {
@@ -925,13 +555,6 @@ function MaintenancePanel() {
     socket.on("maintenance:updated", (payload: { state?: MaintenanceState; maintenance?: MaintenanceState }) => {
       const state = payload.state ?? payload.maintenance;
       if (state) setMaintenance(state);
-    });
-    socket.on("operational-notice:updated", (payload: { state?: OperationalNoticeState; notice?: OperationalNoticeState }) => {
-      const state = payload.state ?? payload.notice;
-      if (state) {
-        setNotice(state);
-        setNoticeMessage(state.message);
-      }
     });
     socket.on("dev:bot_updated", (bot: DevBot) => {
       setBots((current) => current.map((item) => item.id === bot.id ? bot : item));
@@ -967,39 +590,6 @@ function MaintenancePanel() {
       setMaintenance(await sendMaintenanceAlert());
     } finally {
       setAlerting(false);
-    }
-  }
-
-  async function handleNoticeToggle(active: boolean) {
-    setNoticeSaving(true);
-    try {
-      const next = await setOperationalNotice({ active, message: noticeMessage });
-      setNotice(next);
-      setNoticeMessage(next.message);
-    } finally {
-      setNoticeSaving(false);
-    }
-  }
-
-  async function handleNoticeSave() {
-    setNoticeSaving(true);
-    try {
-      const next = await setOperationalNotice({ message: noticeMessage });
-      setNotice(next);
-      setNoticeMessage(next.message);
-    } finally {
-      setNoticeSaving(false);
-    }
-  }
-
-  async function handleNoticeAlert() {
-    setNoticeAlerting(true);
-    try {
-      const next = await sendOperationalNoticeAlert();
-      setNotice(next);
-      setNoticeMessage(next.message);
-    } finally {
-      setNoticeAlerting(false);
     }
   }
 
@@ -1050,7 +640,7 @@ function MaintenancePanel() {
             <CardDescription className="font-medium text-zinc-300">Envie novamente o aviso para os canais configurados pelos bots.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button className="h-11 w-full bg-purple-600 text-white hover:bg-purple-500" disabled={alerting} onClick={() => handleAlert()}>
+            <Button className="h-11 w-full bg-purple-600 text-white hover:bg-purple-500" disabled={alerting} onClick={() => void handleAlert()}>
               {alerting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
               Enviar alerta manual
             </Button>
@@ -1096,55 +686,6 @@ function MaintenancePanel() {
           </CardContent>
         </Card>
       </div>
-
-      <Card className="border-sky-500/20 bg-zinc-950/80 hover:translate-y-0">
-        <CardHeader>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <CardTitle className="text-white">Aviso operacional dos bots</CardTitle>
-              <CardDescription className="font-medium text-zinc-300">
-                Publica uma mensagem nos bots sem ativar manutenção, sem bloquear site, APIs ou interações.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge className={notice?.active ? "border-sky-400/30 bg-sky-500/15 text-sky-100" : "border-zinc-700 bg-zinc-900 text-zinc-300"} variant="muted">
-                {notice?.active ? "Aviso ativo" : "Aviso inativo"}
-              </Badge>
-              <Switch checked={Boolean(notice?.active)} disabled={loading || noticeSaving} onCheckedChange={(checked) => void handleNoticeToggle(checked)} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <label className="block text-sm font-medium text-zinc-200">
-            Texto que o bot vai emitir
-            <textarea
-              className="mt-2 min-h-28 w-full rounded-md border border-zinc-800 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-sky-500/60 disabled:opacity-60"
-              disabled={loading || noticeSaving}
-              maxLength={1200}
-              onChange={(event) => setNoticeMessage(event.target.value)}
-              value={noticeMessage}
-            />
-          </label>
-          <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.07] p-4 text-sm font-semibold leading-6 text-zinc-100">
-            {noticeMessage || "Orviteck informa: os bots ficarão offline por 3 dias por troca de hospedagem."}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={loading || noticeSaving} onClick={() => void handleNoticeSave()} variant="outline">
-              {noticeSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
-              Salvar texto
-            </Button>
-            <Button disabled={loading || noticeAlerting} onClick={() => void handleNoticeAlert()} variant="outline">
-              {noticeAlerting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-              Reenviar aviso
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MaintenanceMetric label="Bots que recebem" value={String(notice?.affectedBots ?? 0)} />
-            <MaintenanceMetric label="Última ativação" value={notice?.activatedAt ? formatDate(notice.activatedAt) : "Nunca"} />
-            <MaintenanceMetric label="Atualizado por" value={notice?.updatedByName ?? "Nenhum registro"} />
-          </div>
-        </CardContent>
-      </Card>
 
       <Card className="border-purple-500/20 bg-zinc-950/80 hover:translate-y-0">
         <CardHeader>
@@ -1254,7 +795,7 @@ function DevFiveMManager({
   };
   const copy = scope === "police"
     ? {
-      title: "Polícia Manager",
+      title: "Policia Manager",
       description: "Gerencie sistemas policiais separados dos modulos FiveM.",
       cardTitle: "Modulos de Policia",
       cardDescription: "Sistemas policiais independentes das configuracoes gerais de RP.",
@@ -1490,8 +1031,8 @@ function DevFiveMManager({
                   </div>
                   {custom ? (
                     <div className="mt-3 flex gap-2">
-                      <Button disabled={savingModuleId === module.id} onClick={() => handleEditCustom(module.id)} size="sm" variant="outline"><Pencil className="h-4 w-4" />Editar</Button>
-                      <Button disabled={savingModuleId === module.id} onClick={() => handleRemoveCustom(module.id)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
+                      <Button disabled={savingModuleId === module.id} onClick={() => void handleEditCustom(module.id)} size="sm" variant="outline"><Pencil className="h-4 w-4" />Editar</Button>
+                      <Button disabled={savingModuleId === module.id} onClick={() => void handleRemoveCustom(module.id)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
                     </div>
                   ) : null}
                 </div>
@@ -1549,33 +1090,16 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "fivem-drugs": PackagePlus,
     "fivem-orders": PackagePlus,
     "fivem-hierarchy": Users,
+    "police-absences": CalendarClock,
     "police-actions": Activity,
-    "police-patrol-reports": ShieldCheck,
-    "patrol-reports": ShieldCheck,
-    "police-reports": ShieldAlert,
-    "police-flight": Radio,
-    "police-rh": CalendarClock,
-    "police-courses": CalendarClock,
-    "dm-system": AtSign,
-    "summons-system": ShieldAlert,
-    "open-point-notification": Bell
+    "police-patrol-reports": ShieldCheck
   };
 
   return icons[moduleId] ?? Boxes;
 }
 
 function isPoliceModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy"
-    || moduleId === "police-actions"
-    || moduleId === "police-patrol-reports"
-    || moduleId === "patrol-reports"
-    || moduleId === "police-reports"
-    || moduleId === "police-flight"
-    || moduleId === "police-rh"
-    || moduleId === "police-courses"
-    || moduleId === "dm-system"
-    || moduleId === "summons-system"
-    || moduleId === "open-point-notification";
+  return moduleId === "fivem-hierarchy" || moduleId === "police-absences" || moduleId === "police-actions" || moduleId === "police-patrol-reports";
 }
 
 function isFiveMManagerModule(moduleId: string) {
