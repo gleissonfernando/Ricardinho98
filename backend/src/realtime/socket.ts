@@ -234,9 +234,17 @@ async function joinDashboardLogRooms(socket: Socket) {
   const defaultGuildRooms = [...getAccessibleGuildIds(auth.user)]
     .map((guildId) => dashboardLogRealtimeRoom(guildId));
   const bots = await listAccessibleDashboardBots(auth.user).catch(() => []);
-  const botGuildRooms = bots.flatMap((bot) => bot.enabledModules.some((moduleId) => moduleId === "logs" || moduleId === "fivem-goals" || moduleId === "fivem-orders" || moduleId === "fivem-finance" || moduleId === "manual-registration")
-    ? bot.guildIds.map((guildId) => dashboardLogRealtimeRoom(guildId, bot.id))
-    : []);
+  const botGuildRooms = bots.flatMap((bot) => {
+    const usesDashboardRooms = bot.enabledModules.some((moduleId) => moduleId === "logs" || moduleId === "fivem-goals" || moduleId === "fivem-orders" || moduleId === "fivem-finance" || moduleId === "manual-registration" || moduleId === "server-backup");
+    const guildRooms = usesDashboardRooms
+      ? bot.guildIds.map((guildId) => dashboardLogRealtimeRoom(guildId, bot.id))
+      : [];
+    const globalBackupRooms = bot.enabledModules.includes("server-backup")
+      ? [dashboardLogRealtimeRoom("all", bot.id)]
+      : [];
+
+    return [...guildRooms, ...globalBackupRooms];
+  });
 
   await socket.join([...new Set([...defaultGuildRooms, ...botGuildRooms])]);
 }

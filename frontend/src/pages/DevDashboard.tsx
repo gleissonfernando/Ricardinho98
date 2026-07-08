@@ -490,11 +490,30 @@ function HostingBackupPanel({
   }, [selectedBot?.id, guildId]);
 
   const latest = dashboard?.backups[0] ?? null;
+  const hasPendingBackup = dashboard?.backups.some((backup) => backup.status === "pending") ?? false;
   const latestReady = latest ? isExportableBackup(latest) : false;
   const totalConfigurations = latest?.counts.configurations ?? latest?.counts.modules ?? 0;
   const nextBackup = dashboard?.settings.autoEnabled && latest
     ? nextBackupDate(latest.createdAt, dashboard.settings.frequency)
     : null;
+
+  useEffect(() => {
+    if (!selectedBot || !guildId || !hasPendingBackup) return;
+
+    let cancelled = false;
+    const intervalId = window.setInterval(() => {
+      getServerBackupDashboard(selectedBot.id, guildId)
+        .then((nextDashboard) => {
+          if (!cancelled) setDashboard(nextDashboard);
+        })
+        .catch(() => undefined);
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [selectedBot?.id, guildId, hasPendingBackup]);
 
   async function handleCreateBackup() {
     if (!selectedBot || !guildId) return;
