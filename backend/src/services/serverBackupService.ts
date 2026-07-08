@@ -1324,6 +1324,9 @@ async function getSnapshotOrThrow(botId: string, guildId: string, backupId: stri
   const { serverBackupSnapshots } = await getMongoCollections();
   const backup = await serverBackupSnapshots.findOne({ _id: backupId, botId, guildId });
   if (!backup) throw Object.assign(new Error("Backup nao encontrado."), { statusCode: 404 });
+  if (backup.status === "pending") {
+    throw Object.assign(new Error("O backup ainda esta sendo processado. Aguarde concluir antes de exportar ou restaurar."), { statusCode: 409 });
+  }
   if (backup.status === "failed" || !isValidSnapshot(backup.snapshot)) {
     throw Object.assign(new Error("O backup esta incompleto ou corrompido e nao pode ser restaurado."), { statusCode: 422 });
   }

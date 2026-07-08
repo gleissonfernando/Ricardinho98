@@ -490,6 +490,7 @@ function HostingBackupPanel({
   }, [selectedBot?.id, guildId]);
 
   const latest = dashboard?.backups[0] ?? null;
+  const latestReady = latest ? isExportableBackup(latest) : false;
   const totalConfigurations = latest?.counts.configurations ?? latest?.counts.modules ?? 0;
   const nextBackup = dashboard?.settings.autoEnabled && latest
     ? nextBackupDate(latest.createdAt, dashboard.settings.frequency)
@@ -528,6 +529,10 @@ function HostingBackupPanel({
 
   async function handleExportBackup(backup: ServerBackupSnapshot) {
     if (!selectedBot || !guildId) return;
+    if (!isExportableBackup(backup)) {
+      setMessage("Aguarde o backup concluir antes de exportar. Enquanto o status estiver Processando, o arquivo JSON ainda nao foi gerado.");
+      return;
+    }
     setWorking(`export:${backup.id}`);
     try {
       const blob = await downloadServerBackup(selectedBot.id, guildId, backup.id);
@@ -617,7 +622,7 @@ function HostingBackupPanel({
             Importar Backup
             <input accept="application/json,.json" className="hidden" disabled={working === "import"} onChange={(event) => void handleImportBackup(event.target.files?.[0] ?? null)} type="file" />
           </label>
-          <Button disabled={!latest || !selectedBot || !guildId} onClick={() => latest && void handleExportBackup(latest)} variant="outline">
+          <Button disabled={!latestReady || !selectedBot || !guildId} onClick={() => latest && void handleExportBackup(latest)} variant="outline">
             <Download className="h-4 w-4" />
             Exportar Backup
           </Button>
@@ -646,7 +651,7 @@ function HostingBackupPanel({
                 <p className="mt-1 break-all font-mono text-[11px] text-zinc-500">id={backup.id} hash={backup.checksum ?? "pendente"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={working === `export:${backup.id}`} onClick={() => void handleExportBackup(backup)} size="sm" variant="outline"><Download className="h-4 w-4" />Baixar</Button>
+                <Button disabled={!isExportableBackup(backup) || working === `export:${backup.id}`} onClick={() => void handleExportBackup(backup)} size="sm" variant="outline"><Download className="h-4 w-4" />Baixar</Button>
                 <Button disabled={working === `delete:${backup.id}`} onClick={() => void handleDeleteBackup(backup)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Excluir</Button>
               </div>
             </div>
@@ -678,6 +683,10 @@ function backupStatusLabel(status: ServerBackupSnapshot["status"]) {
   if (status === "partial") return "Parcial";
   if (status === "failed") return "Erro";
   return "Processando";
+}
+
+function isExportableBackup(backup: ServerBackupSnapshot) {
+  return backup.status === "completed" || backup.status === "partial";
 }
 
 function nextBackupDate(value: string, frequency: ServerBackupDashboard["settings"]["frequency"]) {
