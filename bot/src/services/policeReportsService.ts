@@ -53,6 +53,7 @@ const IAB_EMOJI = {
   finish: "🔒"
 } as const;
 const PROCEDURE_ACTIONS = ["submit", "submit_confirm", "submit_cancel", "assume", "accept", "approve", "validate", "alert", "ping", "request_info", "finish", "archive", "transcript", "close"] as const;
+const PROCEDURE_BUTTON_COOLDOWN_MS = 3_000;
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -121,6 +122,7 @@ const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
 ];
 const imageHealthCache = new Map<string, { expiresAt: number; ok: boolean }>();
 const configCache = new Map<string, { config: PoliceReportsConfig; expiresAt: number }>();
+const procedureButtonCooldowns = new Map<string, number>();
 
 function mergeDefaultComplaintTypes(types: ComplaintType[]) {
   const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -245,6 +247,9 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await ensureEphemeralReply(interaction);
   }
   if (interaction.isButton() && isProcedureAction(action)) {
+    if (await blockProcedureButtonCooldown(interaction, action)) {
+      return true;
+    }
     if (action === "submit_cancel") {
       await interaction.update({ components: [], content: "Envio cancelado. O ticket continua aberto para você enviar provas." }).catch(() => undefined);
       return true;
@@ -368,6 +373,34 @@ function clearPoliceReportsConfigCache(guildId: string) {
       configCache.delete(key);
     }
   }
+}
+
+async function blockProcedureButtonCooldown(interaction: ButtonInteraction, action: string) {
+  const key = [
+    interaction.guildId ?? "dm",
+    interaction.channelId ?? "unknown",
+    interaction.user.id,
+    action
+  ].join(":");
+  const now = Date.now();
+  const availableAt = procedureButtonCooldowns.get(key) ?? 0;
+
+  if (availableAt > now) {
+    const seconds = Math.max(1, Math.ceil((availableAt - now) / 1000));
+    await interaction.reply({
+      content: `Aguarde ${seconds}s antes de usar este botão novamente.`,
+      ephemeral: true
+    }).catch(() => undefined);
+    return true;
+  }
+
+  procedureButtonCooldowns.set(key, now + PROCEDURE_BUTTON_COOLDOWN_MS);
+  setTimeout(() => {
+    if ((procedureButtonCooldowns.get(key) ?? 0) <= Date.now()) {
+      procedureButtonCooldowns.delete(key);
+    }
+  }, PROCEDURE_BUTTON_COOLDOWN_MS + 250).unref?.();
+  return false;
 }
 
 async function acknowledgeProcedureAction(interaction: ButtonInteraction, action: string) {
