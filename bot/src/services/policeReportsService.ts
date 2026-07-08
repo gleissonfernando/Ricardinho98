@@ -17,7 +17,7 @@ import {
 } from "discord.js";
 import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
-import { renderComponentsV2Panel } from "./panelVisualRenderer";
+import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRenderer";
 import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
 import { sendPoliceLog } from "./policeLogService";
 
@@ -92,6 +92,7 @@ const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
   { id: "abuso-de-poder", name: "Abuso de Poder", description: "Denunciar abuso de autoridade ou uso indevido do cargo.", emoji: "🚨", order: 5 },
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
+const imageHealthCache = new Map<string, { expiresAt: number; ok: boolean }>();
 
 function mergeDefaultComplaintTypes(types: ComplaintType[]) {
   const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -247,7 +248,7 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
   const complaintTypes = Array.isArray(raw.complaintTypes)
     ? raw.complaintTypes.filter(isComplaintType).sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
     : [];
-  return {
+  const config: PoliceReportsConfig = {
     enabled: raw.enabled === true,
     panelChannelId: readString(raw.panelChannelId),
     panelChannelIds: idList(raw.panelChannelIds, readString(raw.panelChannelId)),
@@ -280,6 +281,60 @@ async function loadConfig(guildId: string, context: BotContext): Promise<PoliceR
     footerVisual: enabledVisual(footerVisual) ?? panelImage(readString(raw.footerImageUrl) ?? "", "footer"),
     complaintTypes: mergeDefaultComplaintTypes(complaintTypes)
   };
+  return sanitizePoliceReportImages(config);
+}
+
+async function sanitizePoliceReportImages(config: PoliceReportsConfig): Promise<PoliceReportsConfig> {
+  const [panelVisual, channelVisual, footerVisual] = await Promise.all([
+    healthyVisual(config.panelVisual),
+    healthyVisual(config.channelVisual),
+    healthyVisual(config.footerVisual)
+  ]);
+
+  return {
+    ...config,
+    channelVisual,
+    footerVisual,
+    panelVisual
+  };
+}
+
+async function healthyVisual(visual: PanelVisualConfig | null): Promise<PanelVisualConfig | null> {
+  if (!visual?.imageEnabled || !visual.imageUrl || visual.imagePosition === "none") return null;
+  const resolved = resolvePanelImageUrl(visual.imageUrl);
+  if (!resolved) return null;
+  if (!await isReachableImageUrl(resolved)) return null;
+  return { ...visual, imageUrl: resolved };
+}
+
+async function isReachableImageUrl(url: string) {
+  const cached = imageHealthCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.ok;
+
+  const ok = await probeImageUrl(url);
+  imageHealthCache.set(url, { expiresAt: Date.now() + 5 * 60_000, ok });
+  return ok;
+}
+
+async function probeImageUrl(url: string) {
+  try {
+    const head = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(700) });
+    if (head.ok && isImageContentType(head.headers.get("content-type"))) return true;
+    if (head.status !== 405 && head.status !== 403) return false;
+  } catch {
+    // Some image hosts reject HEAD; try a tiny GET before dropping the image.
+  }
+
+  try {
+    const get = await fetch(url, { headers: { Range: "bytes=0-0" }, method: "GET", signal: AbortSignal.timeout(900) });
+    return get.ok && isImageContentType(get.headers.get("content-type"));
+  } catch {
+    return false;
+  }
+}
+
+function isImageContentType(value: string | null) {
+  return /^image\/(png|jpe?g|gif|webp)/i.test(value ?? "");
 }
 
 function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) {
@@ -494,10 +549,11 @@ async function handleProcedureAction(
     await interaction.reply({ content: "A equipe só pode usar estes botões depois que o denunciante confirmar o envio.", ephemeral: true });
     return;
   }
+  await interaction.deferReply({ ephemeral: action === "request_info" || action === "ping" ? false : true });
 
   if (action === "assume" || action === "accept") {
     if (topic.acceptedBy && topic.acceptedBy !== interaction.user.id) {
-      await interaction.reply({ content: `Essa denúncia já está sendo atendida por <@${topic.acceptedBy}>.`, ephemeral: true });
+      await interaction.editReply(`Essa denúncia já está sendo atendida por <@${topic.acceptedBy}>.`);
       return;
     }
     const next = { ...topic, acceptedAt: topic.acceptedAt ?? Date.now(), acceptedBy: interaction.user.id, status: "accepted" as const };
@@ -510,7 +566,7 @@ async function handleProcedureAction(
       requesterId,
       typeName: selected.name
     });
-    await interaction.reply({ content: "Denúncia aceita. O painel foi atualizado.", ephemeral: true });
+    await interaction.editReply("Denúncia aceita. O painel foi atualizado.");
     return;
   }
 
@@ -520,17 +576,16 @@ async function handleProcedureAction(
       : `🔔 A equipe IAB solicitou mais informações sobre uma denúncia.\n\nResponda a equipe conforme as orientações recebidas.`;
     const user = await interaction.client.users.fetch(requesterId).catch(() => null);
     const dmSent = Boolean(await user?.send({ allowedMentions: { parse: [] }, content: dmText }).then(() => true).catch(() => false));
-    await interaction.reply({
+    await interaction.editReply({
       content: anonymous
         ? `🔔 O denunciante anonimo foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
         : `🔔 O denunciante foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
-      ephemeral: false,
       allowedMentions: { parse: [] }
     });
     return;
   }
 
-  if (action === "archive" || action === "transcript") {
+  if (action === "transcript") {
     const logChannelId = firstId(config.logChannelIds, config.logChannelId);
     const target = logChannelId
       ? await interaction.guild.channels.fetch(logChannelId).catch(() => null)
@@ -542,20 +597,20 @@ async function handleProcedureAction(
       });
     }
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.transcript", "Transcript de denúncia gerado.", { channelId: interaction.channel.id, requesterId, anonymous, typeName: selected.name });
-    await interaction.reply({ content: "Transcript enviado para o canal de logs configurado.", ephemeral: true });
+    await interaction.editReply("Transcript enviado para o canal de logs configurado.");
     return;
   }
 
-  if (action === "finish" || action === "close") {
+  if (action === "finish" || action === "close" || action === "archive") {
     const archiveCategoryId = firstId(config.archiveCategoryIds, config.archiveCategoryId);
     if (!archiveCategoryId) {
-      await interaction.reply({ content: "Configure a categoria de denuncias finalizadas na dashboard antes de finalizar.", ephemeral: true });
+      await interaction.editReply("Configure a categoria de denuncias finalizadas na dashboard antes de finalizar.");
       await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao nao configurada.", { channelId: interaction.channel.id });
       return;
     }
     const archiveCategory = await interaction.guild.channels.fetch(archiveCategoryId).catch(() => null);
     if (!archiveCategory || archiveCategory.type !== ChannelType.GuildCategory || !("setParent" in interaction.channel)) {
-      await interaction.reply({ content: "A categoria de finalizacao configurada nao foi encontrada ou o canal nao pode ser movido.", ephemeral: true });
+      await interaction.editReply("A categoria de finalizacao configurada nao foi encontrada ou o canal nao pode ser movido.");
       await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.finish_failed", "Categoria de finalizacao invalida.", { archiveCategoryId, channelId: interaction.channel.id });
       return;
     }
@@ -586,7 +641,7 @@ async function handleProcedureAction(
       finalizedBy: interaction.user.id,
       requesterId
     });
-    const next = { ...topic, closedAt: Date.now(), status: "finished" as const };
+    const next = { ...topic, closedAt: Date.now(), status: action === "archive" ? "archived" as const : "finished" as const };
     await setPoliceReportTopic(interaction.channel, next);
     await updateProcedurePanel(interaction, config, selected, next, requesterId);
     const logChannelId = firstId(config.logChannelIds, config.logChannelId);
@@ -595,11 +650,11 @@ async function handleProcedureAction(
       : interaction.channel;
     const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel);
     if (target && "send" in target && !target.isDMBased()) await target.send(payload).catch(() => null);
-    await interaction.reply({ content: "Denúncia finalizada. Transcript enviado aos logs privados.", ephemeral: true });
+    await interaction.editReply(action === "archive" ? "Denúncia arquivada. Transcript enviado aos logs privados." : "Denúncia finalizada. Transcript enviado aos logs privados.");
     return;
   }
 
-  await interaction.reply({ content: "Ação da denúncia inválida ou expirada. Publique o painel novamente se necessário.", ephemeral: true });
+  await interaction.editReply("Ação da denúncia inválida ou expirada. Publique o painel novamente se necessário.");
 }
 
 function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintType, topic: PoliceReportTopic, userId: string) {
@@ -615,7 +670,8 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
     : [new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`${PREFIX}:accept`).setLabel("Aceitar denúncia").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
       new ButtonBuilder().setCustomId(`${PREFIX}:request_info`).setLabel("Solicitar informações").setEmoji("🔔").setStyle(ButtonStyle.Primary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:transcript`).setLabel("Gerar transcript").setEmoji("📁").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${PREFIX}:transcript`).setLabel("Gerar transcript").setEmoji("📁").setStyle(ButtonStyle.Secondary).setDisabled(locked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji("🗄️").setStyle(ButtonStyle.Secondary).setDisabled(locked),
       new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji("🔒").setStyle(ButtonStyle.Danger).setDisabled(locked)
     )];
   return renderComponentsV2Panel({
