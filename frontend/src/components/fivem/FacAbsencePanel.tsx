@@ -386,15 +386,15 @@ export function FacAbsencePanel({ botId, canManage, guild }: FacAbsencePanelProp
             </div>
 
             <div className="flex flex-wrap gap-2 border-t border-zinc-900 pt-4">
-              <Button disabled={!canManage || syncing} onClick={() => void handleSyncOptions()} variant="outline">
+              <Button disabled={!canManage || syncing} onClick={() => handleSyncOptions()} variant="outline">
                 {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Sincronizar Discord
               </Button>
-              <Button disabled={!canManage || saving} onClick={() => void handleSave()}>
+              <Button disabled={!canManage || saving} onClick={() => handleSave()}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 Salvar FAC
               </Button>
-              <Button disabled={!canManage || publishing || !settings.enabled || !settings.panelChannelId} onClick={() => void handlePublishPanel()} variant="outline">
+              <Button disabled={!canManage || publishing || !settings.enabled || !settings.panelChannelId} onClick={() => handlePublishPanel()} variant="outline">
                 {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Enviar painel
               </Button>
@@ -633,7 +633,7 @@ function AbsenceRow({
             </Button>
             {selectedFile ? (
               <>
-                <Button disabled={photoSaving} onClick={() => void handleSavePhoto()} size="sm" type="button">
+                <Button disabled={photoSaving} onClick={() => handleSavePhoto()} size="sm" type="button">
                   {photoSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   Salvar Foto
                 </Button>
@@ -643,7 +643,7 @@ function AbsenceRow({
                 </Button>
               </>
             ) : absence.photoUrl ? (
-              <Button disabled={photoSaving} onClick={() => void handleRemoveSavedPhoto()} size="sm" type="button" variant="outline">
+              <Button disabled={photoSaving} onClick={() => handleRemoveSavedPhoto()} size="sm" type="button" variant="outline">
                 {photoSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 Remover Foto
               </Button>

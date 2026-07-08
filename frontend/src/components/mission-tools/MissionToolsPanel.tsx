@@ -359,15 +359,15 @@ export function MissionToolsPanel({ botId, canManage, guild, user }: MissionTool
             />
 
             <div className="flex flex-wrap gap-2 border-t border-zinc-900 pt-4">
-              <Button disabled={!canManage || syncing} onClick={() => void handleSyncOptions()} variant="outline">
+              <Button disabled={!canManage || syncing} onClick={() => handleSyncOptions()} variant="outline">
                 {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Sync Discord
               </Button>
-              <Button disabled={!canManage || saving} onClick={() => void handleSave()}>
+              <Button disabled={!canManage || saving} onClick={() => handleSave()}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 Save
               </Button>
-              <Button disabled={!canManage || publishing || !settings.enabled || !settings.panelChannelId} onClick={() => void handlePublishPanel()} variant="outline">
+              <Button disabled={!canManage || publishing || !settings.enabled || !settings.panelChannelId} onClick={() => handlePublishPanel()} variant="outline">
                 {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Publish Control Center
               </Button>

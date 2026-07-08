@@ -399,7 +399,7 @@ export function GiveawayPanel({ botId, canManage, guild }: GiveawayPanelProps) {
               <CardDescription>{editingGiveaway ? "Editando painel e roleta." : "Crie um painel com roleta para Twitch ou Kick."}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={actionId === "sync-options"} onClick={() => void handleSyncOptions()} size="sm" variant="outline">
+              <Button disabled={actionId === "sync-options"} onClick={() => handleSyncOptions()} size="sm" variant="outline">
                 {actionId === "sync-options" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Sincronizar canais
               </Button>
@@ -443,7 +443,7 @@ export function GiveawayPanel({ botId, canManage, guild }: GiveawayPanelProps) {
               <Button
                 className="h-11 shrink-0"
                 disabled={!canManage || livePreviewLoading || !normalizedLiveUrl}
-                onClick={() => void handleVerifyLiveChannel()}
+                onClick={() => handleVerifyLiveChannel()}
                 type="button"
                 variant="outline"
               >
@@ -543,7 +543,7 @@ export function GiveawayPanel({ botId, canManage, guild }: GiveawayPanelProps) {
           </div>
 
           <div className="flex flex-wrap gap-2 lg:col-span-2">
-            <Button disabled={!canSubmit} onClick={() => void handleSubmit()}>
+            <Button disabled={!canSubmit} onClick={() => handleSubmit()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {editingId ? "Salvar alterações" : "Criar sorteio"}
             </Button>

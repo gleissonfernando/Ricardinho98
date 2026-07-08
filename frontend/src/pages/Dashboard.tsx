@@ -1759,7 +1759,7 @@ function GlobalBlacklistPanel({ botId, canManage, guild }: { botId?: string | nu
             <CardTitle className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-red-300" /> Blacklist Global</CardTitle>
             <CardDescription>Entrada automatica somente por eventos do SafeBot ou por acao manual autorizada.</CardDescription>
           </div>
-          <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
+          <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
             Salvar
           </Button>
@@ -2081,7 +2081,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
               <MultiRoleSelect disabled={disabled} label="Cargos autorizados" onChange={(values) => void patchSettings({ authorizedRoleIds: values })} roles={roles.filter((role) => !role.managed)} values={settings.authorizedRoleIds} />
             </div>
           </div>
-          <Button disabled={disabled || saving} onClick={() => void createNow()}>
+          <Button disabled={disabled || saving} onClick={() => createNow()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Criar backup agora
           </Button>
@@ -2108,8 +2108,8 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
                   {backup.statusMessage ? <p className="mt-2 text-xs text-amber-300">{backup.statusMessage}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={workingBackupId === backup.id} onClick={() => void previewRestore(backup)} variant="secondary">{workingBackupId === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Restaurar</Button>
-                  <Button disabled={disabled || workingBackupId === backup.id} onClick={() => void removeBackup(backup.id)} variant="destructive"><Trash2 className="h-4 w-4" />Apagar</Button>
+                  <Button disabled={workingBackupId === backup.id} onClick={() => previewRestore(backup)} variant="secondary">{workingBackupId === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Restaurar</Button>
+                  <Button disabled={disabled || workingBackupId === backup.id} onClick={() => removeBackup(backup.id)} variant="destructive"><Trash2 className="h-4 w-4" />Apagar</Button>
                 </div>
               </div>
             </div>
@@ -2155,7 +2155,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {serverBackupParts.map((part) => <AdvancedToggleField checked={selectedParts.includes(part.id)} disabled={!canManage} key={`send-${part.id}`} label={part.label} onChange={(checked) => togglePart(part.id, checked)} />)}
           </div>
-          <Button disabled={!canManage || !sendBackupId || !targetGuildId || workingBackupId === sendBackupId} onClick={() => void previewSendRestore()} variant="secondary">
+          <Button disabled={!canManage || !sendBackupId || !targetGuildId || workingBackupId === sendBackupId} onClick={() => previewSendRestore()} variant="secondary">
             {workingBackupId === sendBackupId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             Ver previa do destino
           </Button>
@@ -2168,7 +2168,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
             </div>
           ) : null}
           <AdvancedTextField disabled={!canManage || sendPreview?.canRestore === false} label="Confirmacao para servidor destino" onChange={setSendConfirmation} placeholder="Digite CONFIRMAR" value={sendConfirmation} />
-          <Button disabled={!canManage || !sendPreview?.canRestore || sendConfirmation !== "CONFIRMAR" || workingBackupId === sendBackupId} onClick={() => void confirmSendRestore()} variant="destructive">
+          <Button disabled={!canManage || !sendPreview?.canRestore || sendConfirmation !== "CONFIRMAR" || workingBackupId === sendBackupId} onClick={() => confirmSendRestore()} variant="destructive">
             {workingBackupId === sendBackupId ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
             Confirmar envio/restauracao
           </Button>
@@ -2199,7 +2199,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {serverBackupParts.map((part) => <AdvancedToggleField checked={selectedParts.includes(part.id)} disabled={!canManage} key={part.id} label={part.label} onChange={(checked) => togglePart(part.id, checked)} />)}
             </div>
-            <Button disabled={workingBackupId === selectedBackup.id || !selectedParts.length} onClick={() => void previewRestore(selectedBackup)} variant="secondary">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Atualizar previa</Button>
+            <Button disabled={workingBackupId === selectedBackup.id || !selectedParts.length} onClick={() => previewRestore(selectedBackup)} variant="secondary">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Atualizar previa</Button>
             {preview ? (
               <div className="rounded-lg border border-zinc-800 bg-black/40 p-4 text-sm text-zinc-300">
                 <p className="font-semibold text-white">Previa: {preview.summary.roles} cargos, {preview.summary.categories} categorias, {preview.summary.channels} canais, {preview.summary.emojis} emojis, {preview.summary.stickers} stickers e {preview.summary.settings} configuracoes.</p>
@@ -2208,7 +2208,7 @@ function ServerBackupPanel({ botId, canManage, guild }: { botId: string | null; 
               </div>
             ) : null}
             <AdvancedTextField disabled={!canManage || preview?.canRestore === false} label="Confirmacao" onChange={setConfirmation} placeholder="Digite CONFIRMAR" value={confirmation} />
-            <Button disabled={!canManage || !preview?.canRestore || confirmation !== "CONFIRMAR" || workingBackupId === selectedBackup.id} onClick={() => void confirmRestore()} variant="destructive">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}Confirmar restauracao</Button>
+            <Button disabled={!canManage || !preview?.canRestore || confirmation !== "CONFIRMAR" || workingBackupId === selectedBackup.id} onClick={() => confirmRestore()} variant="destructive">{workingBackupId === selectedBackup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}Confirmar restauracao</Button>
           </CardContent>
         </Card>
       ) : null}
@@ -2503,12 +2503,12 @@ function AdvancedSecurityModulePanel({
             voiceChannels={voiceChannels}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={disabled} onClick={() => void saveConfig()}>
+            <Button disabled={disabled} onClick={() => saveConfig()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar
             </Button>
             {moduleId === "tag-verification" ? (
-              <Button disabled={disabled || !enabled || runningNow} onClick={() => void verifyTagNow()} variant="outline">
+              <Button disabled={disabled || !enabled || runningNow} onClick={() => verifyTagNow()} variant="outline">
                 {runningNow ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Verificar agora
               </Button>
@@ -3187,8 +3187,8 @@ function PoliceFlightPanel({ botId, canManage, guild }: { botId?: string | null;
           </div>
           <PanelImageSettings botId={botId} canManage={canManage} guildId={guild.id} panelId="police-flight" panelLabel="Escalacao DAF" />
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || loading} onClick={() => void save()} variant="outline">Salvar</Button>
-            <Button disabled={!canManage || loading || !config.enabled || !config.panelChannelId} onClick={() => void publish()}>Enviar painel</Button>
+            <Button disabled={!canManage || loading} onClick={() => save()} variant="outline">Salvar</Button>
+            <Button disabled={!canManage || loading || !config.enabled || !config.panelChannelId} onClick={() => publish()}>Enviar painel</Button>
           </div>
         </CardContent>
       </Card>
@@ -3315,10 +3315,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
           </div>
           <div className="flex items-center gap-3">
             <Switch checked={config.enabled} disabled={!canManage || loading} onCheckedChange={(enabled) => patch({ enabled })} />
-            <Button disabled={!canManage || !botId || !guild || loading || saving} onClick={() => void save()} size="sm" type="button">
+            <Button disabled={!canManage || !botId || !guild || loading || saving} onClick={() => save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar
             </Button>
-            <Button disabled={!canManage || !botId || !guild || loading || saving || !config.complaintTypes.length} onClick={() => void publish()} size="sm" type="button" variant="outline">
+            <Button disabled={!canManage || !botId || !guild || loading || saving || !config.complaintTypes.length} onClick={() => publish()} size="sm" type="button" variant="outline">
               <Upload className="mr-2 h-4 w-4" />Publicar painel
             </Button>
           </div>
@@ -3658,9 +3658,9 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
           </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={!canManage || !guild} onClick={() => { setDraftHasUnsavedChanges(true); setDraft(createNewHierarchyPanel(guild?.id ?? "", botId, panels.length)); }} size="sm" type="button" variant="outline">Novo painel</Button>
-            <Button disabled={!canManage || !guild || saving} onClick={() => void registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
-            <Button disabled={!canManage || !draft || saving} onClick={() => void savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
-            <Button disabled={!canManage || !draft || saving} onClick={() => void publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
+            <Button disabled={!canManage || !guild || saving} onClick={() => registerDefaultPanels()} size="sm" type="button" variant="outline"><Plus className="mr-2 h-4 w-4" />Cadastrar padroes</Button>
+            <Button disabled={!canManage || !draft || saving} onClick={() => savePanel()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
+            <Button disabled={!canManage || !draft || saving} onClick={() => publishPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Salvar e publicar</Button>
             <Button disabled={!canManage || !draft || saving} onClick={resetDraftToTemplate} size="sm" type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Resetar modelo</Button>
           </div>
         </div>
@@ -3800,7 +3800,7 @@ function FivemHierarchyPanel({ botId, canManage, guild }: { botId?: string | nul
                 </div>
               )}
               <HierarchyPreview panel={draft} roles={roles} />
-              {persistedDraft ? <Button disabled={!canManage || saving} onClick={() => void removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
+              {persistedDraft ? <Button disabled={!canManage || saving} onClick={() => removePanel()} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir painel</Button> : null}
             </div>
           </div>
         )}
@@ -4144,7 +4144,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
               <ListChecks className="mr-2 h-4 w-4" />
               Criar Meta
             </Button>
-            <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
+            <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Salvar Geral
             </Button>
@@ -4264,7 +4264,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                 <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-white">{draft.id === "new" ? "Criar meta" : "Editar meta"}</p>
-                    <Button disabled={!canManage || saving} onClick={() => void saveDraft()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
+                    <Button disabled={!canManage || saving} onClick={() => saveDraft()} size="sm" type="button">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Salvar</Button>
                   </div>
                   <TicketField disabled={!canManage} label="Nome" onChange={(value) => patchDraft({ name: value })} value={draft.name} />
                   <TicketField disabled={!canManage} label="Descricao" onChange={(value) => patchDraft({ description: value })} value={draft.description ?? ""} />
@@ -4299,8 +4299,8 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                   <TicketField disabled={!canManage} label="Regras" onChange={(value) => patchDraft({ rules: value })} value={draft.rules ?? ""} />
                   {draft.id !== "new" ? (
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={!canManage || saving} onClick={() => void removeDraft(false)} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir meta</Button>
-                      <Button disabled={!canManage || saving} onClick={() => void removeDraft(true)} size="sm" type="button" variant="outline">Excluir com historico</Button>
+                      <Button disabled={!canManage || saving} onClick={() => removeDraft(false)} size="sm" type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir meta</Button>
+                      <Button disabled={!canManage || saving} onClick={() => removeDraft(true)} size="sm" type="button" variant="outline">Excluir com historico</Button>
                     </div>
                   ) : null}
                 </div>
@@ -4329,7 +4329,7 @@ function FivemGoalsPanel({ botId, canManage, guild }: { botId?: string | null; c
                   <p className="text-sm font-semibold text-white">Painel de Solicitação de Canal de Meta</p>
                   <p className="mt-1 text-sm text-zinc-400">Use quando o Pedido Set estiver desligado ou quando quiser permitir solicitação manual do canal individual.</p>
                 </div>
-                <Button disabled={!canManage || saving || !settings.enabled || !settings.requestPanelChannelId} onClick={() => void publishRequestPanel()} size="sm" type="button">
+                <Button disabled={!canManage || saving || !settings.enabled || !settings.requestPanelChannelId} onClick={() => publishRequestPanel()} size="sm" type="button">
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                   Enviar/Atualizar painel
                 </Button>
@@ -5226,11 +5226,11 @@ function RulesView({
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={!canManage || saving || publishing} onClick={() => void saveRules()} variant="secondary">
+            <Button disabled={!canManage || saving || publishing} onClick={() => saveRules()} variant="secondary">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar
             </Button>
-            <Button disabled={!canManage || saving || publishing || !draft.rulesChannelId} onClick={() => void publishPanel()}>
+            <Button disabled={!canManage || saving || publishing || !draft.rulesChannelId} onClick={() => publishPanel()}>
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Publicar painel
             </Button>
@@ -5343,10 +5343,10 @@ function DeleteChannelsPanel({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button disabled={loading || deleting} onClick={() => void loadChannels()} variant="secondary">
+          <Button disabled={loading || deleting} onClick={() => loadChannels()} variant="secondary">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Atualizar lista
           </Button>
-          <Button disabled={loading || deleting || !selectedIds.length} onClick={() => void handleDelete()} variant="destructive">
+          <Button disabled={loading || deleting || !selectedIds.length} onClick={() => handleDelete()} variant="destructive">
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Apagar selecionados ({selectedIds.length})
           </Button>
         </div>
@@ -5771,8 +5771,8 @@ function ManualRegistrationPanel({
             <CardDescription>Painel, sets solicitaveis, modal, aprovacao, cargos e logs em Components V2.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!canManage || !settings?.enabled || (!settings.panelChannelId && !settings.panelCategoryId) || saving || loading} onClick={() => void publishSetPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Enviar painel</Button>
-            <Button disabled={!canManage || !settings || saving || loading} onClick={() => void save()} size="sm" type="button">
+            <Button disabled={!canManage || !settings?.enabled || (!settings.panelChannelId && !settings.panelCategoryId) || saving || loading} onClick={() => publishSetPanel()} size="sm" type="button" variant="outline"><Upload className="mr-2 h-4 w-4" />Enviar painel</Button>
+            <Button disabled={!canManage || !settings || saving || loading} onClick={() => save()} size="sm" type="button">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Salvar
             </Button>
@@ -5806,7 +5806,7 @@ function ManualRegistrationPanel({
                 <TicketField disabled={!canManage} label="Nome do personagem" onChange={setCharacterName} value={characterName} />
                 <TicketField disabled={!canManage} label="ID in-game" onChange={setGameId} value={gameId} />
               </div>
-              <Button disabled={!canManage || saving || !selectedMemberId || !manualRoleId || !goalCategoryId || !characterName.trim() || !gameId.trim()} onClick={() => void registerMember()} type="button"><UserPlus className="mr-2 h-4 w-4" />Cadastrar e criar canal</Button>
+              <Button disabled={!canManage || saving || !selectedMemberId || !manualRoleId || !goalCategoryId || !characterName.trim() || !gameId.trim()} onClick={() => registerMember()} type="button"><UserPlus className="mr-2 h-4 w-4" />Cadastrar e criar canal</Button>
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <MetricCard icon={ListChecks} label="Pedidos" value={String(submissions.length)} />
@@ -5947,7 +5947,7 @@ function ManualRegistrationPanel({
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={submission.status === "approved" ? "success" : submission.status === "rejected" ? "danger" : "muted"}>{submission.status}</Badge>
-                    <Button disabled={!canManage || saving} onClick={() => void removeSubmission(submission)} size="icon" title="Excluir cadastro" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
+                    <Button disabled={!canManage || saving} onClick={() => removeSubmission(submission)} size="icon" title="Excluir cadastro" type="button" variant="outline"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
@@ -6089,7 +6089,7 @@ function TicketPanelConfigurator({
             <CardTitle className="flex items-center gap-2"><TicketIcon className="h-5 w-5 text-purple-300" /> Painel visual do ticket</CardTitle>
             <CardDescription>Texto, cor, menu e emojis que aparecem no painel publicado pelo bot.</CardDescription>
           </div>
-          <Button disabled={disabled} onClick={() => void save()} size="sm" type="button">
+          <Button disabled={disabled} onClick={() => save()} size="sm" type="button">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
             Salvar
           </Button>
@@ -6666,22 +6666,22 @@ function ApplicationEmojisView({
               <CardDescription>Sincroniza emojis do servidor para a aba Emojis da aplicação no Developer Portal.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!canManage || syncing || !sourceGuildId} onClick={() => void handleSync()} size="sm" type="button">
+              <Button disabled={!canManage || syncing || !sourceGuildId} onClick={() => handleSync()} size="sm" type="button">
                 {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                 Sincronizar Emojis
               </Button>
-              <Button disabled={loading || syncing} onClick={() => void handleRefreshRemote()} size="sm" type="button" variant="outline">
+              <Button disabled={loading || syncing} onClick={() => handleRefreshRemote()} size="sm" type="button" variant="outline">
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Atualizar Emojis
               </Button>
-              <Button disabled={loading || syncing} onClick={() => void refreshList()} size="sm" type="button" variant="outline">
+              <Button disabled={loading || syncing} onClick={() => refreshList()} size="sm" type="button" variant="outline">
                 Atualizar Lista
               </Button>
-              <Button disabled={!items.length} onClick={() => void handleDownload()} size="sm" type="button" variant="outline">
+              <Button disabled={!items.length} onClick={() => handleDownload()} size="sm" type="button" variant="outline">
                 {downloadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {downloadProgress !== null ? `Cancelar (${downloadProgress || "..."}%)` : "Baixar Emojis"}
               </Button>
-              <Button disabled={!canManage || loading || syncing || !items.length} onClick={() => void handleRemoveAll()} size="sm" type="button" variant="destructive">
+              <Button disabled={!canManage || loading || syncing || !items.length} onClick={() => handleRemoveAll()} size="sm" type="button" variant="destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Remover Todos
               </Button>
@@ -7238,7 +7238,7 @@ function ServerClonerView({
             <Button
               className="mt-4 w-full gap-2 bg-purple-600 text-white hover:bg-purple-500"
               disabled={!canManage || saving || loading}
-              onClick={() => void savePlan()}
+              onClick={() => savePlan()}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar plano
@@ -8033,13 +8033,13 @@ function EmojiCloneSettingsPanel({
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={disabled || bulkLoading !== "idle"} onClick={() => void handleValidateFakeToken()} size="sm" type="button">
+                <Button disabled={disabled || bulkLoading !== "idle"} onClick={() => handleValidateFakeToken()} size="sm" type="button">
                   {bulkLoading === "validating" ? "Validando..." : "Validar token"}
                 </Button>
-                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted} onClick={() => void handleFetchFakeEmojis()} size="sm" type="button" variant="outline">
+                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted} onClick={() => handleFetchFakeEmojis()} size="sm" type="button" variant="outline">
                   {bulkLoading === "fetching" ? "Buscando..." : "Buscar Emojis"}
                 </Button>
-                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted || !fakeEmojis.some((emoji) => emoji.selected)} onClick={() => void handleCloneFakeSelected()} size="sm" type="button" variant="outline">
+                <Button disabled={disabled || bulkLoading !== "idle" || !fakeTokenAccepted || !fakeEmojis.some((emoji) => emoji.selected)} onClick={() => handleCloneFakeSelected()} size="sm" type="button" variant="outline">
                   {bulkLoading === "cloning" ? "Clonando..." : "Clonar Emojis Selecionados"}
                 </Button>
                 <Button onClick={handleClearFakeTest} size="sm" type="button" variant="outline">
@@ -8157,11 +8157,11 @@ function EmojiCloneSettingsPanel({
                 <option value="false">Estaticos</option>
                 <option value="true">Animados</option>
               </select>
-              <Button disabled={libraryLoading} onClick={() => void refreshEmojiLibrary()} size="sm" type="button" variant="outline">
+              <Button disabled={libraryLoading} onClick={() => refreshEmojiLibrary()} size="sm" type="button" variant="outline">
                 {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               </Button>
               {botId ? (
-                <Button disabled={!library.length} onClick={() => void handleLibraryDownload()} size="sm" type="button" variant="outline">
+                <Button disabled={!library.length} onClick={() => handleLibraryDownload()} size="sm" type="button" variant="outline">
                   {libraryDownloadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {libraryDownloadProgress !== null ? `Cancelar (${libraryDownloadProgress || "..."}%)` : "Baixar Emojis"}
                 </Button>
@@ -8195,7 +8195,7 @@ function EmojiCloneSettingsPanel({
                   <Button
                     className="mt-3 w-full"
                     disabled={disabled || !destinationGuildId || resendingId === item.id}
-                    onClick={() => void handleResendLibraryEmoji(item)}
+                    onClick={() => handleResendLibraryEmoji(item)}
                     size="sm"
                     type="button"
                     variant="outline"
@@ -8316,7 +8316,7 @@ function EmojiCloneSettingsPanel({
                   ].join(" ")}
                   disabled={disabled}
                   key={bot.id}
-                  onClick={() => void savePatch({ emojiCloneAllowedBotIds: toggleValue(selectedBotIds, bot.clientId) })}
+                  onClick={() => savePatch({ emojiCloneAllowedBotIds: toggleValue(selectedBotIds, bot.clientId) })}
                   type="button"
                 >
                   <span className="min-w-0">
@@ -8344,7 +8344,7 @@ function EmojiCloneSettingsPanel({
                   ].join(" ")}
                   disabled={disabled}
                   key={role.id}
-                  onClick={() => void savePatch({ emojiCloneAllowedRoleIds: toggleValue(settings?.emojiCloneAllowedRoleIds ?? [], role.id) })}
+                  onClick={() => savePatch({ emojiCloneAllowedRoleIds: toggleValue(settings?.emojiCloneAllowedRoleIds ?? [], role.id) })}
                   type="button"
                 >
                   <span className="truncate text-sm text-zinc-200">@{role.name}</span>
@@ -9419,7 +9419,7 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
                       </label>
                       <PoliceRhField disabled={disabled} label="URL da imagem" onChange={(panelImageUrl) => patch({ panelImageRemoved: false, panelImageUrl, panelBannerUrl: panelImageUrl })} value={config.panelImageUrl || config.panelBannerUrl} />
                       <PoliceRhImagePositionSelect disabled={disabled} label="Posição da imagem" onChange={(panelImagePosition) => patch({ panelImagePosition })} value={config.panelImagePosition} />
-                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={() => void removeRhImage()} type="button" variant="outline">
+                      <Button disabled={disabled || (!config.panelImageUrl && !config.panelBannerUrl && !config.panelFooterImageUrl)} onClick={() => removeRhImage()} type="button" variant="outline">
                         <Trash2 className="h-4 w-4" />
                         Remover imagem
                       </Button>
@@ -9457,11 +9457,11 @@ function PoliceRhPanel({ botId, canManage, guild }: { botId: string | null; canM
               ) : null}
 
               <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-                <Button disabled={disabled} onClick={() => void save()} type="button">
+                <Button disabled={disabled} onClick={() => save()} type="button">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                   Salvar configurações
                 </Button>
-                <Button disabled={disabled || !selectedPanelChannel} onClick={() => void publish()} type="button" variant="outline">
+                <Button disabled={disabled || !selectedPanelChannel} onClick={() => publish()} type="button" variant="outline">
                   {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   Publicar/atualizar painel
                 </Button>

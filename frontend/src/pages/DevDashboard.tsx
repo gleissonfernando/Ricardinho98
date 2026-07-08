@@ -521,7 +521,7 @@ function DevAccessPanel() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={entry.role === "owner" ? "success" : "muted"}>{entry.role}</Badge>
-                  <Button disabled={saving} onClick={() => void handleDelete(entry)} size="sm" variant="outline">
+                  <Button disabled={saving} onClick={() => handleDelete(entry)} size="sm" variant="outline">
                     <Trash2 className="h-4 w-4" />
                     Remover
                   </Button>
@@ -649,7 +649,7 @@ function MaintenancePanel() {
             <CardDescription className="font-medium text-zinc-300">Envie novamente o aviso para os canais configurados pelos bots.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button className="h-11 w-full bg-purple-600 text-white hover:bg-purple-500" disabled={alerting} onClick={() => void handleAlert()}>
+            <Button className="h-11 w-full bg-purple-600 text-white hover:bg-purple-500" disabled={alerting} onClick={() => handleAlert()}>
               {alerting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
               Enviar alerta manual
             </Button>
@@ -1040,8 +1040,8 @@ function DevFiveMManager({
                   </div>
                   {custom ? (
                     <div className="mt-3 flex gap-2">
-                      <Button disabled={savingModuleId === module.id} onClick={() => void handleEditCustom(module.id)} size="sm" variant="outline"><Pencil className="h-4 w-4" />Editar</Button>
-                      <Button disabled={savingModuleId === module.id} onClick={() => void handleRemoveCustom(module.id)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
+                      <Button disabled={savingModuleId === module.id} onClick={() => handleEditCustom(module.id)} size="sm" variant="outline"><Pencil className="h-4 w-4" />Editar</Button>
+                      <Button disabled={savingModuleId === module.id} onClick={() => handleRemoveCustom(module.id)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
                     </div>
                   ) : null}
                 </div>

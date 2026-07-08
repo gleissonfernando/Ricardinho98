@@ -57,6 +57,25 @@
   textarea {
     font: inherit;
   }
+
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    input,
+    select,
+    textarea {
+      min-height: 44px;
+    }
+  }
 }
 
 @layer utilities {

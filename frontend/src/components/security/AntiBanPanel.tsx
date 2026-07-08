@@ -130,7 +130,7 @@ export function AntiBanPanel({ botId, canManage, guild }: Props) {
         {logs.length ? <div className="space-y-2 md:col-span-2">{logs.slice(0, 6).map((log) => <div key={log.id} className="grid gap-1 rounded-lg border border-zinc-900 bg-black/50 p-3 text-xs sm:grid-cols-[1fr_auto]"><div><p className="font-semibold text-zinc-200">{log.actionType} · executor {log.executorId ?? "não identificado"}</p><p className="text-zinc-500">{log.amount}/{log.limit} · {log.punishment}{log.errorMessage ? ` · ${log.errorMessage}` : ""}</p></div><span className={log.success ? "text-emerald-400" : "text-red-400"}>{new Date(log.createdAt).toLocaleString("pt-BR")}</span></div>)}</div> : null}
       </Section>
 
-      <div className="flex flex-wrap gap-3"><Button disabled={disabled} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar configuração</Button><Button variant="secondary" disabled={disabled || !draft.logChannelId} onClick={() => void test()}>{testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}Testar proteção</Button></div>
+      <div className="flex flex-wrap gap-3"><Button disabled={disabled} onClick={() => save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar configuração</Button><Button variant="secondary" disabled={disabled || !draft.logChannelId} onClick={() => test()}>{testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}Testar proteção</Button></div>
     </div>
   );
 }

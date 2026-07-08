@@ -258,7 +258,7 @@ export function AccountAgeSecurityPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-            <Button disabled={disabled} onClick={() => void save()}>
+            <Button disabled={disabled} onClick={() => save()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar segurança
             </Button>

@@ -149,8 +149,8 @@ export function ManualPaymentsPanel({ botId, canManage, guild }: Props) {
             <Textarea disabled={!canManage} label="Instrucoes de pagamento" onChange={(value) => patch({ paymentInstructions: value })} value={draft.paymentInstructions ?? ""} />
 
             <div className="flex flex-wrap gap-3">
-              <Button disabled={!canManage || saving} onClick={() => void save()} type="button"><Save className="mr-2 h-4 w-4" />Salvar</Button>
-              <Button disabled={!canManage || saving} onClick={() => void publish()} type="button" variant="secondary"><Send className="mr-2 h-4 w-4" />Publicar painel</Button>
+              <Button disabled={!canManage || saving} onClick={() => save()} type="button"><Save className="mr-2 h-4 w-4" />Salvar</Button>
+              <Button disabled={!canManage || saving} onClick={() => publish()} type="button" variant="secondary"><Send className="mr-2 h-4 w-4" />Publicar painel</Button>
             </div>
             {message ? <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">{message}</p> : null}
           </CardContent>

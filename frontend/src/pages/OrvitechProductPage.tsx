@@ -169,8 +169,8 @@ export function OrvitechProductPage({ slug, storeId }: OrvitechProductPageProps)
                 />
               </div>
               <div className="mt-4 space-y-3">
-                <PlanCard accent={accent} currency={page.settings.currency} loading={checkoutPlan === "monthly"} onClick={() => void handleCheckout("monthly")} plan={product.plans.monthly} />
-                <PlanCard accent={accent} currency={page.settings.currency} loading={checkoutPlan === "lifetime"} onClick={() => void handleCheckout("lifetime")} plan={product.plans.lifetime} />
+                <PlanCard accent={accent} currency={page.settings.currency} loading={checkoutPlan === "monthly"} onClick={() => handleCheckout("monthly")} plan={product.plans.monthly} />
+                <PlanCard accent={accent} currency={page.settings.currency} loading={checkoutPlan === "lifetime"} onClick={() => handleCheckout("lifetime")} plan={product.plans.lifetime} />
               </div>
               {checkoutMessage ? (
                 <div className="mt-4 rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-100">

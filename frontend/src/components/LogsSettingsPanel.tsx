@@ -293,7 +293,7 @@ export function LogsSettingsPanel({
             <div><p className="mb-2 text-sm font-medium text-zinc-200">Cargos autorizados a ver logs</p><div className="grid max-h-44 gap-2 overflow-y-auto rounded-lg border border-zinc-800 p-3 sm:grid-cols-2">{roles.map((role) => <label className="flex items-center gap-2 text-sm text-zinc-300" key={role.id}><input type="checkbox" disabled={disabled} checked={automated.allowedRoleIds.includes(role.id)} onChange={() => setAutomated((current) => current ? { ...current, allowedRoleIds: current.allowedRoleIds.includes(role.id) ? current.allowedRoleIds.filter((id) => id !== role.id) : [...current.allowedRoleIds, role.id] } : current)} />@{role.name}</label>)}</div></div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{Object.entries(automated.channels).map(([key, value]) => <div className="rounded-lg border border-zinc-900 bg-zinc-950 p-3 text-sm" key={key}><span className="text-zinc-500">{key}</span><p className="mt-1 text-zinc-200">{value ? `Canal ${value}` : "Não criado"}</p></div>)}</div>
             {automated.lastError ? <p className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">{automated.lastError}</p> : null}
-            <div className="flex flex-wrap gap-2"><Button disabled={disabled} variant="outline" onClick={() => void requestAutomatedSync("Sincronização da estrutura de logs solicitada.")}>Recriar estrutura</Button><Button disabled={disabled} variant="outline" onClick={() => void requestAutomatedSync("Atualização de permissões solicitada.")}>Atualizar permissões</Button>{automated.lastSyncedAt ? <Badge variant="success">Sincronizado em {new Date(automated.lastSyncedAt).toLocaleString("pt-BR")}</Badge> : <Badge variant="warning">Aguardando sincronização do bot</Badge>}</div>
+            <div className="flex flex-wrap gap-2"><Button disabled={disabled} variant="outline" onClick={() => requestAutomatedSync("Sincronização da estrutura de logs solicitada.")}>Recriar estrutura</Button><Button disabled={disabled} variant="outline" onClick={() => requestAutomatedSync("Atualização de permissões solicitada.")}>Atualizar permissões</Button>{automated.lastSyncedAt ? <Badge variant="success">Sincronizado em {new Date(automated.lastSyncedAt).toLocaleString("pt-BR")}</Badge> : <Badge variant="warning">Aguardando sincronização do bot</Badge>}</div>
           </CardContent>
         </Card>
       ) : null}
@@ -303,7 +303,7 @@ export function LogsSettingsPanel({
           {error ? <p className="text-red-300">{error}</p> : null}
           {status ? <p className="text-emerald-300">{status}</p> : null}
         </div>
-        <Button disabled={disabled} onClick={() => void save()}>
+        <Button disabled={disabled} onClick={() => save()}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Salvar logs
         </Button>

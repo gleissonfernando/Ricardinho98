@@ -275,7 +275,7 @@ export function GiveawayRoulettePage({ token }: GiveawayRoulettePageProps) {
               ) : null}
 
               <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <Button className="h-12 bg-emerald-400 px-6 font-bold text-black hover:bg-emerald-300" disabled={!canSpin || spinning} onClick={() => void handleSpin()}>
+                <Button className="h-12 bg-emerald-400 px-6 font-bold text-black hover:bg-emerald-300" disabled={!canSpin || spinning} onClick={() => handleSpin()}>
                   {spinning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Girar Roleta
                 </Button>

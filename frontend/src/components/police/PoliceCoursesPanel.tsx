@@ -127,7 +127,7 @@ export function PoliceCoursesPanel({ botId, canManage, guild }: Props) {
             <CardTitle>Configuracao geral</CardTitle>
             <CardDescription>Altere os campos e clique em salvar para persistir no bot.</CardDescription>
           </div>
-          <Button disabled={!canManage || savingConfig} onClick={() => void saveConfig()}>
+          <Button disabled={!canManage || savingConfig} onClick={() => saveConfig()}>
             <Save className="mr-2 h-4 w-4" />{savingConfig ? "Salvando..." : "Salvar configuracao"}
           </Button>
         </div>

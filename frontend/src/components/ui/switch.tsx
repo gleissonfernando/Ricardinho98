@@ -13,7 +13,7 @@ export function Switch({ checked, onCheckedChange, className, ...props }: Switch
       role="switch"
       aria-checked={checked}
       className={cn(
-        "relative h-6 w-11 rounded-full border border-border transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative h-6 min-h-11 w-11 touch-manipulation rounded-full border border-border transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         checked ? "bg-white" : "bg-zinc-800",
         className
       )}

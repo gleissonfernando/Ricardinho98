@@ -570,7 +570,7 @@ export function WelcomePanel({
           </label>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button disabled={!canManage || saving === "message"} onClick={() => void handleMessageSave()} type="button">
+            <Button disabled={!canManage || saving === "message"} onClick={() => handleMessageSave()} type="button">
               {saving === "message" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar
             </Button>
@@ -597,7 +597,7 @@ export function WelcomePanel({
                 placeholder="https://site.com/banner.gif"
                 value={imageInput}
               />
-              <Button disabled={!canManage || saving === "imageUrl"} onClick={() => void handleImageUrlSubmit()} type="button" variant="outline">
+              <Button disabled={!canManage || saving === "imageUrl"} onClick={() => handleImageUrlSubmit()} type="button" variant="outline">
                 <Link2 className="h-4 w-4" />
                 Link
               </Button>
@@ -605,7 +605,7 @@ export function WelcomePanel({
                 {saving === "image" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Enviar
               </Button>
-              <Button disabled={!canManage || !settings?.[config.imageKey] || saving === "imageUrl"} onClick={() => void handleImageRemove()} type="button" variant="outline">
+              <Button disabled={!canManage || !settings?.[config.imageKey] || saving === "imageUrl"} onClick={() => handleImageRemove()} type="button" variant="outline">
                 Remover
               </Button>
             </div>

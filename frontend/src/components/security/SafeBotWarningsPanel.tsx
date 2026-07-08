@@ -258,7 +258,7 @@ export function SafeBotWarningsPanel({
             </div>
           ) : null}
 
-          <Button disabled={disabled} onClick={() => void save()}>
+          <Button disabled={disabled} onClick={() => save()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar sistema de advertências
           </Button>
@@ -280,8 +280,8 @@ export function SafeBotWarningsPanel({
                 </div>
                 <textarea className="mt-3 min-h-16 w-full rounded-md border border-zinc-800 bg-black p-2 text-xs text-zinc-200" defaultValue={user.internalNote} disabled={disabled} id={`note-${user.userId}`} placeholder="Observação interna da staff" />
                 <div className="mt-2 flex gap-2">
-                  <Button disabled={disabled} onClick={() => void saveNote(user.userId)} size="sm" variant="outline">Salvar observação</Button>
-                  <Button disabled={disabled || user.totalWarnings === 0} onClick={() => void resetUser(user.userId)} size="sm" variant="destructive">Resetar advertências</Button>
+                  <Button disabled={disabled} onClick={() => saveNote(user.userId)} size="sm" variant="outline">Salvar observação</Button>
+                  <Button disabled={disabled || user.totalWarnings === 0} onClick={() => resetUser(user.userId)} size="sm" variant="destructive">Resetar advertências</Button>
                 </div>
               </div>
             )) : <p className="py-8 text-center text-sm text-zinc-500">Nenhum usuário advertido.</p>}
@@ -304,7 +304,7 @@ export function SafeBotWarningsPanel({
                 <p className="mt-1 text-xs text-zinc-500">Ação: {warning.executedAction ?? warning.configuredAction ?? "apenas registrar"} • {new Date(warning.createdAt).toLocaleString()}</p>
                 {warning.error ? <p className="mt-1 text-xs text-red-300">{warning.error}</p> : null}
                 {warning.status !== "removed" ? (
-                  <Button className="mt-2" disabled={disabled} onClick={() => void removeWarning(warning.id)} size="sm" variant="outline">
+                  <Button className="mt-2" disabled={disabled} onClick={() => removeWarning(warning.id)} size="sm" variant="outline">
                     <Trash2 className="h-3.5 w-3.5" />
                     Remover
                   </Button>

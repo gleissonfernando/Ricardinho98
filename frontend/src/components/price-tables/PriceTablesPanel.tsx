@@ -161,7 +161,7 @@ export function PriceTablesPanel({ botId, canManage, guild }: Props) {
           <CardDescription>{loading ? "Carregando..." : `${tables.length} tabela(s) cadastrada(s)`}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button className="w-full" disabled={!canManage || saving} onClick={() => void createNewTable()} type="button"><Plus className="mr-2 h-4 w-4" />Criar nova tabela</Button>
+          <Button className="w-full" disabled={!canManage || saving} onClick={() => createNewTable()} type="button"><Plus className="mr-2 h-4 w-4" />Criar nova tabela</Button>
           {tables.map((table) => (
             <button className={`w-full rounded-lg border p-3 text-left text-sm ${selectedId === table.id ? "border-purple-500/50 bg-purple-500/10 text-white" : "border-zinc-800 bg-zinc-950 text-zinc-400"}`} key={table.id} onClick={() => selectTable(table)} type="button">
               <span className="block truncate font-semibold">{table.name}</span>
@@ -228,9 +228,9 @@ export function PriceTablesPanel({ botId, canManage, guild }: Props) {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Button disabled={!canManage || saving} onClick={() => void saveDraft()} type="button"><Save className="mr-2 h-4 w-4" />Salvar</Button>
-                <Button disabled={!canManage || saving || !selectedId} onClick={() => void publishSelected()} type="button" variant="secondary"><Send className="mr-2 h-4 w-4" />Publicar no Discord</Button>
-                <Button disabled={!canManage || saving || !selectedId} onClick={() => void removeSelected()} type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir</Button>
+                <Button disabled={!canManage || saving} onClick={() => saveDraft()} type="button"><Save className="mr-2 h-4 w-4" />Salvar</Button>
+                <Button disabled={!canManage || saving || !selectedId} onClick={() => publishSelected()} type="button" variant="secondary"><Send className="mr-2 h-4 w-4" />Publicar no Discord</Button>
+                <Button disabled={!canManage || saving || !selectedId} onClick={() => removeSelected()} type="button" variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Excluir</Button>
               </div>
             </CardContent>
           </Card>

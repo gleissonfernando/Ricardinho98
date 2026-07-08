@@ -318,7 +318,7 @@ export function SiteAccessPanel({
               placeholder="Nome, @usuário ou ID Discord"
               value={userQuery}
             />
-            <Button disabled={disabled || loadingMembers || userQuery.trim().length < 2} onClick={() => void handleMemberSearch()} type="button" variant="outline">
+            <Button disabled={disabled || loadingMembers || userQuery.trim().length < 2} onClick={() => handleMemberSearch()} type="button" variant="outline">
               {loadingMembers ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               Buscar
             </Button>

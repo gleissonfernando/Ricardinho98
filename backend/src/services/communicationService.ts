@@ -68,7 +68,8 @@ export async function getSummonsSettings(botId: string, guildId: string) {
   const value: MongoSummonsSettings = {
     _id: randomUUID(), botId, guildId, enabled: false, categoryId: null, temporaryCategoryId: null,
     authorizedRoleIds: [], moderatorRoleIds: [], anonymityEnabled: true, teamRoleIds: [],
-    conselhoRoleIds: [], hcmdRoleIds: [], comissarioRoleIds: [], allowedCommandRoleIds: [],
+    teamMentionRoleIds: [], conselhoRoleIds: [], conselhoMentionRoleIds: [], hcmdRoleIds: [], hcmdMentionRoleIds: [],
+    comissarioRoleIds: [], comissarioMentionRoleIds: [], allowedCommandRoleIds: [],
     iabCategoryId: null, conselhoCategoryId: null, hcmdCategoryId: null, comissarioCategoryId: null,
     iabLogChannelId: null, conselhoLogChannelId: null, hcmdLogChannelId: null, comissarioLogChannelId: null,
     panelBannerUrl: null, defaultDeadline: null, teamAvatarUrl: null,
@@ -141,9 +142,13 @@ function summonsSettingsDto(value: MongoSummonsSettings) {
     ...value,
     anonymityEnabled: value.anonymityEnabled ?? true,
     teamRoleIds: value.teamRoleIds ?? [],
+    teamMentionRoleIds: value.teamMentionRoleIds ?? [],
     conselhoRoleIds: value.conselhoRoleIds ?? [],
+    conselhoMentionRoleIds: value.conselhoMentionRoleIds ?? [],
     hcmdRoleIds: value.hcmdRoleIds ?? [],
+    hcmdMentionRoleIds: value.hcmdMentionRoleIds ?? [],
     comissarioRoleIds: value.comissarioRoleIds ?? [],
+    comissarioMentionRoleIds: value.comissarioMentionRoleIds ?? [],
     allowedCommandRoleIds: value.allowedCommandRoleIds ?? value.authorizedRoleIds ?? [],
     iabCategoryId: value.iabCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
     conselhoCategoryId: value.conselhoCategoryId ?? value.temporaryCategoryId ?? value.categoryId ?? null,
@@ -194,10 +199,17 @@ function normalizeDmSettingsInput(input: Partial<Omit<MongoDmSettings, "_id" | "
 
 function normalizeSummonsSettingsInput(input: Partial<Omit<MongoSummonsSettings, "_id" | "botId" | "guildId" | "createdAt" | "updatedAt" | "updatedBy">>) {
   const next: typeof input = { ...input };
+  for (const key of ["authorizedRoleIds", "moderatorRoleIds", "teamRoleIds", "teamMentionRoleIds", "conselhoRoleIds", "conselhoMentionRoleIds", "hcmdRoleIds", "hcmdMentionRoleIds", "comissarioRoleIds", "comissarioMentionRoleIds", "allowedCommandRoleIds"] as const) {
+    if (key in next) next[key] = normalizeIdList(next[key]);
+  }
   if ("bannerUrl" in next) next.bannerUrl = normalizeImageUrl(next.bannerUrl);
   if ("panelBannerUrl" in next) next.panelBannerUrl = normalizeImageUrl(next.panelBannerUrl);
   if ("teamAvatarUrl" in next) next.teamAvatarUrl = normalizeImageUrl(next.teamAvatarUrl);
   return next;
+}
+
+function normalizeIdList(value: unknown) {
+  return Array.isArray(value) ? [...new Set(value.map((item) => String(item).trim()).filter((item) => /^\d{5,32}$/.test(item)))] : [];
 }
 
 function normalizeText(value: string | null | undefined, fallback: string, maxLength: number) {

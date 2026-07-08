@@ -1178,7 +1178,7 @@ export function DevPanel({
                         <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
                           <Button
                             disabled={poweringBotId === bot.id}
-                            onClick={() => void handlePower(bot)}
+                            onClick={() => handlePower(bot)}
                             size="icon"
                             title={bot.status === "online" ? "Desligar bot" : "Ligar bot"}
                             variant={bot.status === "online" ? "destructive" : "outline"}
@@ -1187,7 +1187,7 @@ export function DevPanel({
                           </Button>
                           <Button
                             disabled={deletingBotId === bot.id}
-                            onClick={() => void handleDelete(bot)}
+                            onClick={() => handleDelete(bot)}
                             size="icon"
                             title="Desconectar bot"
                             variant="destructive"
@@ -1472,7 +1472,7 @@ function ConnectedBotPanel({
                 onToggle={() => setNewTokenVisible((current) => !current)}
                 value={newToken}
               />
-              <Button disabled={updatingToken || newToken.trim().length < 10} onClick={() => void handleSaveToken()} size="sm">
+              <Button disabled={updatingToken || newToken.trim().length < 10} onClick={() => handleSaveToken()} size="sm">
                 {updatingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {updatingToken ? "Validando..." : "Salvar novo token"}
               </Button>
@@ -1490,7 +1490,7 @@ function ConnectedBotPanel({
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button onClick={() => void handleCopyDashboardUrl()} size="sm" variant="outline">
+              <Button onClick={() => handleCopyDashboardUrl()} size="sm" variant="outline">
                 {copiedDashboardUrl ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                 Copiar URL
               </Button>
@@ -2293,11 +2293,11 @@ function DatabaseMaintenancePanel({ bot, guilds }: { bot: DevBot; guilds: Dashbo
             <label className="block text-xs font-semibold uppercase text-zinc-400">ID Discord ou nome</label>
             <div className="flex gap-2">
               <input className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-800 bg-black px-3 text-sm text-white outline-none focus:border-purple-400" onChange={(event) => setQuery(event.target.value)} placeholder="1234567890 ou nome" value={query} />
-              <Button disabled={busy === "search"} onClick={() => void searchUsers()} size="sm">{busy === "search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Buscar</Button>
+              <Button disabled={busy === "search"} onClick={() => searchUsers()} size="sm">{busy === "search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Buscar</Button>
             </div>
             <div className="space-y-2">
               {users.map((user) => (
-                <button className={`w-full rounded-lg border p-3 text-left ${selectedUserId === user.userId ? "border-purple-400 bg-purple-500/10" : "border-zinc-800 bg-zinc-950/70"}`} key={user.userId} onClick={() => void inspectUser(user.userId)} type="button">
+                <button className={`w-full rounded-lg border p-3 text-left ${selectedUserId === user.userId ? "border-purple-400 bg-purple-500/10" : "border-zinc-800 bg-zinc-950/70"}`} key={user.userId} onClick={() => inspectUser(user.userId)} type="button">
                   <span className="block text-sm font-semibold text-white">{user.username || "Usuario sem nome"}</span>
                   <span className="block font-mono text-xs text-zinc-400">{user.userId}</span>
                   <span className="mt-1 block text-xs text-zinc-500">{user.sources.join(", ")}</span>
@@ -2337,7 +2337,7 @@ function DatabaseMaintenancePanel({ bot, guilds }: { bot: DevBot; guilds: Dashbo
                   <label className="block text-xs font-semibold uppercase text-red-100">Confirmar exclusao digitando o ID do usuario</label>
                   <div className="mt-2 flex gap-2">
                     <input className="h-10 min-w-0 flex-1 rounded-lg border border-red-500/25 bg-black px-3 font-mono text-sm text-white" onChange={(event) => setDeleteConfirmation(event.target.value)} value={deleteConfirmation} />
-                    <Button disabled={busy === "delete-user" || deleteConfirmation.trim() !== selectedUserId || !links.total} onClick={() => void deleteUser()} variant="destructive">
+                    <Button disabled={busy === "delete-user" || deleteConfirmation.trim() !== selectedUserId || !links.total} onClick={() => deleteUser()} variant="destructive">
                       {busy === "delete-user" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Excluir vinculos
                     </Button>
                   </div>
@@ -2359,7 +2359,7 @@ function DatabaseMaintenancePanel({ bot, guilds }: { bot: DevBot; guilds: Dashbo
             <CardDescription>Remove testes, duplicados e registros detectavelmente orfaos.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <Button disabled={busy === "cleanup-legacy"} onClick={() => void cleanupLegacy()} variant="outline">
+            <Button disabled={busy === "cleanup-legacy"} onClick={() => cleanupLegacy()} variant="outline">
               {busy === "cleanup-legacy" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Limpar sistema antigo
             </Button>
           </CardContent>
@@ -2375,7 +2375,7 @@ function DatabaseMaintenancePanel({ bot, guilds }: { bot: DevBot; guilds: Dashbo
               {modules.map((module) => <option key={module.id} value={module.id}>{module.label}</option>)}
             </select>
             <input className="h-10 w-full rounded-lg border border-zinc-800 bg-black px-3 text-sm text-white" onChange={(event) => setModuleConfirmation(event.target.value)} placeholder="CONFIRMAR" value={moduleConfirmation} />
-            <Button disabled={busy === "reset-module" || moduleConfirmation.trim() !== "CONFIRMAR"} onClick={() => void resetModule()} variant="destructive">
+            <Button disabled={busy === "reset-module" || moduleConfirmation.trim() !== "CONFIRMAR"} onClick={() => resetModule()} variant="destructive">
               {busy === "reset-module" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Zerar modulo
             </Button>
           </CardContent>
@@ -2388,7 +2388,7 @@ function DatabaseMaintenancePanel({ bot, guilds }: { bot: DevBot; guilds: Dashbo
           </CardHeader>
           <CardContent className="space-y-3 p-4 pt-0">
             <input className="h-10 w-full rounded-lg border border-red-500/25 bg-black px-3 font-mono text-sm text-white" onChange={(event) => setServerConfirmation(event.target.value)} placeholder={guildId} value={serverConfirmation} />
-            <Button disabled={busy === "reset-server" || serverConfirmation.trim() !== guildId} onClick={() => void resetServer()} variant="destructive">
+            <Button disabled={busy === "reset-server" || serverConfirmation.trim() !== guildId} onClick={() => resetServer()} variant="destructive">
               {busy === "reset-server" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Zerar servidor
             </Button>
           </CardContent>
@@ -3092,7 +3092,7 @@ function OrvitechSalesWorkspace({
                   <option value="USD">USD</option>
                   <option value="EUR">EUR</option>
                 </select>
-                <Button disabled={saving === "settings"} onClick={() => void handleSaveSettings()}>
+                <Button disabled={saving === "settings"} onClick={() => handleSaveSettings()}>
                   {saving === "settings" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings className="h-4 w-4" />}
                   Salvar configuracao
                 </Button>
@@ -3127,7 +3127,7 @@ function OrvitechSalesWorkspace({
                   <DevInput label="Segredo webhook" onChange={(value) => setProviderForm((current) => ({ ...current, webhookSecret: value }))} value={providerForm.webhookSecret ?? ""} />
                   <DevInput label="Instrucoes" onChange={(value) => setProviderForm((current) => ({ ...current, instructions: value }))} value={providerForm.instructions ?? ""} />
                 </div>
-                <Button disabled={saving === "provider"} onClick={() => void handleSaveProvider()}>
+                <Button disabled={saving === "provider"} onClick={() => handleSaveProvider()}>
                   {saving === "provider" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                   Salvar pagamento
                 </Button>
@@ -3140,7 +3140,7 @@ function OrvitechSalesWorkspace({
                         <p className="truncate text-xs font-medium text-zinc-400">{provider.provider} · gateway {provider.gatewayId} {provider.secretConfigured ? "· segredo configurado" : ""}</p>
                       </div>
                       <Badge variant={provider.enabled ? "success" : "muted"}>{provider.enabled ? "Ativo" : "Off"}</Badge>
-                      <Button disabled={saving === provider.id} onClick={() => void handleDeleteProvider(provider)} size="icon" variant="destructive">
+                      <Button disabled={saving === provider.id} onClick={() => handleDeleteProvider(provider)} size="icon" variant="destructive">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -3233,7 +3233,7 @@ function OrvitechSalesWorkspace({
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {editingProductId ? <Button onClick={() => { setEditingProductId(null); setProductForm(defaultProductForm); }} variant="outline">Cancelar</Button> : null}
-                    <Button disabled={saving === "product"} onClick={() => void handleSaveProduct()}>
+                    <Button disabled={saving === "product"} onClick={() => handleSaveProduct()}>
                       {saving === "product" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                       {editingProductId ? "Salvar alteracoes" : "Novo produto"}
                     </Button>
@@ -3269,9 +3269,9 @@ function OrvitechSalesWorkspace({
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button onClick={() => editProduct(product)} size="sm" variant="outline"><Settings className="h-4 w-4" />Editar</Button>
-                        <Button onClick={() => void handleDuplicateProduct(product)} size="sm" variant="outline"><Copy className="h-4 w-4" />Duplicar</Button>
+                        <Button onClick={() => handleDuplicateProduct(product)} size="sm" variant="outline"><Copy className="h-4 w-4" />Duplicar</Button>
                         <Button onClick={() => window.open(product.publicUrl, "_blank", "noopener,noreferrer")} size="sm" variant="outline"><ExternalLink className="h-4 w-4" />Ver</Button>
-                        <Button disabled={saving === product.id} onClick={() => void handleDeleteProduct(product)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Excluir</Button>
+                        <Button disabled={saving === product.id} onClick={() => handleDeleteProduct(product)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Excluir</Button>
                       </div>
                     </div>
                   ))}
@@ -3306,7 +3306,7 @@ function OrvitechSalesWorkspace({
                 </label>
                 <div className="flex gap-2">
                   {editingPlanId ? <Button onClick={() => { setEditingPlanId(null); setPlanForm(defaultPlanForm); }} variant="outline">Cancelar</Button> : null}
-                  <Button disabled={saving === "plan"} onClick={() => void handleSavePlan()}>
+                  <Button disabled={saving === "plan"} onClick={() => handleSavePlan()}>
                     {saving === "plan" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     {editingPlanId ? "Atualizar plano" : "Criar plano"}
                   </Button>
@@ -3322,7 +3322,7 @@ function OrvitechSalesWorkspace({
                       </div>
                       <div className="flex gap-2">
                         <Button onClick={() => editPlan(plan)} size="sm" variant="outline"><Settings className="h-4 w-4" />Editar</Button>
-                        <Button disabled={saving === plan.id} onClick={() => void handleDeletePlan(plan)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
+                        <Button disabled={saving === plan.id} onClick={() => handleDeletePlan(plan)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Remover</Button>
                       </div>
                     </div>
                   </div>
@@ -3351,7 +3351,7 @@ function OrvitechSalesWorkspace({
                 <DevInput inputMode="numeric" label="Valor em centavos" onChange={(value) => setSaleForm((current) => ({ ...current, amountCents: Number(value.replace(/\D/g, "")) || null }))} value={String(saleForm.amountCents ?? "")} />
                 <DevInput label="Referencia externa" onChange={(value) => setSaleForm((current) => ({ ...current, externalReference: value }))} value={saleForm.externalReference ?? ""} />
               </div>
-              <Button disabled={saving === "sale"} onClick={() => void handleCreateSale()}>
+              <Button disabled={saving === "sale"} onClick={() => handleCreateSale()}>
                 {saving === "sale" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Registrar venda
               </Button>
@@ -3365,8 +3365,8 @@ function OrvitechSalesWorkspace({
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge variant={sale.status === "paid" ? "success" : sale.status === "cancelled" || sale.status === "refunded" ? "danger" : "muted"}>{saleStatusLabel(sale.status)}</Badge>
-                        {sale.status !== "paid" ? <Button disabled={saving === sale.id} onClick={() => void handleSaleStatus(sale.id, "paid")} size="sm" variant="outline">Marcar paga</Button> : null}
-                        {sale.status === "pending" ? <Button disabled={saving === sale.id} onClick={() => void handleSaleStatus(sale.id, "cancelled")} size="sm" variant="destructive">Cancelar</Button> : null}
+                        {sale.status !== "paid" ? <Button disabled={saving === sale.id} onClick={() => handleSaleStatus(sale.id, "paid")} size="sm" variant="outline">Marcar paga</Button> : null}
+                        {sale.status === "pending" ? <Button disabled={saving === sale.id} onClick={() => handleSaleStatus(sale.id, "cancelled")} size="sm" variant="destructive">Cancelar</Button> : null}
                       </div>
                     </div>
                   </div>
@@ -3742,7 +3742,7 @@ function ServerCloneDevWorkspace({
           <button
             className="flex h-10 items-center justify-center gap-2 rounded-lg border border-purple-500/30 bg-purple-600 px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(124,58,237,0.28)] transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={saving || loadingConfig}
-            onClick={() => void handleSavePlan()}
+            onClick={() => handleSavePlan()}
             type="button"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}

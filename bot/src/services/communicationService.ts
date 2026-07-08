@@ -334,6 +334,7 @@ async function handleSummons(interaction: any, context: BotContext) {
     try {
       const channel = await createSummonsChannel(interaction, settings, record);
       const panel = await channel.send(summonsPanel(settings, record));
+      await mentionSummonsRoles(channel, settings, record);
       let dmMessageId: string | null = null;
       let dmDeliveryStatus: "sent" | "failed" = "sent";
       let dmDeliveryError: string | null = null;
@@ -370,7 +371,7 @@ async function handleSummons(interaction: any, context: BotContext) {
   if (action === "abort" && interaction.isButton()) {
     const record = await context.api.getSummons(id!);
     if (!canManageSummons(interaction, settings, record)) return void await interaction.reply({ content: "Você não possui permissão para atuar nesta intimação.", ephemeral: true });
-    await closeSummons(interaction, context, settings, id!, "cancelada");
+    await closeSummons(interaction, context, settings, id!, "arquivada");
     return;
   }
   if (action === "start" && interaction.isButton()) {
@@ -433,9 +434,40 @@ async function closeSummons(interaction: any, context: BotContext, settings: Sum
   const transcript = settings.transcriptEnabled && channel?.isTextBased() ? await makeTranscript(channel) : null;
   const deleteAt = new Date(Date.now() + settings.deleteDelaySeconds * 1000);
   const updated = await context.api.updateSummons(id, { status: "closing", transcript, closedAt: new Date().toISOString(), closedBy: interaction.user.id, deleteAt: deleteAt.toISOString() });
+  await disableSummonsPanelButtons(channel, settings, updated, action);
   await channel?.send({ components: [{ type: 17, accent_color: 0xef4444, components: [{ type: 10, content: `## Conversa ${action}\nA solicitação foi ${action} pela ${teamName}. Este canal será excluído em ${settings.deleteDelaySeconds} segundos.` }] }], flags: MessageFlags.IsComponentsV2 });
   await sendSummonsLog(interaction, settings, updated, action, transcript);
   setTimeout(() => void channel?.delete(`Intimação ${id} finalizada`).then(() => context.api.updateSummons(id, { status: "closed" })).catch(() => undefined), settings.deleteDelaySeconds * 1000).unref();
+}
+
+async function mentionSummonsRoles(channel: any, settings: SummonsSettings, record: SummonsRecord) {
+  const roleIds = mentionRoleIdsForCompetence(settings, recordCompetence(record));
+  if (!roleIds.length) return;
+
+  await channel.send({
+    allowedMentions: { roles: roleIds },
+    content: `${roleIds.map((roleId) => `<@&${roleId}>`).join(" ")}\nNova intimação para análise da ${competenceLabel(recordCompetence(record))}.`
+  }).catch((error: unknown) => {
+    console.warn("[summons] falha ao mencionar cargos configurados", {
+      channelId: channel.id,
+      error: messageOf(error),
+      recordId: record.id
+    });
+  });
+}
+
+async function disableSummonsPanelButtons(channel: any, settings: SummonsSettings, record: SummonsRecord, actionLabel: string) {
+  if (!record.panelMessageId || !channel?.messages?.fetch) return;
+  const message = await channel.messages.fetch(record.panelMessageId).catch(() => null);
+  if (!message) return;
+
+  await message.edit(summonsPanel(settings, record, { actionLabel, disabled: true })).catch((error: unknown) => {
+    console.warn("[summons] falha ao desativar botões do painel", {
+      channelId: channel.id,
+      error: messageOf(error),
+      recordId: record.id
+    });
+  });
 }
 
 export function dmPayload(settings: DmSettings, title: string, description: string, guildName: string) {
@@ -510,13 +542,15 @@ export function createSummonsMessageModal(targetId: string) {
       input("description", "Descrição do ocorrido", "Descreva o motivo da intimação...", true, true, 850)
     );
 }
-export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
+export function summonsPanel(settings: SummonsSettings, record: SummonsRecord, options: { actionLabel?: string; disabled?: boolean } = {}) {
   const competence = recordCompetence(record);
   const teamName = teamNameForCompetence(competence, settings);
   const deadline = snapshotString(record, "deadline");
+  const disabled = options.disabled === true || ("status" in record && record.status !== "active" && record.status !== "creating");
+  const status = disabled ? `Encerrada${options.actionLabel ? ` (${options.actionLabel})` : ""}` : "Aguardando resposta";
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setLabel("Cancelar Intimação").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:finish:${record.id}`).setLabel("Finalizar Intimação").setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`${SUMMONS_PREFIX}:abort:${record.id}`).setLabel("Arquivar Intimação").setStyle(ButtonStyle.Danger).setDisabled(disabled)
   );
   return renderComponentsV2Panel({
     accentColor: color(settings.color),
@@ -526,7 +560,7 @@ export function summonsPanel(settings: SummonsSettings, record: SummonsRecord) {
       `**Intimado:** <@${record.targetId}>`,
       `**Órgão competente:** ${competenceLabel(competence)}`,
       `**Motivo:** ${record.reason}`,
-      "**Status:** Aguardando resposta",
+      `**Status:** ${status}`,
       `**Remetente:** ${teamName}`,
       `**Data de criação:** <t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:f>`,
       `**Prazo:** ${deadline ?? "Não definido"}`
@@ -746,6 +780,12 @@ function roleIdsForCompetence(settings: SummonsSettings, competence: SummonsComp
   if (competence === "hcmd") return settings.hcmdRoleIds;
   return settings.comissarioRoleIds;
 }
+function mentionRoleIdsForCompetence(settings: SummonsSettings, competence: SummonsCompetence) {
+  if (competence === "iab") return uniqueIds(settings.teamMentionRoleIds);
+  if (competence === "conselho") return uniqueIds(settings.conselhoMentionRoleIds);
+  if (competence === "hcmd") return uniqueIds(settings.hcmdMentionRoleIds);
+  return uniqueIds(settings.comissarioMentionRoleIds);
+}
 function categoryIdForCompetence(settings: SummonsSettings, competence: SummonsCompetence) {
   if (competence === "iab") return settings.iabCategoryId ?? settings.temporaryCategoryId ?? settings.categoryId;
   if (competence === "conselho") return settings.conselhoCategoryId ?? settings.temporaryCategoryId ?? settings.categoryId;
@@ -882,6 +922,9 @@ function summonsTeamRoleIds(settings: SummonsSettings) {
   const configured = [...new Set(settings.teamRoleIds.filter(Boolean))];
   return configured.length ? configured : [...new Set([...settings.authorizedRoleIds, ...settings.moderatorRoleIds])];
 }
+function uniqueIds(values: string[] | null | undefined) {
+  return [...new Set((values ?? []).filter((value) => /^\d{5,32}$/.test(value)))];
+}
 function canUseSummonsCommand(member: GuildMember, settings: SummonsSettings) {
   const roles = settings.allowedCommandRoleIds.length ? settings.allowedCommandRoleIds : settings.authorizedRoleIds;
   return roles.length > 0 && hasRole(member, roles);
@@ -906,6 +949,10 @@ function summonsSettingsSnapshot(settings: SummonsSettings) {
     moderatorRoleIds: settings.moderatorRoleIds,
     anonymityEnabled: settings.anonymityEnabled,
     teamRoleIds: summonsTeamRoleIds(settings),
+    teamMentionRoleIds: settings.teamMentionRoleIds,
+    conselhoMentionRoleIds: settings.conselhoMentionRoleIds,
+    hcmdMentionRoleIds: settings.hcmdMentionRoleIds,
+    comissarioMentionRoleIds: settings.comissarioMentionRoleIds,
     teamAvatarUrl: settings.teamAvatarUrl,
     privateLogChannelId: settings.privateLogChannelId,
     publicResponsibleName: ANONYMOUS_TEAM_NAME,

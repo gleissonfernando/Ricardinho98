@@ -713,7 +713,7 @@ export function SelfBotProtectionPanel({
           </Section>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-            <Button disabled={disabled} onClick={() => void handleSave()}>
+            <Button disabled={disabled} onClick={() => handleSave()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar SelfBot Protection
             </Button>

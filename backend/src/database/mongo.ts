@@ -1415,9 +1415,13 @@ export type MongoSummonsSettings = {
   moderatorRoleIds: string[];
   anonymityEnabled?: boolean;
   teamRoleIds?: string[];
+  teamMentionRoleIds?: string[];
   conselhoRoleIds?: string[];
+  conselhoMentionRoleIds?: string[];
   hcmdRoleIds?: string[];
+  hcmdMentionRoleIds?: string[];
   comissarioRoleIds?: string[];
+  comissarioMentionRoleIds?: string[];
   allowedCommandRoleIds?: string[];
   iabCategoryId?: string | null;
   conselhoCategoryId?: string | null;

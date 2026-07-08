@@ -461,7 +461,7 @@ export function PanelImageSettings({ botId, canManage, guildId, panelId, panelLa
         </div>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-          <Button disabled={disabled} onClick={() => void save()} type="button">
+          <Button disabled={disabled} onClick={() => save()} type="button">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar imagem
           </Button>

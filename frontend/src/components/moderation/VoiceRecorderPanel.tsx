@@ -374,23 +374,23 @@ export function VoiceRecorderPanel({ botId, canManage, guild }: VoiceRecorderPan
             />
 
             <div className="flex flex-wrap gap-2 border-t border-zinc-900 pt-4">
-              <Button disabled={!canManage || saving} onClick={() => void handleSave({ enabled: true })} variant="outline">
+              <Button disabled={!canManage || saving} onClick={() => handleSave({ enabled: true })} variant="outline">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 Ativar
               </Button>
-              <Button disabled={!canManage || saving} onClick={() => void handleSave({ enabled: false })} variant="outline">
+              <Button disabled={!canManage || saving} onClick={() => handleSave({ enabled: false })} variant="outline">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
                 Desativar
               </Button>
-              <Button disabled={!canManage || saving} onClick={() => void handleSave()}>
+              <Button disabled={!canManage || saving} onClick={() => handleSave()}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Salvar
               </Button>
-              <Button disabled={acting || !settings.enabled || !selectedVoiceChannelId || Boolean(activeRecording)} onClick={() => void handleStart()} variant="outline">
+              <Button disabled={acting || !settings.enabled || !selectedVoiceChannelId || Boolean(activeRecording)} onClick={() => handleStart()} variant="outline">
                 {acting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Iniciar
               </Button>
-              <Button disabled={acting || !activeRecording} onClick={() => void handleStop()} variant="outline">
+              <Button disabled={acting || !activeRecording} onClick={() => handleStop()} variant="outline">
                 {acting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
                 Encerrar
               </Button>
@@ -431,7 +431,7 @@ export function VoiceRecorderPanel({ botId, canManage, guild }: VoiceRecorderPan
               <CardTitle>Histórico das gravações</CardTitle>
               <CardDescription>{data.recordings.length} registro(s) carregado(s).</CardDescription>
             </div>
-            <Button disabled={loading} onClick={() => void load()} variant="outline">
+            <Button disabled={loading} onClick={() => load()} variant="outline">
               <RefreshCw className="h-4 w-4" />
               Atualizar
             </Button>
@@ -450,7 +450,7 @@ export function VoiceRecorderPanel({ botId, canManage, guild }: VoiceRecorderPan
               value={filters.channelId}
             />
             <div className="flex items-end">
-              <Button className="w-full" onClick={() => void load(filters)} variant="outline">
+              <Button className="w-full" onClick={() => load(filters)} variant="outline">
                 <Search className="h-4 w-4" />
                 Filtrar
               </Button>
