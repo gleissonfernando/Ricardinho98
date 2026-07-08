@@ -58,7 +58,9 @@ export function registerEvents(client: Client, context: BotContext) {
   });
   client.once(Events.ClientReady, (readyClient) => runEvent("ready", () => handleReady(readyClient, context)));
   client.on(Events.InteractionCreate, (interaction) => {
-    void handleInteractionCreate(interaction, context);
+    void handleInteractionCreate(interaction, context).catch((error) => {
+      console.error("[interactionCreate] falha fora do dispatcher:", error);
+    });
   });
   client.on(Events.UserUpdate, (_oldUser, newUser) => {
     if (client.user && newUser.id === client.user.id) {

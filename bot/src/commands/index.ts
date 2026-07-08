@@ -21,6 +21,7 @@ import { serverClonerCommand } from "./serverCloner";
 import { serverGeneratorCommand } from "./serverGenerator";
 import { ticketCommand } from "./ticket";
 import { summonsCommand } from "./summons";
+import { iabCommand, sistemaCommand } from "./reportSystem";
 import { policePatrolReportCommand, viewPolicePatrolReportCommand } from "./policePatrolReports";
 import { policeReportsCommand } from "../services/policeReportsService";
 import { notifyOpenPointCommand, notifyOpenPointConfigCommand, notifyOpenPointCounterCommand, notifyOpenPointResetCommand } from "../services/openPointNotificationService";
@@ -56,6 +57,8 @@ export function createCommandCollection() {
     summonsCommand,
     policePatrolReportCommand,
     viewPolicePatrolReportCommand,
+    sistemaCommand,
+    iabCommand,
     policeReportsCommand,
     policeCourseCommand,
     editPoliceCourseCommand,
