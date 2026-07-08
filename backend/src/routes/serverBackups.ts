@@ -8,8 +8,10 @@ import { resolveRequestBotId } from "../services/requestBotScopeService";
 import {
   createServerBackup,
   deleteServerBackup,
+  exportServerBackup,
   getServerBackupDashboard,
   getServerBackupSettings,
+  importServerBackup,
   isStoredServerBackupOwner,
   previewServerBackupRestore,
   restoreServerBackup,
@@ -99,6 +101,26 @@ serverBackupsRouter.post("/:guildId/backups", async (req, res, next) => {
   }
 });
 
+serverBackupsRouter.post("/:guildId/import", async (req, res, next) => {
+  try {
+    const scope = await readScope(req, res);
+    if (!scope || !(await canManageServerBackup(scope))) {
+      return res.status(403).json({ message: "Sem permissao para importar backup." });
+    }
+
+    return res.status(201).json({
+      backup: await importServerBackup({
+        actorId: scope.user.discordId ?? scope.user.id,
+        botId: scope.botId,
+        guildId: scope.guildId,
+        payload: req.body
+      })
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 serverBackupsRouter.delete("/:guildId/backups/:backupId", async (req, res, next) => {
   try {
     const scope = await readScope(req, res);
@@ -109,6 +131,24 @@ serverBackupsRouter.delete("/:guildId/backups/:backupId", async (req, res, next)
 
     await deleteServerBackup(scope.botId, scope.guildId, backupId, scope.user.discordId ?? scope.user.id);
     return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+serverBackupsRouter.get("/:guildId/backups/:backupId/download", async (req, res, next) => {
+  try {
+    const scope = await readScope(req, res);
+    const backupId = backupIdSchema.parse(req.params.backupId);
+    if (!scope || !(await canAccessStoredBackup(scope, backupId, false))) {
+      return res.status(403).json({ message: "Sem permissao para exportar backup." });
+    }
+
+    const payload = await exportServerBackup(scope.botId, scope.guildId, backupId);
+    const filename = `orvitek-backup-${scope.guildId}-${backupId}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(JSON.stringify(payload, null, 2));
   } catch (error) {
     return next(error);
   }

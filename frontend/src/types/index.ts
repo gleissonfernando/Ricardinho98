@@ -248,7 +248,9 @@ export type ServerBackupSnapshot = {
   counts: {
     categories: number;
     channels: number;
+    configurations?: number;
     emojis: number;
+    modules?: number;
     roles: number;
     stickers: number;
   };
@@ -257,6 +259,7 @@ export type ServerBackupSnapshot = {
   guildId: string;
   guildName: string;
   id: string;
+  integrity?: "valid" | "invalid" | "pending";
   kind: "manual" | "automatic";
   snapshotVersion?: number;
   status: "pending" | "completed" | "failed" | "partial";

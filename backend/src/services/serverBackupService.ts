@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import axios from "axios";
-import { getMongoCollections, type MongoServerBackupRestoreJob, type MongoServerBackupSettings, type MongoServerBackupSnapshot } from "../database/mongo";
+import { getMongoCollections, getMongoDb, type MongoServerBackupRestoreJob, type MongoServerBackupSettings, type MongoServerBackupSnapshot } from "../database/mongo";
 import { dashboardLogRealtimeRoom, emitRealtimeToRoom } from "../realtime/events";
 import { getBotGuildConfig, getDevBotToken, updateBotGuildConfig } from "./devBotService";
 import { createLog } from "./logService";
@@ -13,6 +13,7 @@ const RESTORE_MODES = ["merge", "missing", "replace", "clear"] as const;
 const SNAPSHOT_VERSION = 2;
 const MAX_EMBEDDED_ASSET_BYTES = 7 * 1024 * 1024;
 const MAX_SINGLE_ASSET_BYTES = 1024 * 1024;
+const SYSTEM_BACKUP_COLLECTION_PREFIXES = ["server_backup_", "background_jobs", "service_heartbeats"];
 const SERVICE_STARTED_AT = new Date();
 const AUTO_BACKUP_TICK_MS = 5 * 60_000;
 let schedulerStarted = false;
@@ -33,6 +34,7 @@ export type ServerBackupSnapshotDto = {
   botId: string;
   checksum: string | null;
   counts: MongoServerBackupSnapshot["counts"];
+  integrity: "valid" | "invalid" | "pending";
   createdAt: string;
   createdBy: string | null;
   guildId: string;
@@ -329,6 +331,67 @@ export async function deleteServerBackup(botId: string, guildId: string, backupI
   await createLog({ botId, guildId, userId: actorId, type: "server-backup.deleted", message: "Backup apagado.", metadata: { backupId } }).catch(() => null);
 }
 
+export async function exportServerBackup(botId: string, guildId: string, backupId: string) {
+  const backup = await getSnapshotOrThrow(botId, guildId, backupId);
+  const checksum = snapshotChecksum(backup.snapshot);
+  return {
+    exportedAt: new Date().toISOString(),
+    format: "orvitek-hosting-backup",
+    id: backup._id,
+    metadata: {
+      botId: backup.botId,
+      checksum,
+      counts: backup.counts,
+      createdAt: backup.createdAt.toISOString(),
+      createdBy: backup.createdBy,
+      guildId: backup.guildId,
+      guildName: backup.guildName,
+      kind: backup.kind,
+      snapshotVersion: backup.snapshotVersion,
+      status: backup.status,
+      updatedAt: backup.updatedAt.toISOString(),
+      vertexVersion: "orvitek"
+    },
+    snapshot: backup.snapshot
+  };
+}
+
+export async function importServerBackup(input: { actorId: string | null; botId: string; guildId: string; payload: unknown }) {
+  const parsed = parseImportedBackup(input.payload);
+  const now = new Date();
+  const snapshot = parsed.snapshot;
+  const counts = countSnapshot(snapshot);
+  const checksum = snapshotChecksum(snapshot);
+  const snapshotId = randomUUID();
+  const { serverBackupSnapshots } = await getMongoCollections();
+  const imported: MongoServerBackupSnapshot = {
+    _id: snapshotId,
+    botId: input.botId,
+    checksum,
+    counts,
+    createdAt: now,
+    createdBy: input.actorId,
+    guildId: input.guildId,
+    guildName: readString((snapshot as Record<string, unknown>).guild, "name") || input.guildId,
+    kind: "manual",
+    snapshotVersion: Number((snapshot as Record<string, unknown>).snapshotVersion ?? SNAPSHOT_VERSION),
+    snapshot: {
+      ...(snapshot as Record<string, unknown>),
+      importedFrom: {
+        id: parsed.id,
+        metadata: parsed.metadata ?? null,
+        sourceGuildId: readString((snapshot as Record<string, unknown>).source, "guildId") ?? parsed.metadata?.guildId ?? null
+      }
+    },
+    status: "completed",
+    statusMessage: "Backup importado de arquivo JSON.",
+    updatedAt: now
+  };
+  await serverBackupSnapshots.insertOne(imported);
+  await createLog({ botId: input.botId, guildId: input.guildId, userId: input.actorId, type: "server-backup.imported", message: "Backup de Hospedagem importado.", metadata: { backupId: snapshotId, checksum, counts } }).catch(() => null);
+  return toSnapshotDto(imported);
+}
+
 export async function isStoredServerBackupOwner(botId: string, guildId: string, backupId: string, userIds: string[]) {
   const { serverBackupSnapshots } = await getMongoCollections();
   const normalizedUserIds = [...new Set(userIds.map((item) => item.trim()).filter(Boolean))];
@@ -491,14 +554,15 @@ function failedRestoreResult(error: unknown): RestoreResult {
 }
 
 async function captureSnapshot(botToken: string, botId: string, guildId: string) {
-  const [guild, roles, channels, emojis, stickers, webhooks, moduleConfig] = await Promise.all([
+  const [guild, roles, channels, emojis, stickers, webhooks, moduleConfig, databaseCollections] = await Promise.all([
     discordGet(botToken, `/guilds/${guildId}?with_counts=true`),
     discordGet(botToken, `/guilds/${guildId}/roles`),
     discordGet(botToken, `/guilds/${guildId}/channels`),
     discordGet(botToken, `/guilds/${guildId}/emojis`).catch(() => []),
     discordGet(botToken, `/guilds/${guildId}/stickers`).catch(() => []),
     discordGet(botToken, `/guilds/${guildId}/webhooks`).catch(() => []),
-    getBotGuildConfig(botId, guildId).catch(() => null)
+    getBotGuildConfig(botId, guildId).catch(() => null),
+    captureDatabaseCollections(botId, guildId)
   ]);
   const assetBudget = { remaining: MAX_EMBEDDED_ASSET_BYTES, warnings: [] as string[] };
   const guildData = pick(guild, ["id", "name", "icon", "banner", "description", "verification_level", "default_message_notifications", "explicit_content_filter", "preferred_locale", "afk_timeout", "afk_channel_id", "system_channel_id", "rules_channel_id", "public_updates_channel_id"]);
@@ -528,8 +592,43 @@ async function captureSnapshot(botToken: string, botId: string, guildId: string)
     stickers: capturedStickers,
     webhooks: Array.isArray(webhooks) ? webhooks.map((webhook) => pick(webhook, ["id", "type", "name", "channel_id", "avatar", "application_id"])) : [],
     internalSettings: moduleConfig?.modules ?? {},
+    databaseCollections,
     assetWarnings: assetBudget.warnings
   };
+}
+
+async function captureDatabaseCollections(botId: string, guildId: string) {
+  const db = await getMongoDb();
+  const collections = await db.listCollections().toArray();
+  const captured: Record<string, { count: number; documents: unknown[] }> = {};
+  for (const collectionInfo of collections) {
+    const name = collectionInfo.name;
+    if (shouldSkipBackupCollection(name)) continue;
+    const collection = db.collection(name);
+    const documents = await collection.find({
+      guildId,
+      $or: [
+        { botId },
+        { botId: null },
+        { botId: { $exists: false } }
+      ]
+    }).limit(5000).toArray();
+    if (documents.length) {
+      captured[name] = {
+        count: documents.length,
+        documents: sanitizeMongoDocuments(documents)
+      };
+    }
+  }
+  return captured;
+}
+
+function shouldSkipBackupCollection(name: string) {
+  return SYSTEM_BACKUP_COLLECTION_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+function sanitizeMongoDocuments(documents: unknown[]) {
+  return JSON.parse(JSON.stringify(documents));
 }
 
 async function mapInBatches<T, TResult>(items: T[], batchSize: number, mapper: (item: T) => Promise<TResult>) {
@@ -778,7 +877,8 @@ async function executeRestore(
       await restoreGuildSettings(botToken, guildId, snapshot.guild ?? {}, result.idMap);
       const mappedSettings = remapIdsDeep(snapshot.internalSettings ?? {}, result.idMap, collectSnapshotIds(snapshot));
       await updateBotGuildConfig({ botId, guildId, guildName: readString(targetGuild, "name") || guildId, modules: mappedSettings });
-      result.summary.settings = Object.keys(mappedSettings).length;
+      const restoredDocuments = await restoreDatabaseCollections(botId, guildId, snapshot.databaseCollections, result.idMap, collectSnapshotIds(snapshot));
+      result.summary.settings = Object.keys(mappedSettings).length + restoredDocuments;
     } catch (error) {
       addRestoreError(result, "settings", errorMessage(error));
     }
@@ -1007,6 +1107,35 @@ async function restoreGuildSettings(botToken: string, guildId: string, guild: an
   await discordPatch(botToken, `/guilds/${guildId}`, Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)));
 }
 
+async function restoreDatabaseCollections(
+  botId: string,
+  guildId: string,
+  source: unknown,
+  idMap: RestoreResult["idMap"],
+  sourceIds: Set<string>
+) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return 0;
+  const db = await getMongoDb();
+  let restored = 0;
+  for (const [collectionName, payload] of Object.entries(source as Record<string, unknown>)) {
+    if (shouldSkipBackupCollection(collectionName) || !payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+    const documents = (payload as { documents?: unknown }).documents;
+    if (!Array.isArray(documents) || !documents.length) continue;
+    const collection = db.collection(collectionName);
+    for (const document of documents) {
+      if (!document || typeof document !== "object" || Array.isArray(document)) continue;
+      const mapped = remapIdsDeep(document, idMap, sourceIds) as Record<string, unknown>;
+      mapped.botId = botId;
+      mapped.guildId = guildId;
+      const id = mapped._id;
+      if (id === undefined || id === null) continue;
+      await collection.replaceOne({ _id: id }, mapped, { upsert: true });
+      restored += 1;
+    }
+  }
+  return restored;
+}
+
 async function checkpoint(result: RestoreResult, progressPercent: number, startedAt: number, onProgress?: (result: RestoreResult) => Promise<void>) {
   result.progressPercent = progressPercent;
   result.durationMs = Date.now() - startedAt;
@@ -1223,9 +1352,19 @@ function normalizeRestoreMode(mode: unknown): RestoreMode {
 
 function countSnapshot(snapshot: any) {
   const channels = Array.isArray(snapshot.channels) ? snapshot.channels : [];
+  const databaseCollections = snapshot && typeof snapshot.databaseCollections === "object" && !Array.isArray(snapshot.databaseCollections)
+    ? snapshot.databaseCollections as Record<string, { count?: unknown; documents?: unknown }>
+    : {};
+  const databaseDocuments = Object.values(databaseCollections).reduce((total, item) => {
+    if (Array.isArray(item?.documents)) return total + item.documents.length;
+    const count = Number(item?.count);
+    return total + (Number.isFinite(count) ? count : 0);
+  }, 0);
   return {
     categories: channels.filter((channel: any) => channel.type === 4).length,
     channels: channels.filter((channel: any) => channel.type !== 4).length,
+    configurations: Object.keys(snapshot.internalSettings ?? {}).length + databaseDocuments,
+    modules: Object.keys(snapshot.internalSettings ?? {}).length,
     emojis: Array.isArray(snapshot.emojis) ? snapshot.emojis.length : 0,
     roles: Array.isArray(snapshot.roles) ? snapshot.roles.length : 0,
     stickers: Array.isArray(snapshot.stickers) ? snapshot.stickers.length : 0
@@ -1242,7 +1381,7 @@ function toSettingsDto(settings: MongoServerBackupSettings): ServerBackupSetting
 }
 
 function toSnapshotDto(snapshot: MongoServerBackupSnapshot): ServerBackupSnapshotDto {
-  return { botId: snapshot.botId, checksum: snapshot.checksum ?? null, counts: snapshot.counts, createdAt: snapshot.createdAt.toISOString(), createdBy: snapshot.createdBy, guildId: snapshot.guildId, guildName: snapshot.guildName, id: snapshot._id, kind: snapshot.kind, snapshotVersion: snapshot.snapshotVersion ?? 1, status: snapshot.status, statusMessage: snapshot.statusMessage, updatedAt: snapshot.updatedAt.toISOString() };
+  return { botId: snapshot.botId, checksum: snapshot.checksum ?? null, counts: snapshot.counts, createdAt: snapshot.createdAt.toISOString(), createdBy: snapshot.createdBy, guildId: snapshot.guildId, guildName: snapshot.guildName, id: snapshot._id, integrity: snapshot.checksum ? (snapshotChecksum(snapshot.snapshot) === snapshot.checksum ? "valid" : "invalid") : "pending", kind: snapshot.kind, snapshotVersion: snapshot.snapshotVersion ?? 1, status: snapshot.status, statusMessage: snapshot.statusMessage, updatedAt: snapshot.updatedAt.toISOString() };
 }
 
 function toRestoreJobDto(job: MongoServerBackupRestoreJob) {
@@ -1270,6 +1409,31 @@ function errorMessage(error: unknown) {
 
 function snapshotChecksum(snapshot: unknown) {
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
+function parseImportedBackup(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw Object.assign(new Error("Arquivo de backup invalido."), { statusCode: 400 });
+  }
+  const value = payload as Record<string, unknown>;
+  if (value.format !== "orvitek-hosting-backup" || !value.snapshot || typeof value.snapshot !== "object") {
+    throw Object.assign(new Error("Formato de backup nao reconhecido."), { statusCode: 400 });
+  }
+  const metadata = value.metadata && typeof value.metadata === "object" && !Array.isArray(value.metadata)
+    ? value.metadata as Record<string, unknown>
+    : null;
+  const expectedChecksum = typeof metadata?.checksum === "string" ? metadata.checksum : null;
+  if (expectedChecksum && snapshotChecksum(value.snapshot) !== expectedChecksum) {
+    throw Object.assign(new Error("A verificacao de integridade do arquivo falhou."), { statusCode: 422 });
+  }
+  if (!isValidSnapshot(value.snapshot)) {
+    throw Object.assign(new Error("A estrutura do backup esta incompleta."), { statusCode: 422 });
+  }
+  return {
+    id: typeof value.id === "string" ? value.id : null,
+    metadata: metadata as ({ guildId?: string; [key: string]: unknown } | null),
+    snapshot: value.snapshot
+  };
 }
 
 function isValidSnapshot(snapshot: unknown) {

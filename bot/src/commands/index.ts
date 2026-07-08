@@ -8,6 +8,7 @@ import { deleteServeCommand } from "./deleteServe";
 import { dmCommand, dmConfigCommand } from "./dm";
 import { emojiClonerCommand } from "./emojiCloner";
 import { gravarCommand } from "./gravar";
+import { hostingBackupCommand } from "./hostingBackup";
 import { fivemOrdersCommand } from "./fivemOrders";
 import { fivemFinanceCommand } from "./fivemFinance";
 import { actionCommand } from "../services/fivemActionService";
@@ -42,6 +43,7 @@ export function createCommandCollection() {
     dmConfigCommand,
     emojiClonerCommand,
     gravarCommand,
+    hostingBackupCommand,
     actionCommand,
     fivemFinanceCommand,
     fivemOrdersCommand,

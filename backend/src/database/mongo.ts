@@ -692,7 +692,9 @@ export type MongoServerBackupSnapshot = {
   counts: {
     categories: number;
     channels: number;
+    configurations?: number;
     emojis: number;
+    modules?: number;
     roles: number;
     stickers: number;
   };

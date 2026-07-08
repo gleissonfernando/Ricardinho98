@@ -2193,6 +2193,23 @@ export async function createServerBackup(botId: string, guildId: string) {
   return data.backup;
 }
 
+export async function importServerBackup(botId: string, guildId: string, payload: unknown) {
+  const { data } = await api.post<{ backup: ServerBackupSnapshot }>(
+    `/server-backups/${encodeURIComponent(guildId)}/import`,
+    payload,
+    { params: botParams(botId), timeout: 180000 }
+  );
+  return data.backup;
+}
+
+export async function downloadServerBackup(botId: string, guildId: string, backupId: string) {
+  const response = await api.get<Blob>(
+    `/server-backups/${encodeURIComponent(guildId)}/backups/${encodeURIComponent(backupId)}/download`,
+    { params: botParams(botId), responseType: "blob", timeout: 180000 }
+  );
+  return response.data;
+}
+
 export async function deleteServerBackup(botId: string, guildId: string, backupId: string) {
   await api.delete(`/server-backups/${encodeURIComponent(guildId)}/backups/${encodeURIComponent(backupId)}`, {
     params: botParams(botId)

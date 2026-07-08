@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
+  ArchiveRestore,
   AtSign,
   Boxes,
   BriefcaseBusiness,
@@ -8,6 +9,9 @@ import {
   CalendarClock,
   Code2,
   Copy,
+  DatabaseBackup,
+  Download,
+  FileUp,
   LayoutDashboard,
   Loader2,
   PackagePlus,
@@ -35,8 +39,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Switch } from "../components/ui/switch";
 import {
   createDevFivemModule,
+  createServerBackup,
   deleteDevFivemModule,
   deleteDevAccessEntry,
+  deleteServerBackup,
+  downloadServerBackup,
   getDashboardMe,
   getDevAccessEntries,
   getDevBots,
@@ -44,9 +51,12 @@ import {
   getMaintenanceState,
   getOperationalNoticeState,
   getLogs,
+  getServerBackupDashboard,
+  importServerBackup,
   sendMaintenanceAlert,
   sendOperationalNoticeAlert,
   saveDevAccessEntry,
+  saveServerBackupSettings,
   setMaintenanceMode,
   setOperationalNotice,
   updateDevBotModules,
@@ -54,7 +64,7 @@ import {
 } from "../lib/api";
 import { createDashboardSocket } from "../lib/socket";
 import { dashboardUrl } from "../lib/urls";
-import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState, OperationalNoticeState } from "../types";
+import type { AuthResponse, DashboardBot, DashboardMeResponse, DevAccessEntry, DevAccessRole, DevBot, FivemModuleDefinition, LogEntry, MaintenanceState, OperationalNoticeState, ServerBackupDashboard, ServerBackupSnapshot } from "../types";
 
 type DevDashboardProps = {
   auth: AuthResponse;
@@ -62,7 +72,7 @@ type DevDashboardProps = {
   onLogout: () => void;
 };
 
-type DevView = "bots" | "connected" | "bot-menu" | "cloning" | "sales" | "fivem" | "police" | "logs" | "access" | "maintenance";
+type DevView = "bots" | "connected" | "bot-menu" | "cloning" | "sales" | "hosting-backup" | "fivem" | "police" | "logs" | "access" | "maintenance";
 
 type FiveMModuleView = FivemModuleDefinition & {
   icon: LucideIcon;
@@ -209,6 +219,7 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
             { id: "bot-menu" as const, label: "Menu do Bot" },
             { id: "cloning" as const, label: "Clonagem" },
             { id: "sales" as const, label: "Vendas" },
+            { id: "hosting-backup" as const, label: "Backup de Hospedagem" },
             { id: "fivem" as const, label: "FiveM" },
             { id: "police" as const, label: "Policia" },
             { id: "logs" as const, label: "Logs" },
@@ -272,6 +283,7 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
           />
         ) : null}
 
+        {activeView === "hosting-backup" ? <HostingBackupPanel bots={profile.bots} selectedBotId={selectedBotId} selectedGuildId={selectedGuildId} onSelectBot={setSelectedBotId} onSelectGuild={setSelectedGuildId} /> : null}
         {activeView === "logs" ? <TechnicalLogsPanel botId={selectedBotId} guildId={selectedGuildId} /> : null}
         {activeView === "access" ? <DevAccessPanel /> : null}
         {activeView === "maintenance" ? <MaintenancePanel /> : null}
@@ -285,6 +297,7 @@ function devPathForView(view: DevView) {
   if (view === "bot-menu") return "/dev/menu-do-bot";
   if (view === "cloning") return "/dev/clonagem";
   if (view === "sales") return "/dev/vendas-orvitech";
+  if (view === "hosting-backup") return "/dev/backup-de-hospedagem";
   if (view === "fivem") return "/dev/fivem";
   if (view === "police") return "/dev/policia";
   if (view === "logs") return "/dev/logs";
@@ -318,6 +331,7 @@ function DevSidebar({
     { icon: Settings, id: "bot-menu", label: "Menu do Bot" },
     { icon: Copy, id: "cloning", label: "Clonagem" },
     { icon: CreditCard, id: "sales", label: "Vendas OrviTech" },
+    { icon: DatabaseBackup, id: "hosting-backup", label: "Backup de Hospedagem" },
     { icon: Building2, id: "fivem", label: "FiveM" },
     { icon: ShieldCheck, id: "police", label: "Policia" },
     { icon: ScrollText, id: "logs", label: "Logs" },
@@ -408,6 +422,258 @@ function DevUserCard({ canViewDev, user }: { canViewDev: boolean; user: AuthResp
       </CardContent>
     </Card>
   );
+}
+
+function HostingBackupPanel({
+  bots,
+  onSelectBot,
+  onSelectGuild,
+  selectedBotId,
+  selectedGuildId
+}: {
+  bots: DashboardBot[];
+  onSelectBot: (botId: string | null) => void;
+  onSelectGuild: (guildId: string | null) => void;
+  selectedBotId: string | null;
+  selectedGuildId: string | null;
+}) {
+  const selectedBot = bots.find((bot) => bot.id === selectedBotId) ?? bots[0] ?? null;
+  const guildId = selectedGuildId ?? selectedBot?.guildIds[0] ?? selectedBot?.mainGuildId ?? null;
+  const [dashboard, setDashboard] = useState<ServerBackupDashboard | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [working, setWorking] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedBot || !guildId) {
+      setDashboard(null);
+      return;
+    }
+
+    let mounted = true;
+    setLoading(true);
+    getServerBackupDashboard(selectedBot.id, guildId)
+      .then((nextDashboard) => {
+        if (mounted) setDashboard(nextDashboard);
+      })
+      .catch((error) => {
+        if (mounted) setMessage(readRequestMessage(error) ?? "Nao foi possivel carregar o Backup de Hospedagem.");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedBot?.id, guildId]);
+
+  useEffect(() => {
+    const socket = createDashboardSocket();
+    const refresh = () => {
+      if (!selectedBot || !guildId) return;
+      void getServerBackupDashboard(selectedBot.id, guildId).then(setDashboard).catch(() => undefined);
+    };
+    socket.on("server-backup:snapshot_updated", refresh);
+    socket.on("server-backup:restore_progress", refresh);
+    return () => {
+      socket.off("server-backup:snapshot_updated", refresh);
+      socket.off("server-backup:restore_progress", refresh);
+      socket.close();
+    };
+  }, [selectedBot?.id, guildId]);
+
+  const latest = dashboard?.backups[0] ?? null;
+  const totalConfigurations = latest?.counts.configurations ?? latest?.counts.modules ?? 0;
+  const nextBackup = dashboard?.settings.autoEnabled && latest
+    ? nextBackupDate(latest.createdAt, dashboard.settings.frequency)
+    : null;
+
+  async function handleCreateBackup() {
+    if (!selectedBot || !guildId) return;
+    setWorking("create");
+    setMessage(null);
+    try {
+      const backup = await createServerBackup(selectedBot.id, guildId);
+      setDashboard((current) => current ? { ...current, backups: [backup, ...current.backups.filter((item) => item.id !== backup.id)] } : current);
+      setMessage("Backup manual criado e enviado para processamento.");
+    } catch (error) {
+      setMessage(readRequestMessage(error) ?? "Nao foi possivel criar o backup.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleImportBackup(file: File | null) {
+    if (!file || !selectedBot || !guildId) return;
+    setWorking("import");
+    setMessage(null);
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      const backup = await importServerBackup(selectedBot.id, guildId, payload);
+      setDashboard((current) => current ? { ...current, backups: [backup, ...current.backups] } : current);
+      setMessage("Backup importado e validado.");
+    } catch (error) {
+      setMessage(readRequestMessage(error) ?? "Arquivo JSON invalido ou backup corrompido.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleExportBackup(backup: ServerBackupSnapshot) {
+    if (!selectedBot || !guildId) return;
+    setWorking(`export:${backup.id}`);
+    try {
+      const blob = await downloadServerBackup(selectedBot.id, guildId, backup.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `orvitek-backup-${guildId}-${backup.id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(readRequestMessage(error) ?? "Nao foi possivel exportar o backup.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleDeleteBackup(backup: ServerBackupSnapshot) {
+    if (!selectedBot || !guildId || !window.confirm("Excluir este backup do historico?")) return;
+    setWorking(`delete:${backup.id}`);
+    try {
+      await deleteServerBackup(selectedBot.id, guildId, backup.id);
+      setDashboard((current) => current ? { ...current, backups: current.backups.filter((item) => item.id !== backup.id) } : current);
+    } catch (error) {
+      setMessage(readRequestMessage(error) ?? "Nao foi possivel excluir o backup.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleToggleAuto(autoEnabled: boolean) {
+    if (!selectedBot || !guildId || !dashboard) return;
+    setWorking("settings");
+    try {
+      const settings = await saveServerBackupSettings(selectedBot.id, guildId, { autoEnabled });
+      setDashboard({ ...dashboard, settings });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-white">Backup de Hospedagem</h2>
+          <p className="mt-1 text-sm text-zinc-400">Backup, importacao, exportacao e historico das configuracoes do ecossistema Orvitek.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectBot(event.target.value || null)} value={selectedBot?.id ?? ""}>
+            {bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}
+          </select>
+          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectGuild(event.target.value || null)} value={guildId ?? ""}>
+            {(selectedBot?.guildIds.length ? selectedBot.guildIds : selectedBot?.mainGuildId ? [selectedBot.mainGuildId] : []).map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+        </div>
+      </section>
+
+      {message ? <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100">{message}</div> : null}
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <BackupMetric icon={CalendarClock} label="Ultima Data" value={latest ? formatDate(latest.createdAt) : "Sem backup"} />
+        <BackupMetric icon={Activity} label="Status Atual" value={latest ? backupStatusLabel(latest.status) : "Aguardando"} />
+        <BackupMetric icon={Boxes} label="Quantidade de Modulos" value={String(latest?.counts.modules ?? 0)} />
+        <BackupMetric icon={DatabaseBackup} label="Configuracoes" value={String(totalConfigurations)} />
+        <BackupMetric icon={Download} label="Tamanho do Backup" value={latest ? `${JSON.stringify(latest.counts).length} refs` : "0"} />
+        <BackupMetric icon={ShieldCheck} label="Integridade" value={latest?.integrity === "invalid" ? "Falha" : latest?.integrity === "valid" ? "Valida" : "Pendente"} />
+        <BackupMetric icon={ArchiveRestore} label="Proximo Backup" value={nextBackup ? formatDate(nextBackup) : "Manual"} />
+        <BackupMetric icon={Code2} label="Versao da Orvitek" value={`Snapshot v${latest?.snapshotVersion ?? 2}`} />
+      </section>
+
+      <Card className="border-zinc-800/80 bg-zinc-950/75">
+        <CardHeader className="p-5 sm:p-6">
+          <CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5" /> Operacoes</CardTitle>
+          <CardDescription>Criar backup manual, importar JSON e ativar o agendamento automatico.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-5 pt-0 sm:grid-cols-2 lg:grid-cols-4 sm:p-6 sm:pt-0">
+          <Button disabled={!selectedBot || !guildId || working === "create"} onClick={() => void handleCreateBackup()}>
+            {working === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
+            Criar Backup
+          </Button>
+          <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-4 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-900">
+            {working === "import" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+            Importar Backup
+            <input accept="application/json,.json" className="hidden" disabled={working === "import"} onChange={(event) => void handleImportBackup(event.target.files?.[0] ?? null)} type="file" />
+          </label>
+          <Button disabled={!latest || !selectedBot || !guildId} onClick={() => latest && void handleExportBackup(latest)} variant="outline">
+            <Download className="h-4 w-4" />
+            Exportar Backup
+          </Button>
+          <Button disabled={!dashboard || working === "settings"} onClick={() => void handleToggleAuto(!dashboard?.settings.autoEnabled)} variant={dashboard?.settings.autoEnabled ? "default" : "outline"}>
+            {working === "settings" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+            {dashboard?.settings.autoEnabled ? "Automatico Ativo" : "Backup Automatico"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800/80 bg-zinc-950/75">
+        <CardHeader className="p-5 sm:p-6">
+          <CardTitle>Historico de Backups</CardTitle>
+          <CardDescription>Restaurar e baixar continuam protegidos pelas permissoes do modulo.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 p-5 pt-0 sm:p-6 sm:pt-0">
+          {loading ? <div className="flex min-h-28 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div> : dashboard?.backups.length ? dashboard.backups.map((backup) => (
+            <div className="grid gap-3 rounded-lg border border-zinc-900 bg-black/35 p-4 lg:grid-cols-[minmax(0,1fr)_auto]" key={backup.id}>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={backup.status === "completed" ? "success" : backup.status === "failed" ? "danger" : "muted"}>{backupStatusLabel(backup.status)}</Badge>
+                  <Badge variant="muted">{backup.kind === "automatic" ? "Automatico" : "Manual"}</Badge>
+                  <span className="text-xs text-zinc-400">{formatDate(backup.createdAt)}</span>
+                </div>
+                <p className="mt-2 truncate text-sm font-bold text-white">{backup.guildName || backup.guildId}</p>
+                <p className="mt-1 break-all font-mono text-[11px] text-zinc-500">id={backup.id} hash={backup.checksum ?? "pendente"}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={working === `export:${backup.id}`} onClick={() => void handleExportBackup(backup)} size="sm" variant="outline"><Download className="h-4 w-4" />Baixar</Button>
+                <Button disabled={working === `delete:${backup.id}`} onClick={() => void handleDeleteBackup(backup)} size="sm" variant="destructive"><Trash2 className="h-4 w-4" />Excluir</Button>
+              </div>
+            </div>
+          )) : (
+            <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-zinc-800 text-sm text-zinc-500">
+              Nenhum backup encontrado.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function BackupMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <Card className="border-zinc-800/80 bg-zinc-950/75">
+      <CardContent className="p-4">
+        <Icon className="h-5 w-5 text-zinc-400" />
+        <p className="mt-3 truncate text-xs text-zinc-500">{label}</p>
+        <p className="mt-1 truncate text-lg font-semibold text-white">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function backupStatusLabel(status: ServerBackupSnapshot["status"]) {
+  if (status === "completed") return "Concluido";
+  if (status === "partial") return "Parcial";
+  if (status === "failed") return "Erro";
+  return "Processando";
+}
+
+function nextBackupDate(value: string, frequency: ServerBackupDashboard["settings"]["frequency"]) {
+  const base = new Date(value).getTime();
+  const hours = frequency === "6h" ? 6 : frequency === "12h" ? 12 : frequency === "weekly" ? 24 * 7 : frequency === "monthly" ? 24 * 30 : 24;
+  return new Date(base + hours * 60 * 60 * 1000).toISOString();
 }
 
 function DevAccessPanel() {
