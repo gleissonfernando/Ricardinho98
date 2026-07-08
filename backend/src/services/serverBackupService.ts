@@ -68,6 +68,8 @@ type RestoreResult = {
   summary: { roles: number; categories: number; channels: number; permissions: number; emojis: number; stickers: number; settings: number; reused: number; failed: number };
 };
 
+type CaptureProgressReporter = (progress: number, message: string) => Promise<void>;
+
 export type RestorePreview = {
   backupId: string;
   canRestore: boolean;
@@ -237,13 +239,21 @@ export async function processQueuedServerBackupCapture(payload: Record<string, u
   if (!pending) throw new Error(`Snapshot ${snapshotId} nao encontrado.`);
   if (pending.status === "completed" || pending.status === "partial") return;
   try {
-    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 15, "Capturando configuracoes do site.");
-    const snapshot = await captureSnapshot(pending.botId, pending.guildId);
-    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 70, "Backup capturado. Validando integridade.");
+    let lastProgress = -1;
+    const reportProgress: CaptureProgressReporter = async (progress, message) => {
+      const nextProgress = Math.max(0, Math.min(99, Math.round(progress)));
+      if (nextProgress === lastProgress) return;
+      lastProgress = nextProgress;
+      await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, nextProgress, message);
+    };
+
+    await reportProgress(10, "Iniciando captura das configuracoes do site.");
+    const snapshot = await captureSnapshot(pending.botId, pending.guildId, reportProgress);
+    await reportProgress(82, "Backup capturado. Validando integridade.");
     const counts = countSnapshot(snapshot);
     const assetWarnings = Array.isArray(snapshot.assetWarnings) ? snapshot.assetWarnings : [];
     const checksum = snapshotChecksum(snapshot);
-    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 90, "Gravando snapshot no banco de dados.");
+    await reportProgress(92, "Gravando snapshot no banco de dados.");
     const updatedAt = new Date();
     const status = assetWarnings.length ? "partial" as const : "completed" as const;
     await serverBackupSnapshots.updateOne(
@@ -544,24 +554,36 @@ function failedRestoreResult(error: unknown): RestoreResult {
   };
 }
 
-async function captureSnapshot(botId: string, guildId: string) {
+async function captureSnapshot(botId: string, guildId: string, onProgress?: CaptureProgressReporter) {
   if (guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
-    return captureGlobalSnapshot(botId);
+    return captureGlobalSnapshot(botId, onProgress);
   }
 
-  return captureGuildSnapshot(botId, guildId);
+  return captureGuildSnapshot(botId, guildId, onProgress);
 }
 
-async function captureGlobalSnapshot(botId: string) {
+async function captureGlobalSnapshot(botId: string, onProgress?: CaptureProgressReporter) {
+  await onProgress?.(16, "Localizando bots e servidores salvos.");
   const runtime = await getDevBotRuntimeConfig(botId);
   const guildIds = runtime?.guildIds?.length ? runtime.guildIds : runtime?.mainGuildId ? [runtime.mainGuildId] : [];
   const uniqueGuildIds = [...new Set(guildIds.filter((id) => /^\d{5,32}$/.test(id)))];
-  const [guildSnapshots, hostingInventory] = await Promise.all([
-    mapInBatches(uniqueGuildIds, 5, async (guildId) => captureGuildSnapshot(botId, guildId)),
-    captureHostingInventory(botId, uniqueGuildIds)
-  ]);
+  await onProgress?.(22, "Capturando cadastro dos bots.");
+  const hostingInventory = await captureHostingInventory(botId, uniqueGuildIds);
+  const guildSnapshots = [];
+  for (let index = 0; index < uniqueGuildIds.length; index += 1) {
+    const guildId = uniqueGuildIds[index];
+    if (!guildId) continue;
+    const start = 28 + Math.floor((index / Math.max(1, uniqueGuildIds.length)) * 30);
+    const end = 28 + Math.floor(((index + 1) / Math.max(1, uniqueGuildIds.length)) * 30);
+    await onProgress?.(start, `Capturando configs do servidor ${index + 1}/${uniqueGuildIds.length}.`);
+    guildSnapshots.push(await captureGuildSnapshot(botId, guildId, async (progress, message) => {
+      const scaled = start + ((Math.max(0, Math.min(100, progress)) / 100) * Math.max(1, end - start));
+      await onProgress?.(scaled, message);
+    }));
+  }
 
-  const databaseCollections = await captureDatabaseCollections(botId, GLOBAL_SERVER_BACKUP_GUILD_ID, uniqueGuildIds);
+  await onProgress?.(60, "Capturando colecoes de configuracao.");
+  const databaseCollections = await captureDatabaseCollections(botId, GLOBAL_SERVER_BACKUP_GUILD_ID, uniqueGuildIds, onProgress, 60, 80);
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     capturedAt: new Date().toISOString(),
@@ -580,12 +602,13 @@ async function captureGlobalSnapshot(botId: string) {
   };
 }
 
-async function captureGuildSnapshot(botId: string, guildId: string) {
-  const [moduleConfig, hostingInventory, databaseCollections] = await Promise.all([
-    getBotGuildConfig(botId, guildId).catch(() => null),
-    captureHostingInventory(botId, [guildId]),
-    captureDatabaseCollections(botId, guildId)
-  ]);
+async function captureGuildSnapshot(botId: string, guildId: string, onProgress?: CaptureProgressReporter) {
+  await onProgress?.(20, "Capturando modulos configurados.");
+  const moduleConfig = await getBotGuildConfig(botId, guildId).catch(() => null);
+  await onProgress?.(35, "Capturando cadastro do bot e servidor.");
+  const hostingInventory = await captureHostingInventory(botId, [guildId]);
+  await onProgress?.(48, "Capturando colecoes de configuracao.");
+  const databaseCollections = await captureDatabaseCollections(botId, guildId, [], onProgress, 48, 80);
 
   return {
     snapshotVersion: SNAPSHOT_VERSION,
@@ -617,13 +640,15 @@ async function captureHostingInventory(botId: string, guildIds: string[]) {
   };
 }
 
-async function captureDatabaseCollections(botId: string, guildId: string, guildIds: string[] = []) {
+async function captureDatabaseCollections(botId: string, guildId: string, guildIds: string[] = [], onProgress?: CaptureProgressReporter, progressStart = 50, progressEnd = 80) {
   const db = await getMongoDb();
   const collections = await db.listCollections().toArray();
   const captured: Record<string, { count: number; documents: unknown[] }> = {};
-  for (const collectionInfo of collections) {
+  const eligibleCollections = collections.filter((collectionInfo) => !shouldSkipBackupCollection(collectionInfo.name));
+  for (const [index, collectionInfo] of eligibleCollections.entries()) {
     const name = collectionInfo.name;
-    if (shouldSkipBackupCollection(name)) continue;
+    const progress = progressStart + (index / Math.max(1, eligibleCollections.length)) * Math.max(1, progressEnd - progressStart);
+    await onProgress?.(progress, `Lendo configs: ${name}.`);
     const collection = db.collection(name);
     const documents = await collection.find(backupCollectionQuery(botId, guildId, guildIds) as Record<string, unknown>).limit(5000).toArray();
     if (documents.length) {
@@ -633,6 +658,7 @@ async function captureDatabaseCollections(botId: string, guildId: string, guildI
       };
     }
   }
+  await onProgress?.(progressEnd, "Colecoes de configuracao capturadas.");
   return captured;
 }
 
