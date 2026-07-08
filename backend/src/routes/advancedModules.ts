@@ -113,7 +113,7 @@ const policeReportsConfigSchema = z.object({
   logChannelId: snowflakeSchema.nullable().default(null),
   logChannelIds: z.array(snowflakeSchema).max(100).default([]),
   responsibleRoleId: snowflakeSchema.nullable().default(null),
-  responsibleRoleIds: z.array(snowflakeSchema).max(100).default([]).transform((ids) => ids.slice(0, 1)),
+  responsibleRoleIds: z.array(snowflakeSchema).max(100).default([]),
   maxChannelMinutes: z.coerce.number().int().min(1).max(10080).default(1440),
   initialMessage: z.string().trim().max(1200).default("A equipe responsavel vai dar continuidade ao procedimento por este canal."),
   procedureText: z.string().trim().max(2000).default("Descreva o ocorrido com detalhes e aguarde a analise da equipe responsavel."),
@@ -820,7 +820,7 @@ function normalizeModuleConfig(moduleId: z.infer<typeof moduleIdSchema>, config:
         .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name)),
       panelTitle: parsed.panelTitle === "Sistema de Denuncias IAB" ? POLICE_REPORTS_PANEL_TITLE : parsed.panelTitle,
       responsibleRoleId,
-      responsibleRoleIds: responsibleRoleId ? [responsibleRoleId] : []
+      responsibleRoleIds: parsed.responsibleRoleIds
     };
   }
 

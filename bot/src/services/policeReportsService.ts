@@ -116,6 +116,12 @@ function isHighCommandComplaint(type: Pick<ComplaintType, "id" | "name">) {
 }
 
 function reviewerRoleIdsFor(config: PoliceReportsConfig, selected: Pick<ComplaintType, "id" | "name">) {
+  return isHighCommandComplaint(selected)
+    ? uniqueIds(config.highCommandRoleIds)
+    : uniqueIds(config.responsibleRoleIds.length ? config.responsibleRoleIds : [config.responsibleRoleId].filter(Boolean) as string[]);
+}
+
+function mentionRoleIdsFor(config: PoliceReportsConfig, selected: Pick<ComplaintType, "id" | "name">) {
   const roleId = isHighCommandComplaint(selected)
     ? config.highCommandRoleIds[0]
     : config.responsibleRoleId ?? config.responsibleRoleIds[0];
@@ -541,7 +547,7 @@ async function handleProcedureAction(
       return;
     }
     await interaction.deferUpdate();
-    await submitPoliceReport(interaction, context, config, selected, topic, requesterId, reviewerRoleIds);
+    await submitPoliceReport(interaction, context, config, selected, topic, requesterId, reviewerRoleIds, mentionRoleIdsFor(config, selected));
     await interaction.followUp({ content: "Denúncia enviada para análise. Você não verá mais este canal.", ephemeral: true }).catch(() => null);
     return;
   }
@@ -754,7 +760,8 @@ async function submitPoliceReport(
   selected: ComplaintType,
   topic: PoliceReportTopic,
   requesterId: string,
-  reviewerRoleIds: string[]
+  reviewerRoleIds: string[],
+  mentionRoleIds: string[]
 ) {
   if (!interaction.guild || !interaction.channel || !("permissionOverwrites" in interaction.channel)) return;
   const channel: any = interaction.channel;
@@ -779,10 +786,10 @@ async function submitPoliceReport(
     });
   }
 
-  if (reviewerRoleIds.length) {
+  if (mentionRoleIds.length) {
     await channel.send({
-      allowedMentions: { roles: reviewerRoleIds },
-      content: reviewerRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")
+      allowedMentions: { roles: mentionRoleIds },
+      content: mentionRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")
     }).catch(() => null);
   }
 
@@ -792,6 +799,7 @@ async function submitPoliceReport(
     anonymous: topic.anonymous,
     channelId: channel.id,
     requesterId,
+    mentionedRoleIds: mentionRoleIds,
     reviewerRoleIds,
     submittedAt: new Date(submittedAt).toISOString(),
     typeName: selected.name

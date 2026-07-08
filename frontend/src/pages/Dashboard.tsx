@@ -3026,7 +3026,7 @@ function normalizePoliceReportsConfig(config: Partial<PoliceReportsConfig>): Par
     buttonLabel: config.buttonLabel === "Selecionar denuncia" ? "Abrir denuncia" : config.buttonLabel,
     panelTitle: config.panelTitle === "Sistema de Denuncias IAB" ? "Denúncia IAB" : config.panelTitle,
     responsibleRoleId,
-    responsibleRoleIds: responsibleRoleId ? [responsibleRoleId] : []
+    responsibleRoleIds: config.responsibleRoleIds ?? (responsibleRoleId ? [responsibleRoleId] : [])
   };
 }
 
@@ -3353,7 +3353,8 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria Alto Comando" onChange={(highCommandCategoryId) => patch({ highCommandCategoryId })} placeholder="Categoria exclusiva do Alto Comando" value={config.highCommandCategoryId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Destino apos finalizar" onChange={(archiveCategoryId) => patch({ archiveCategoryId })} placeholder="Categoria para mover o canal finalizado" value={config.archiveCategoryId} />
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
-          <RoleSelect disabled={!canManage || loading} label="Cargo responsavel pelas denuncias da IAB" onChange={(responsibleRoleId) => patch({ responsibleRoleId: responsibleRoleId || null, responsibleRoleIds: responsibleRoleId ? [responsibleRoleId] : [] })} roles={roles} value={config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? ""} />
+          <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis com acesso" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds.includes(config.responsibleRoleId ?? "") ? config.responsibleRoleId : responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds} />
+          <RoleSelect disabled={!canManage || loading} label="Cargo mencionado ao enviar denuncia" onChange={(responsibleRoleId) => patch({ responsibleRoleId: responsibleRoleId || null, responsibleRoleIds: responsibleRoleId && !config.responsibleRoleIds.includes(responsibleRoleId) ? [...config.responsibleRoleIds, responsibleRoleId] : config.responsibleRoleIds })} roles={roles} value={config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? ""} />
           <MultiRoleSelect disabled={!canManage || loading} label="Cargos Alto Comando" onChange={(highCommandRoleIds) => patch({ highCommandRoleIds })} roles={roles} values={config.highCommandRoleIds} />
           <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
           <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
