@@ -120,6 +120,7 @@ const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
   { id: "assuntos-internos", name: "Assuntos Internos", description: "Abrir procedimento sigiloso de assuntos internos.", emoji: "🔎", order: 6 }
 ];
 const imageHealthCache = new Map<string, { expiresAt: number; ok: boolean }>();
+const configCache = new Map<string, { config: PoliceReportsConfig; expiresAt: number }>();
 
 function mergeDefaultComplaintTypes(types: ComplaintType[]) {
   const normalizedName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -177,6 +178,7 @@ export const policeReportsCommand: BotCommand = {
 
 export function startPoliceReportsService(client: Client<true>, context: BotContext) {
   context.socket.onPoliceReportsPanelUpdate((payload) => {
+    clearPoliceReportsConfigCache(payload.guildId);
     const guild = client.guilds.cache.get(payload.guildId);
     if (guild) void publishPoliceReportsPanel(guild, context, payload.action === "publish").catch((error) => {
       console.warn("[police-reports] falha ao atualizar painel:", error instanceof Error ? error.message : error);
@@ -360,6 +362,14 @@ function isProcedureAction(action: string | undefined): action is typeof PROCEDU
   return PROCEDURE_ACTIONS.includes(action as typeof PROCEDURE_ACTIONS[number]);
 }
 
+function clearPoliceReportsConfigCache(guildId: string) {
+  for (const key of configCache.keys()) {
+    if (key.includes(`:${guildId}:`)) {
+      configCache.delete(key);
+    }
+  }
+}
+
 async function acknowledgeProcedureAction(interaction: ButtonInteraction, action: string) {
   if (interaction.deferred || interaction.replied) return;
 
@@ -424,12 +434,20 @@ async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allo
 async function loadConfig(guildId: string, context: BotContext, sanitizeImages = true): Promise<PoliceReportsConfig | null> {
   const botId = currentRuntimeBotId();
   if (!botId) return null;
+  const cacheKey = `${botId}:${guildId}:${sanitizeImages ? "visual" : "runtime"}`;
+  const cached = configCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.config;
+  }
+
   const runtime = await context.api.getBotGuildConfig(botId, guildId);
-  const [mainVisual, channelVisual, footerVisual] = await Promise.all([
-    context.api.getPanelVisualSettings(guildId, "police-reports").catch(() => null),
-    context.api.getPanelVisualSettings(guildId, "police-reports-banner-2").catch(() => null),
-    context.api.getPanelVisualSettings(guildId, "police-reports-banner-3").catch(() => null)
-  ]);
+  const [mainVisual, channelVisual, footerVisual] = sanitizeImages
+    ? await Promise.all([
+      context.api.getPanelVisualSettings(guildId, "police-reports").catch(() => null),
+      context.api.getPanelVisualSettings(guildId, "police-reports-banner-2").catch(() => null),
+      context.api.getPanelVisualSettings(guildId, "police-reports-banner-3").catch(() => null)
+    ])
+    : [null, null, null];
   const raw = runtime.modules[MODULE_ID] ?? {};
   const complaintTypes = Array.isArray(raw.complaintTypes)
     ? raw.complaintTypes.filter(isComplaintType).sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
@@ -467,7 +485,9 @@ async function loadConfig(guildId: string, context: BotContext, sanitizeImages =
     footerVisual: enabledVisual(footerVisual) ?? panelImage(readString(raw.footerImageUrl) ?? "", "footer"),
     complaintTypes: mergeDefaultComplaintTypes(complaintTypes)
   };
-  return sanitizeImages ? sanitizePoliceReportImages(config) : config;
+  const resolved = sanitizeImages ? await sanitizePoliceReportImages(config) : config;
+  configCache.set(cacheKey, { config: resolved, expiresAt: Date.now() + (sanitizeImages ? 60_000 : 10_000) });
+  return resolved;
 }
 
 async function sanitizePoliceReportImages(config: PoliceReportsConfig): Promise<PoliceReportsConfig> {

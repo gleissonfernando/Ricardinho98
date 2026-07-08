@@ -44,6 +44,12 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
     return;
   }
 
+  if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith("police_reports:")) {
+    if (await runInteractionHandler(interaction, "police-reports", () => handlePoliceReportsInteraction(interaction, context))) {
+      return;
+    }
+  }
+
   if ((interaction.isButton() || interaction.isModalSubmit()) && interaction.customId.startsWith("music_")) {
     const { handleMusicInteraction } = await import("../music/musicService.js");
     if (await runInteractionHandler(interaction, "music", () => handleMusicInteraction(interaction, context))) {
