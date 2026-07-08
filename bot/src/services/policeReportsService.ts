@@ -634,8 +634,10 @@ async function handleProcedureAction(
     const dmSent = Boolean(await user?.send({ allowedMentions: { parse: [] }, content: dmText }).then(() => true).catch(() => false));
     if ("send" in interaction.channel) {
       await interaction.channel.send({
-        allowedMentions: { users: [requesterId] },
-        content: `<@${requesterId}> a equipe IAB solicitou novas informações. Envie as provas ou respostas necessárias neste canal.`
+        allowedMentions: anonymous ? { parse: [] } : { users: [requesterId] },
+        content: anonymous
+          ? "🔔 A equipe IAB solicitou novas informações ao denunciante anônimo. O acesso foi liberado para resposta."
+          : `<@${requesterId}> a equipe IAB solicitou novas informações. Envie as provas ou respostas necessárias neste canal.`
       }).catch(() => null);
     }
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.requester_alerted", "Denunciante chamado de volta ao canal.", { anonymous, channelId: interaction.channel.id, requesterId, requestedBy: interaction.user.id, typeName: selected.name });
@@ -653,7 +655,7 @@ async function handleProcedureAction(
     const target = logChannelId
       ? await interaction.guild.channels.fetch(logChannelId).catch(() => null)
       : interaction.channel;
-    const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel);
+    const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel, Boolean(logChannelId && target));
     if (target && "send" in target && !target.isDMBased()) {
       await target.send(payload).catch(async (error) => {
         await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.archive_failed", "Falha ao enviar transcript da denúncia.", { channelId: interaction.channel!.id, error: error instanceof Error ? error.message : String(error) });
@@ -711,7 +713,7 @@ async function handleProcedureAction(
     const target = logChannelId
       ? await interaction.guild.channels.fetch(logChannelId).catch(() => null)
       : interaction.channel;
-    const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel);
+    const payload = await createArchivePanel(config, selected, requesterId, anonymous, interaction.channel, Boolean(logChannelId && target));
     if (target && "send" in target && !target.isDMBased()) await target.send(payload).catch(() => null);
     await interaction.editReply(action === "archive" ? "Denúncia arquivada. Transcript enviado aos logs privados." : "Denúncia finalizada. Transcript enviado aos logs privados.");
     return;
@@ -852,7 +854,8 @@ async function createArchivePanel(
   selected: ComplaintType,
   requesterId: string,
   anonymous: boolean,
-  channel: ButtonInteraction["channel"]
+  channel: ButtonInteraction["channel"],
+  revealRequester = false
 ) {
   const fetched = channel && "messages" in channel
     ? await channel.messages.fetch({ limit: 100 }).catch(() => null)
@@ -874,7 +877,7 @@ async function createArchivePanel(
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     description: `:info1: Denuncia - ${selected.name}`,
     fields: [
-      `**Denunciante**\n${anonymous ? "Denuncia Anonima" : `<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\n${IAB_WEBHOOK_NAME}`,
+      `**Denunciante**\n${anonymous && !revealRequester ? "Denuncia Anonima" : `${anonymous ? "Denuncia Anonima no ticket\nReal: " : ""}<@${requesterId}> | ${requesterId}`}\n\n**Tipo**\n${selected.name}\n\n**Status**\nARQUIVADO\n\n**Arquivado por**\n${IAB_WEBHOOK_NAME}`,
       `**Data / Horario**\n<t:${createdAt}:F>\n\n**Evidencias**\n${evidence.length ? evidence.join("\n") : "Nenhuma evidencia encontrada no historico recente."}`,
       `**Historico recente**\n${history || "Sem mensagens textuais recentes."}`
     ],
@@ -1060,7 +1063,7 @@ async function writeLog(context: BotContext, guildId: string, userId: string | n
     fields: [
       { name: "Sistema", value: PANEL_TITLE },
       { name: "Tipo", value: typeof record.selectedType === "string" ? record.selectedType : typeof record.typeName === "string" ? record.typeName : "Denúncia" },
-      { name: "Denunciante", value: record.anonymous === true ? "Denúncia anônima" : typeof record.requesterId === "string" ? `<@${record.requesterId}> | ${record.requesterId}` : typeof record.authorId === "string" ? `<@${record.authorId}> | ${record.authorId}` : null },
+      { name: "Denunciante", value: policeReportLogRequester(record) },
       { name: "Detalhes", value: formatPoliceReportDetails(record) }
     ],
     image: config.channelVisual ?? config.panelVisual,
@@ -1075,6 +1078,18 @@ function formatPoliceReportDetails(record: Record<string, unknown>) {
     .slice(0, 6)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`);
   return lines.length ? lines.join("\n") : "-";
+}
+
+function policeReportLogRequester(record: Record<string, unknown>) {
+  const requesterId = typeof record.requesterId === "string"
+    ? record.requesterId
+    : typeof record.authorId === "string"
+      ? record.authorId
+      : null;
+  if (!requesterId) return record.anonymous === true ? "Denúncia anônima" : null;
+  return record.anonymous === true
+    ? `Denúncia anônima no ticket\nReal no log: <@${requesterId}> | ${requesterId}`
+    : `<@${requesterId}> | ${requesterId}`;
 }
 function scheduleChannelExpiry(channelId: string, guildId: string, minutes: number, context: BotContext) {
   const delay = Math.min(Math.max(1, minutes) * 60_000, 2_147_000_000);
