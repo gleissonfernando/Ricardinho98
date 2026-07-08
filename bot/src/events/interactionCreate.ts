@@ -35,22 +35,7 @@ export async function handleInteractionCreate(interaction: Interaction, context:
   try {
     await dispatchInteractionCreate(interaction, context);
   } catch (error) {
-    console.error(JSON.stringify({
-      action: interaction.id,
-      at: new Date().toISOString(),
-      error: error instanceof Error ? error.stack ?? error.message : String(error),
-      guildId: interaction.guildId,
-      level: "error",
-      module: "interactions",
-      userId: interaction.user.id
-    }));
-    if (!interaction.isRepliable()) return;
-    const payload = { content: "Nao foi possivel concluir esta interacao.", ephemeral: true } as const;
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload).catch(() => undefined);
-    } else {
-      await interaction.reply(payload).catch(() => undefined);
-    }
+    await reportInteractionError(interaction, "dispatcher", error);
   }
 }
 
@@ -61,83 +46,83 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
 
   if ((interaction.isButton() || interaction.isModalSubmit()) && interaction.customId.startsWith("music_")) {
     const { handleMusicInteraction } = await import("../music/musicService.js");
-    if (await handleMusicInteraction(interaction, context)) {
+    if (await runInteractionHandler(interaction, "music", () => handleMusicInteraction(interaction, context))) {
       return;
     }
   }
 
-  if (await handleFivemFacInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "fivem-fac", () => handleFivemFacInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleGiveawayInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "giveaway", () => handleGiveawayInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleMissionToolsInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "mission-tools", () => handleMissionToolsInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleSafeBotWarningInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "safe-bot-warning", () => handleSafeBotWarningInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleTemporaryVoiceInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "temporary-voice", () => handleTemporaryVoiceInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleTicketPanelInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "ticket-panel", () => handleTicketPanelInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleReportSystemInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "report-system", () => handleReportSystemInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleManualRegistrationInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "manual-registration", () => handleManualRegistrationInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleFivemGoalInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "fivem-goals", () => handleFivemGoalInteraction(interaction, context))) {
     return;
   }
-  if (await handleFivemFinanceInteraction(interaction, context)) return;
-  if (await handleFivemOrderInteraction(interaction, context)) return;
+  if (await runInteractionHandler(interaction, "fivem-finance", () => handleFivemFinanceInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "fivem-orders", () => handleFivemOrderInteraction(interaction, context))) return;
 
-  if (await handleFivemHierarchyInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "fivem-hierarchy", () => handleFivemHierarchyInteraction(interaction, context))) {
     return;
   }
-  if (await handleFivemActionInteraction(interaction, context)) return;
-  if (await handleAbsenceRemovalInteraction(interaction, context)) return;
-  if (await handlePolicePatrolInteraction(interaction, context)) return;
-  if (await handlePoliceReportsInteraction(interaction, context)) return;
-  if (await handlePoliceRhInteraction(interaction, context)) return;
-  if (await handlePoliceFlightInteraction(interaction, context)) return;
-  if (await handleCommunicationInteraction(interaction, context)) return;
-  if (await handleOpenPointInteraction(interaction, context)) return;
-  if (await handlePoliceCourseInteraction(interaction, context)) return;
+  if (await runInteractionHandler(interaction, "fivem-actions", () => handleFivemActionInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "absence-removal", () => handleAbsenceRemovalInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "police-patrol", () => handlePolicePatrolInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "police-reports", () => handlePoliceReportsInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "police-rh", () => handlePoliceRhInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "police-flight", () => handlePoliceFlightInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "communication", () => handleCommunicationInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "open-point", () => handleOpenPointInteraction(interaction, context))) return;
+  if (await runInteractionHandler(interaction, "police-course", () => handlePoliceCourseInteraction(interaction, context))) return;
 
-  if (await handlePriceTableInteraction(interaction, context)) {
-    return;
-  }
-
-  if (await handleManualPaymentInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "price-table", () => handlePriceTableInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleEmojiCloneInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "manual-payment", () => handleManualPaymentInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleServerCloneInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "emoji-clone", () => handleEmojiCloneInteraction(interaction, context))) {
     return;
   }
 
-  if (await handleServerGeneratorInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "server-clone", () => handleServerCloneInteraction(interaction, context))) {
     return;
   }
 
-  if (interaction.isButton() && await handleRulesInteraction(interaction, context)) {
+  if (await runInteractionHandler(interaction, "server-generator", () => handleServerGeneratorInteraction(interaction, context))) {
+    return;
+  }
+
+  if (interaction.isButton() && await runInteractionHandler(interaction, "rules", () => handleRulesInteraction(interaction, context))) {
     return;
   }
 
@@ -192,5 +177,40 @@ async function dispatchInteractionCreate(interaction: Interaction, context: BotC
     }
 
     await interaction.reply(payload);
+  }
+}
+
+async function runInteractionHandler(interaction: Interaction, handler: string, run: () => Promise<boolean>) {
+  try {
+    return await run();
+  } catch (error) {
+    await reportInteractionError(interaction, handler, error);
+    return true;
+  }
+}
+
+async function reportInteractionError(interaction: Interaction, handler: string, error: unknown) {
+  const errorId = `${Date.now().toString(36)}-${interaction.id.slice(-6)}`;
+  const customId = "customId" in interaction ? String(interaction.customId) : null;
+  console.error(JSON.stringify({
+    action: interaction.id,
+    at: new Date().toISOString(),
+    commandName: interaction.isChatInputCommand() ? interaction.commandName : null,
+    customId,
+    error: error instanceof Error ? error.stack ?? error.message : String(error),
+    errorId,
+    guildId: interaction.guildId,
+    handler,
+    level: "error",
+    module: "interactions",
+    type: interaction.type,
+    userId: interaction.user.id
+  }));
+  if (!interaction.isRepliable()) return;
+  const payload = { content: `Nao foi possivel concluir esta interacao. Codigo: ${errorId}`, ephemeral: true } as const;
+  if (interaction.replied || interaction.deferred) {
+    await interaction.followUp(payload).catch(() => undefined);
+  } else {
+    await interaction.reply(payload).catch(() => undefined);
   }
 }
