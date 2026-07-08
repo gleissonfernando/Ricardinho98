@@ -181,6 +181,13 @@ export function startPoliceReportsService(client: Client<true>, context: BotCont
       console.warn("[police-reports] falha ao atualizar painel:", error instanceof Error ? error.message : error);
     });
   });
+  setTimeout(() => {
+    for (const guild of client.guilds.cache.values()) {
+      void publishPoliceReportsPanel(guild, context, false).catch((error) => {
+        console.warn(`[police-reports] painel existente nao foi sincronizado em ${guild.id}:`, error instanceof Error ? error.message : error);
+      });
+    }
+  }, 5_000).unref?.();
 }
 
 export async function handlePoliceReportsInteraction(interaction: Interaction, context: BotContext) {
