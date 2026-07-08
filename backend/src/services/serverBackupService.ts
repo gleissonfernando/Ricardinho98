@@ -42,6 +42,7 @@ export type ServerBackupSnapshotDto = {
   guildName: string;
   id: string;
   kind: "manual" | "automatic";
+  progress: number;
   snapshotVersion: number;
   status: "pending" | "completed" | "failed" | "partial";
   statusMessage: string | null;
@@ -210,6 +211,7 @@ export async function createServerBackup(input: { actorId: string | null; botId:
     guildId: input.guildId,
     guildName: input.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID ? "Todos os servidores" : input.guildId,
     kind: input.kind,
+    progress: 0,
     snapshotVersion: SNAPSHOT_VERSION,
     snapshot: {},
     status: "pending",
@@ -238,15 +240,18 @@ export async function processQueuedServerBackupCapture(payload: Record<string, u
   if (!botToken) throw new Error("Token do bot nao configurado para criar backup.");
 
   try {
+    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 15, "Capturando servidores, modulos e configuracoes.");
     const snapshot = await captureSnapshot(botToken, pending.botId, pending.guildId);
+    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 70, "Backup capturado. Validando integridade.");
     const counts = countSnapshot(snapshot);
     const assetWarnings = Array.isArray(snapshot.assetWarnings) ? snapshot.assetWarnings : [];
     const checksum = snapshotChecksum(snapshot);
+    await updateCaptureProgress(pending.botId, pending.guildId, snapshotId, 90, "Gravando snapshot no banco de dados.");
     const updatedAt = new Date();
     const status = assetWarnings.length ? "partial" as const : "completed" as const;
     await serverBackupSnapshots.updateOne(
       { _id: snapshotId },
-      { $set: { checksum, counts, guildName: readString(snapshot.guild, "name") || pending.guildId, snapshot, snapshotVersion: SNAPSHOT_VERSION, status, statusMessage: assetWarnings.length ? `${assetWarnings.length} mídia(s) não puderam ser incorporadas ao snapshot.` : null, updatedAt } }
+      { $set: { checksum, counts, guildName: readString(snapshot.guild, "name") || pending.guildId, progress: 100, snapshot, snapshotVersion: SNAPSHOT_VERSION, status, statusMessage: assetWarnings.length ? `${assetWarnings.length} mídia(s) não puderam ser incorporadas ao snapshot.` : "Backup concluido.", updatedAt } }
     );
     const updatedSnapshot = await serverBackupSnapshots.findOne({ _id: snapshotId });
     if (updatedSnapshot) {
@@ -265,7 +270,7 @@ export async function processQueuedServerBackupCapture(payload: Record<string, u
     const terminal = context.attempt >= context.maxAttempts;
     await serverBackupSnapshots.updateOne(
       { _id: snapshotId },
-      { $set: { status: terminal ? "failed" : "pending", statusMessage: errorMessage(error), updatedAt: new Date() } }
+      { $set: { progress: terminal ? 100 : 0, status: terminal ? "failed" : "pending", statusMessage: errorMessage(error), updatedAt: new Date() } }
     );
     const failedSnapshot = await serverBackupSnapshots.findOne({ _id: snapshotId });
     if (failedSnapshot) {
@@ -375,6 +380,7 @@ export async function importServerBackup(input: { actorId: string | null; botId:
     guildId: input.guildId,
     guildName: readString((snapshot as Record<string, unknown>).guild, "name") || input.guildId,
     kind: "manual",
+    progress: 100,
     snapshotVersion: Number((snapshot as Record<string, unknown>).snapshotVersion ?? SNAPSHOT_VERSION),
     snapshot: {
       ...(snapshot as Record<string, unknown>),
@@ -1452,7 +1458,19 @@ function toSettingsDto(settings: MongoServerBackupSettings): ServerBackupSetting
 }
 
 function toSnapshotDto(snapshot: MongoServerBackupSnapshot): ServerBackupSnapshotDto {
-  return { botId: snapshot.botId, checksum: snapshot.checksum ?? null, counts: snapshot.counts, createdAt: snapshot.createdAt.toISOString(), createdBy: snapshot.createdBy, guildId: snapshot.guildId, guildName: snapshot.guildName, id: snapshot._id, integrity: snapshot.checksum ? (snapshotChecksum(snapshot.snapshot) === snapshot.checksum ? "valid" : "invalid") : "pending", kind: snapshot.kind, snapshotVersion: snapshot.snapshotVersion ?? 1, status: snapshot.status, statusMessage: snapshot.statusMessage, updatedAt: snapshot.updatedAt.toISOString() };
+  return { botId: snapshot.botId, checksum: snapshot.checksum ?? null, counts: snapshot.counts, createdAt: snapshot.createdAt.toISOString(), createdBy: snapshot.createdBy, guildId: snapshot.guildId, guildName: snapshot.guildName, id: snapshot._id, integrity: snapshot.checksum ? (snapshotChecksum(snapshot.snapshot) === snapshot.checksum ? "valid" : "invalid") : "pending", kind: snapshot.kind, progress: snapshot.status === "completed" || snapshot.status === "partial" ? 100 : Math.max(0, Math.min(100, snapshot.progress ?? 0)), snapshotVersion: snapshot.snapshotVersion ?? 1, status: snapshot.status, statusMessage: snapshot.statusMessage, updatedAt: snapshot.updatedAt.toISOString() };
+}
+
+async function updateCaptureProgress(botId: string, guildId: string, snapshotId: string, progress: number, statusMessage: string) {
+  const { serverBackupSnapshots } = await getMongoCollections();
+  await serverBackupSnapshots.updateOne(
+    { _id: snapshotId },
+    { $set: { progress: Math.max(0, Math.min(100, progress)), statusMessage, updatedAt: new Date() } }
+  );
+  const snapshot = await serverBackupSnapshots.findOne({ _id: snapshotId });
+  if (snapshot) {
+    emitRealtimeToRoom(dashboardLogRealtimeRoom(guildId, botId), "server-backup:snapshot_updated", toSnapshotDto(snapshot));
+  }
 }
 
 function toRestoreJobDto(job: MongoServerBackupRestoreJob) {

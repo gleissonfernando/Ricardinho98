@@ -703,6 +703,7 @@ export type MongoServerBackupSnapshot = {
   guildId: string;
   guildName: string;
   kind: "manual" | "automatic";
+  progress?: number;
   snapshotVersion?: number;
   snapshot: Record<string, unknown>;
   status: "pending" | "completed" | "failed" | "partial";

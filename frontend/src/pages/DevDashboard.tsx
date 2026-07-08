@@ -607,6 +607,14 @@ function HostingBackupPanel({
         <BackupMetric icon={Code2} label="Versao da Orvitek" value={`Snapshot v${latest?.snapshotVersion ?? 2}`} />
       </section>
 
+      {latest ? (
+        <Card className="border-zinc-800/80 bg-zinc-950/75">
+          <CardContent className="p-4">
+            <BackupProgress backup={latest} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-zinc-800/80 bg-zinc-950/75">
         <CardHeader className="p-5 sm:p-6">
           <CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5" /> Operacoes</CardTitle>
@@ -649,6 +657,9 @@ function HostingBackupPanel({
                 </div>
                 <p className="mt-2 truncate text-sm font-bold text-white">{backup.guildName || backup.guildId}</p>
                 <p className="mt-1 break-all font-mono text-[11px] text-zinc-500">id={backup.id} hash={backup.checksum ?? "pendente"}</p>
+                <div className="mt-3 max-w-md">
+                  <BackupProgress backup={backup} compact />
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button disabled={!isExportableBackup(backup) || working === `export:${backup.id}`} onClick={() => void handleExportBackup(backup)} size="sm" variant="outline"><Download className="h-4 w-4" />Baixar</Button>
@@ -678,11 +689,48 @@ function BackupMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: s
   );
 }
 
+function BackupProgress({ backup, compact = false }: { backup: ServerBackupSnapshot; compact?: boolean }) {
+  const progress = backupProgress(backup);
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className={compact ? "text-xs font-semibold text-zinc-300" : "text-sm font-semibold text-white"}>
+          {backupProgressLabel(backup)}
+        </p>
+        <span className="font-mono text-xs font-semibold text-zinc-300">{progress}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-900 ring-1 ring-zinc-800">
+        <div
+          className={[
+            "h-full rounded-full transition-all duration-500",
+            backup.status === "failed" ? "bg-red-400" : backup.status === "pending" ? "bg-purple-300" : "bg-emerald-400"
+          ].join(" ")}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      {!compact && backup.statusMessage ? <p className="mt-2 text-xs text-zinc-400">{backup.statusMessage}</p> : null}
+    </div>
+  );
+}
+
 function backupStatusLabel(status: ServerBackupSnapshot["status"]) {
   if (status === "completed") return "Concluido";
   if (status === "partial") return "Parcial";
   if (status === "failed") return "Erro";
   return "Processando";
+}
+
+function backupProgress(backup: ServerBackupSnapshot) {
+  if (backup.status === "completed" || backup.status === "partial") return 100;
+  if (backup.status === "failed") return 100;
+  return Math.max(0, Math.min(99, Math.round(backup.progress ?? 0)));
+}
+
+function backupProgressLabel(backup: ServerBackupSnapshot) {
+  if (backup.status === "completed") return "Backup concluido";
+  if (backup.status === "partial") return "Backup concluido com avisos";
+  if (backup.status === "failed") return "Backup falhou";
+  return "Backup em andamento";
 }
 
 function isExportableBackup(backup: ServerBackupSnapshot) {

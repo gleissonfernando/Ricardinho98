@@ -261,6 +261,7 @@ export type ServerBackupSnapshot = {
   id: string;
   integrity?: "valid" | "invalid" | "pending";
   kind: "manual" | "automatic";
+  progress?: number;
   snapshotVersion?: number;
   status: "pending" | "completed" | "failed" | "partial";
   statusMessage: string | null;
