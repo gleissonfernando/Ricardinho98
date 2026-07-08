@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { canManageDevBot, canManageDevBotGuild, canReadDevBotModule, canUseDevBotModule, getDevBotToken } from "../services/devBotService";
+import { canAccessDevDashboard } from "../services/devPermissionService";
 import { areGuildRoles, userHasAnyGuildRole } from "../services/discordOptionsService";
 import { resolveRequestBotId } from "../services/requestBotScopeService";
 import {
@@ -242,7 +243,7 @@ async function readBotToken(botId: string) {
 
 async function canManageServerBackup(scope: { botId: string; guildId: string; user: AuthSessionUser }) {
   if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
-    return canManageDevBot(scope.user, scope.botId);
+    return canAccessDevDashboard(scope.user.discordId ?? scope.user.id);
   }
 
   if (await canUseDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID)) {
@@ -259,7 +260,7 @@ async function canManageServerBackup(scope: { botId: string; guildId: string; us
 
 async function canReadServerBackup(scope: { botId: string; guildId: string; user: AuthSessionUser }) {
   if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
-    return canManageDevBot(scope.user, scope.botId);
+    return canAccessDevDashboard(scope.user.discordId ?? scope.user.id);
   }
 
   return canReadDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID);

@@ -444,8 +444,15 @@ function HostingBackupPanel({
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!selectedBotId && selectedBot) {
+      onSelectBot(selectedBot.id);
+    }
+  }, [onSelectBot, selectedBot?.id, selectedBotId]);
+
+  useEffect(() => {
     if (!selectedBot || !guildId) {
       setDashboard(null);
+      setMessage("Selecione um bot para criar o Backup de Hospedagem.");
       return;
     }
 
