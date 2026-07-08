@@ -11,6 +11,7 @@ import {
   exportServerBackup,
   getServerBackupDashboard,
   getServerBackupSettings,
+  GLOBAL_SERVER_BACKUP_GUILD_ID,
   importServerBackup,
   isStoredServerBackupOwner,
   previewServerBackupRestore,
@@ -20,7 +21,7 @@ import {
 import type { AuthSessionUser } from "../types/session";
 
 const MODULE_ID = "server-backup";
-const guildIdSchema = z.string().regex(/^\d{5,32}$/);
+const guildIdSchema = z.union([z.string().regex(/^\d{5,32}$/), z.literal(GLOBAL_SERVER_BACKUP_GUILD_ID)]);
 const backupIdSchema = z.string().min(8).max(120);
 const snowflakeSchema = z.string().regex(/^\d{5,32}$/);
 const optionalSnowflakeSchema = z.union([snowflakeSchema, z.literal(""), z.null()]).optional();
@@ -48,7 +49,7 @@ serverBackupsRouter.use(requireAuth);
 serverBackupsRouter.get("/:guildId", async (req, res, next) => {
   try {
     const scope = await readScope(req, res);
-    if (!scope || !(await canReadDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID))) {
+    if (!scope || !(await canReadServerBackup(scope))) {
       return res.status(403).json({ message: "Sem acesso ao Backup Completo deste bot/servidor." });
     }
 
@@ -67,7 +68,7 @@ serverBackupsRouter.patch("/:guildId/settings", async (req, res, next) => {
     }
 
     const token = await readBotToken(scope.botId);
-    if (input.authorizedRoleIds?.length && !(await areGuildRoles(scope.guildId, input.authorizedRoleIds, token))) {
+    if (scope.guildId !== GLOBAL_SERVER_BACKUP_GUILD_ID && input.authorizedRoleIds?.length && !(await areGuildRoles(scope.guildId, input.authorizedRoleIds, token))) {
       return res.status(400).json({ message: "Um ou mais cargos autorizados nao existem neste servidor." });
     }
 
@@ -162,6 +163,9 @@ serverBackupsRouter.post("/:guildId/backups/:backupId/preview", async (req, res,
     if (!scope || !(await canAccessStoredBackup(scope, backupId, false))) {
       return res.status(403).json({ message: "Sem permissao para visualizar restauracao." });
     }
+    if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
+      return res.status(400).json({ message: "Backups globais devem ser restaurados pela importacao/rotina global, nao em um servidor unico." });
+    }
     const targetGuildId = input.targetGuildId || scope.guildId;
     const botToken = await readBotToken(scope.botId);
     const targetValidation = await validateBackupTargetGuild(scope, targetGuildId, botToken);
@@ -195,6 +199,9 @@ serverBackupsRouter.post("/:guildId/backups/:backupId/restore", async (req, res,
     }
     if (!scope || !(await canAccessStoredBackup(scope, backupId, true))) {
       return res.status(403).json({ message: "Sem permissao para restaurar backup." });
+    }
+    if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
+      return res.status(400).json({ message: "Backups globais devem ser restaurados pela importacao/rotina global, nao em um servidor unico." });
     }
     const targetGuildId = input.targetGuildId || scope.guildId;
     const botToken = await readBotToken(scope.botId);
@@ -234,6 +241,10 @@ async function readBotToken(botId: string) {
 }
 
 async function canManageServerBackup(scope: { botId: string; guildId: string; user: AuthSessionUser }) {
+  if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
+    return canManageDevBot(scope.user, scope.botId);
+  }
+
   if (await canUseDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID)) {
     return true;
   }
@@ -246,14 +257,22 @@ async function canManageServerBackup(scope: { botId: string; guildId: string; us
   return userHasAnyGuildRole(scope.guildId, scope.user.discordId, settings.authorizedRoleIds, await readBotToken(scope.botId));
 }
 
+async function canReadServerBackup(scope: { botId: string; guildId: string; user: AuthSessionUser }) {
+  if (scope.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
+    return canManageDevBot(scope.user, scope.botId);
+  }
+
+  return canReadDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID);
+}
+
 async function canAccessStoredBackup(
   scope: { botId: string; guildId: string; user: AuthSessionUser },
   backupId: string,
   requireWrite: boolean
 ) {
   const moduleAccess = requireWrite
-    ? await canUseDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID)
-    : await canReadDevBotModule(scope.user, scope.botId, scope.guildId, MODULE_ID);
+    ? await canManageServerBackup(scope)
+    : await canReadServerBackup(scope);
   if (moduleAccess || await canManageDevBot(scope.user, scope.botId)) return true;
 
   return isStoredServerBackupOwner(

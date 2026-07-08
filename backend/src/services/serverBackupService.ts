@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import axios from "axios";
 import { getMongoCollections, getMongoDb, type MongoServerBackupRestoreJob, type MongoServerBackupSettings, type MongoServerBackupSnapshot } from "../database/mongo";
 import { dashboardLogRealtimeRoom, emitRealtimeToRoom } from "../realtime/events";
-import { getBotGuildConfig, getDevBotToken, updateBotGuildConfig } from "./devBotService";
+import { getBotGuildConfig, getDevBotRuntimeConfig, getDevBotToken, updateBotGuildConfig } from "./devBotService";
 import { createLog } from "./logService";
 import { enqueueBackgroundJob, type BackgroundJobContext } from "./backgroundJobService";
 
@@ -11,6 +11,7 @@ const MODULE_ID = "server-backup";
 const RESTORE_PARTS = ["roles", "channels", "permissions", "emojis", "stickers", "settings", "panels"] as const;
 const RESTORE_MODES = ["merge", "missing", "replace", "clear"] as const;
 const SNAPSHOT_VERSION = 2;
+export const GLOBAL_SERVER_BACKUP_GUILD_ID = "all";
 const MAX_EMBEDDED_ASSET_BYTES = 7 * 1024 * 1024;
 const MAX_SINGLE_ASSET_BYTES = 1024 * 1024;
 const SYSTEM_BACKUP_COLLECTION_PREFIXES = ["server_backup_", "background_jobs", "service_heartbeats"];
@@ -203,11 +204,11 @@ export async function createServerBackup(input: { actorId: string | null; botId:
     _id: snapshotId,
     botId: input.botId,
     checksum: null,
-    counts: { categories: 0, channels: 0, emojis: 0, roles: 0, stickers: 0 },
+    counts: { categories: 0, channels: 0, configurations: 0, emojis: 0, modules: 0, roles: 0, stickers: 0 },
     createdAt: now,
     createdBy: input.actorId,
     guildId: input.guildId,
-    guildName: input.guildId,
+    guildName: input.guildId === GLOBAL_SERVER_BACKUP_GUILD_ID ? "Todos os servidores" : input.guildId,
     kind: input.kind,
     snapshotVersion: SNAPSHOT_VERSION,
     snapshot: {},
@@ -554,6 +555,57 @@ function failedRestoreResult(error: unknown): RestoreResult {
 }
 
 async function captureSnapshot(botToken: string, botId: string, guildId: string) {
+  if (guildId === GLOBAL_SERVER_BACKUP_GUILD_ID) {
+    return captureGlobalSnapshot(botToken, botId);
+  }
+
+  return captureGuildSnapshot(botToken, botId, guildId);
+}
+
+async function captureGlobalSnapshot(botToken: string, botId: string) {
+  const runtime = await getDevBotRuntimeConfig(botId);
+  const guildIds = runtime?.guildIds?.length ? runtime.guildIds : runtime?.mainGuildId ? [runtime.mainGuildId] : [];
+  const uniqueGuildIds = [...new Set(guildIds.filter((id) => /^\d{5,32}$/.test(id)))];
+  const guildSnapshots = await mapInBatches(uniqueGuildIds, 2, async (guildId) => {
+    try {
+      return await captureGuildSnapshot(botToken, botId, guildId);
+    } catch (error) {
+      return {
+        snapshotVersion: SNAPSHOT_VERSION,
+        capturedAt: new Date().toISOString(),
+        source: { botId, guildId },
+        guild: { id: guildId, name: guildId },
+        roles: [],
+        channels: [],
+        emojis: [],
+        stickers: [],
+        webhooks: [],
+        internalSettings: {},
+        databaseCollections: {},
+        assetWarnings: [`${guildId}: ${errorMessage(error)}`]
+      };
+    }
+  });
+
+  const databaseCollections = await captureDatabaseCollections(botId, GLOBAL_SERVER_BACKUP_GUILD_ID, uniqueGuildIds);
+  return {
+    snapshotVersion: SNAPSHOT_VERSION,
+    capturedAt: new Date().toISOString(),
+    source: { botId, guildId: GLOBAL_SERVER_BACKUP_GUILD_ID },
+    guild: { id: GLOBAL_SERVER_BACKUP_GUILD_ID, name: "Todos os servidores" },
+    guilds: guildSnapshots,
+    roles: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.roles) ? snapshot.roles : []),
+    channels: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.channels) ? snapshot.channels : []),
+    emojis: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.emojis) ? snapshot.emojis : []),
+    stickers: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.stickers) ? snapshot.stickers : []),
+    webhooks: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.webhooks) ? snapshot.webhooks : []),
+    internalSettings: Object.fromEntries(guildSnapshots.map((snapshot: any) => [snapshot.source?.guildId, snapshot.internalSettings ?? {}]).filter(([guildId]) => Boolean(guildId))),
+    databaseCollections,
+    assetWarnings: guildSnapshots.flatMap((snapshot: any) => Array.isArray(snapshot.assetWarnings) ? snapshot.assetWarnings : [])
+  };
+}
+
+async function captureGuildSnapshot(botToken: string, botId: string, guildId: string) {
   const [guild, roles, channels, emojis, stickers, webhooks, moduleConfig, databaseCollections] = await Promise.all([
     discordGet(botToken, `/guilds/${guildId}?with_counts=true`),
     discordGet(botToken, `/guilds/${guildId}/roles`),
@@ -597,7 +649,7 @@ async function captureSnapshot(botToken: string, botId: string, guildId: string)
   };
 }
 
-async function captureDatabaseCollections(botId: string, guildId: string) {
+async function captureDatabaseCollections(botId: string, guildId: string, guildIds: string[] = []) {
   const db = await getMongoDb();
   const collections = await db.listCollections().toArray();
   const captured: Record<string, { count: number; documents: unknown[] }> = {};
@@ -605,14 +657,7 @@ async function captureDatabaseCollections(botId: string, guildId: string) {
     const name = collectionInfo.name;
     if (shouldSkipBackupCollection(name)) continue;
     const collection = db.collection(name);
-    const documents = await collection.find({
-      guildId,
-      $or: [
-        { botId },
-        { botId: null },
-        { botId: { $exists: false } }
-      ]
-    }).limit(5000).toArray();
+    const documents = await collection.find(backupCollectionQuery(botId, guildId, guildIds) as Record<string, unknown>).limit(5000).toArray();
     if (documents.length) {
       captured[name] = {
         count: documents.length,
@@ -621,6 +666,29 @@ async function captureDatabaseCollections(botId: string, guildId: string) {
     }
   }
   return captured;
+}
+
+function backupCollectionQuery(botId: string, guildId: string, guildIds: string[]) {
+  if (guildId !== GLOBAL_SERVER_BACKUP_GUILD_ID) {
+    return {
+      guildId,
+      $or: [
+        { botId },
+        { botId: null },
+        { botId: { $exists: false } }
+      ]
+    };
+  }
+
+  const scopedGuildIds = guildIds.length ? guildIds : [guildId];
+  return {
+    $or: [
+      { botId },
+      { _id: botId },
+      { guildId: { $in: scopedGuildIds }, botId: null },
+      { guildId: { $in: scopedGuildIds }, botId: { $exists: false } }
+    ]
+  };
 }
 
 function shouldSkipBackupCollection(name: string) {

@@ -283,7 +283,7 @@ export function DevDashboard({ auth, initialView = "bots", onLogout }: DevDashbo
           />
         ) : null}
 
-        {activeView === "hosting-backup" ? <HostingBackupPanel bots={profile.bots} selectedBotId={selectedBotId} selectedGuildId={selectedGuildId} onSelectBot={setSelectedBotId} onSelectGuild={setSelectedGuildId} /> : null}
+        {activeView === "hosting-backup" ? <HostingBackupPanel bots={profile.bots} selectedBotId={selectedBotId} onSelectBot={setSelectedBotId} onSelectGuild={setSelectedGuildId} /> : null}
         {activeView === "logs" ? <TechnicalLogsPanel botId={selectedBotId} guildId={selectedGuildId} /> : null}
         {activeView === "access" ? <DevAccessPanel /> : null}
         {activeView === "maintenance" ? <MaintenancePanel /> : null}
@@ -428,17 +428,16 @@ function HostingBackupPanel({
   bots,
   onSelectBot,
   onSelectGuild,
-  selectedBotId,
-  selectedGuildId
+  selectedBotId
 }: {
   bots: DashboardBot[];
   onSelectBot: (botId: string | null) => void;
   onSelectGuild: (guildId: string | null) => void;
   selectedBotId: string | null;
-  selectedGuildId: string | null;
 }) {
   const selectedBot = bots.find((bot) => bot.id === selectedBotId) ?? bots[0] ?? null;
-  const guildId = selectedGuildId ?? selectedBot?.guildIds[0] ?? selectedBot?.mainGuildId ?? null;
+  const [scopeGuildId, setScopeGuildId] = useState("all");
+  const guildId = scopeGuildId;
   const [dashboard, setDashboard] = useState<ServerBackupDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
@@ -573,7 +572,11 @@ function HostingBackupPanel({
           <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectBot(event.target.value || null)} value={selectedBot?.id ?? ""}>
             {bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}
           </select>
-          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => onSelectGuild(event.target.value || null)} value={guildId ?? ""}>
+          <select className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none" onChange={(event) => {
+            setScopeGuildId(event.target.value || "all");
+            onSelectGuild(event.target.value === "all" ? null : event.target.value || null);
+          }} value={guildId ?? "all"}>
+            <option value="all">Todos os servidores</option>
             {(selectedBot?.guildIds.length ? selectedBot.guildIds : selectedBot?.mainGuildId ? [selectedBot.mainGuildId] : []).map((id) => <option key={id} value={id}>{id}</option>)}
           </select>
         </div>
