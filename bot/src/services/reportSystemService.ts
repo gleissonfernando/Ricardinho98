@@ -29,6 +29,10 @@ import { renderComponentsV2Panel } from "./panelVisualRenderer";
 const PREFIX = "iab_admin";
 const PANEL_SELECT_ID = "iab_report_select";
 const REPORT_PREFIX = "iab_report";
+const LEGACY_PANEL_SELECT_IDS = new Set(["iab_denuncia_select", "iab_denuncia_tipo", "iab_open_report", "abrir_denuncia"]);
+const LEGACY_CONFIRM_BUTTON_IDS = new Set(["iab_confirmar_denuncia", "iab_denuncia_confirmar", "confirmar_denuncia", "confirm_report"]);
+const LEGACY_IDENTIFIED_BUTTON_IDS = new Set(["iab_denuncia_identificada", "iab_report_identified", "denuncia_identificada"]);
+const LEGACY_ANONYMOUS_BUTTON_IDS = new Set(["iab_denuncia_anonima", "iab_denuncia_anônima", "iab_report_anonymous", "denuncia_anonima", "denuncia_anônima"]);
 const BUTTON_LABELS: Record<ReportSystemButtonKey, string> = {
   addMember: "Adicionar membro",
   claim: "Assumir denuncia",
@@ -80,12 +84,12 @@ export async function openReportSystemAdmin(interaction: ChatInputCommandInterac
 export async function handleReportSystemInteraction(interaction: Interaction, context: BotContext) {
   if (!interaction.guild || !interaction.isRepliable()) return false;
 
-  if (interaction.isStringSelectMenu() && interaction.customId === PANEL_SELECT_ID) {
+  if (interaction.isStringSelectMenu() && isReportPanelSelect(interaction.customId)) {
     await handleReportPanelSelect(interaction, context);
     return true;
   }
 
-  if (interaction.isButton() && interaction.customId.startsWith(`${REPORT_PREFIX}:`)) {
+  if (interaction.isButton() && isReportButton(interaction.customId)) {
     await handleReportButton(interaction, context);
     return true;
   }
@@ -200,16 +204,17 @@ async function handleReportPanelSelect(interaction: StringSelectMenuInteraction,
 }
 
 async function handleReportButton(interaction: ButtonInteraction, context: BotContext) {
-  const [, action, mode, categoryId] = interaction.customId.split(":");
+  const parsed = parseReportButton(interaction.customId);
+  const categoryId = parsed.categoryId;
 
-  if (action === "confirm") {
+  if (parsed.action === "confirm") {
     await interaction.deferReply({ ephemeral: true });
     await interaction.message.edit({ components: [] }).catch(() => null);
     await interaction.editReply("Denuncia enviada para analise da equipe.");
     return;
   }
 
-  if (action !== "report" || !categoryId) {
+  if (parsed.action !== "report") {
     await interaction.reply({ content: "Acao de denuncia nao reconhecida.", ephemeral: true });
     return;
   }
@@ -218,7 +223,7 @@ async function handleReportButton(interaction: ButtonInteraction, context: BotCo
 
   const settings = await getFreshGuildSettings(context, interaction.guild!.id, interaction.client.user?.id);
   const report = settings.reportSystem;
-  const category = report.categories.find((item) => item.enabled && item.id === categoryId);
+  const category = findReportCategory(report, categoryId);
 
   if (!report.enabled || !category) {
     await interaction.editReply("Esta opcao de denuncia nao esta mais disponivel.");
@@ -230,8 +235,8 @@ async function handleReportButton(interaction: ButtonInteraction, context: BotCo
     return;
   }
 
-  const anonymous = mode === "anonymous" && report.allowAnonymousReports;
-  const channelId = await createReportChannel(interaction, settings, categoryId, anonymous);
+  const anonymous = parsed.mode === "anonymous" && report.allowAnonymousReports;
+  const channelId = await createReportChannel(interaction, settings, category.id, anonymous);
   await interaction.editReply(channelId ? `Denuncia aberta: <#${channelId}>` : "Denuncia registrada para a equipe responsavel.");
 }
 
@@ -611,6 +616,51 @@ function canCreateReport(member: GuildMember | null, report: ReportSystemSetting
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (!report.createRoleIds.length && !report.permissionRoleIds.length) return true;
   return [...report.createRoleIds, ...report.permissionRoleIds].some((roleId) => member.roles.cache.has(roleId));
+}
+
+function isReportPanelSelect(customId: string) {
+  return customId === PANEL_SELECT_ID || LEGACY_PANEL_SELECT_IDS.has(customId);
+}
+
+function isReportButton(customId: string) {
+  return customId.startsWith(`${REPORT_PREFIX}:`)
+    || LEGACY_CONFIRM_BUTTON_IDS.has(customId)
+    || LEGACY_IDENTIFIED_BUTTON_IDS.has(customId)
+    || LEGACY_ANONYMOUS_BUTTON_IDS.has(customId)
+    || customId.startsWith("iab_denuncia_identificada:")
+    || customId.startsWith("iab_denuncia_anonima:")
+    || customId.startsWith("iab_denuncia_anônima:")
+    || customId.startsWith("iab_denuncia_confirmar:")
+    || customId.startsWith("iab_confirmar_denuncia:");
+}
+
+function parseReportButton(customId: string): { action: "confirm" | "report" | "unknown"; categoryId: string | null; mode: "anonymous" | "identified" } {
+  if (customId.startsWith(`${REPORT_PREFIX}:`)) {
+    const [, action, mode, categoryId] = customId.split(":");
+    return {
+      action: action === "confirm" ? "confirm" : action === "report" ? "report" : "unknown",
+      categoryId: categoryId ?? null,
+      mode: mode === "anonymous" ? "anonymous" : "identified"
+    };
+  }
+
+  const [, legacyCategoryId] = customId.split(":");
+  if (LEGACY_CONFIRM_BUTTON_IDS.has(customId) || customId.startsWith("iab_denuncia_confirmar:") || customId.startsWith("iab_confirmar_denuncia:")) {
+    return { action: "confirm", categoryId: legacyCategoryId ?? null, mode: "identified" };
+  }
+  if (LEGACY_ANONYMOUS_BUTTON_IDS.has(customId) || customId.startsWith("iab_denuncia_anonima:") || customId.startsWith("iab_denuncia_anônima:")) {
+    return { action: "report", categoryId: legacyCategoryId ?? null, mode: "anonymous" };
+  }
+  if (LEGACY_IDENTIFIED_BUTTON_IDS.has(customId) || customId.startsWith("iab_denuncia_identificada:")) {
+    return { action: "report", categoryId: legacyCategoryId ?? null, mode: "identified" };
+  }
+  return { action: "unknown", categoryId: null, mode: "identified" };
+}
+
+function findReportCategory(report: ReportSystemSettings, categoryId: string | null) {
+  return report.categories.find((item) => item.enabled && item.id === categoryId)
+    ?? report.categories.find((item) => item.enabled)
+    ?? null;
 }
 
 function patchToggle(report: ReportSystemSettings, target: string): Partial<ReportSystemSettings> {
