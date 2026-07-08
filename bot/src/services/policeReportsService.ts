@@ -62,7 +62,7 @@ type PoliceReportsConfig = {
   footerVisual: PanelVisualConfig | null;
   complaintTypes: ComplaintType[];
 };
-type PoliceReportStatus = "draft" | "submitted" | "accepted" | "finished" | "archived";
+type PoliceReportStatus = "draft" | "submitted" | "accepted" | "validated" | "finished" | "archived";
 type PoliceReportTopic = {
   anonymous: boolean;
   selectedId: string;
@@ -81,7 +81,8 @@ const REPORT_STATUS_LABELS: Record<PoliceReportStatus, string> = {
   archived: "Arquivada",
   draft: "Aguardando provas",
   finished: "Finalizada",
-  submitted: "Enviada para análise"
+  submitted: "Enviada para análise",
+  validated: "Validada"
 };
 
 const DEFAULT_COMPLAINT_TYPES: ComplaintType[] = [
@@ -112,6 +113,13 @@ function isHighCommandComplaint(type: Pick<ComplaintType, "id" | "name">) {
     || normalized.includes("alto comando")
     || normalized.includes("high command")
     || normalized.includes("hcmd");
+}
+
+function reviewerRoleIdsFor(config: PoliceReportsConfig, selected: Pick<ComplaintType, "id" | "name">) {
+  const roleId = isHighCommandComplaint(selected)
+    ? config.highCommandRoleIds[0]
+    : config.responsibleRoleId ?? config.responsibleRoleIds[0];
+  return roleId ? [roleId] : [];
 }
 
 export const policeReportsCommand: BotCommand = {
@@ -185,7 +193,7 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await createTemporaryProcedureChannel(interaction, context, config, selected, mode === "anonymous");
     return true;
   }
-  if (["submit", "submit_confirm", "submit_cancel", "assume", "accept", "ping", "request_info", "finish", "archive", "transcript", "close"].includes(action ?? "")) {
+  if (["submit", "submit_confirm", "submit_cancel", "assume", "accept", "approve", "validate", "alert", "ping", "request_info", "finish", "archive", "transcript", "close"].includes(action ?? "")) {
     await handleProcedureAction(interaction, context, config, action!);
     return true;
   }
@@ -395,10 +403,9 @@ async function createTemporaryProcedureChannel(
   }
 
   const me = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
-  const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
-  const reviewerRoleIds = highCommandComplaint ? uniqueIds(config.highCommandRoleIds) : responsibleRoleIds;
-  if (highCommandComplaint && !reviewerRoleIds.length) {
-    await interaction.editReply("Configure ao menos um cargo do Alto Comando para receber este tipo de denuncia.");
+  const reviewerRoleIds = reviewerRoleIdsFor(config, selected);
+  if (!reviewerRoleIds.length) {
+    await interaction.editReply(highCommandComplaint ? "Configure ao menos um cargo do Alto Comando para receber este tipo de denuncia." : "Configure o cargo responsavel pelas denuncias da IAB antes de abrir tickets.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.config_missing", "Cargos do Alto Comando nao configurados.", { selectedType: selected.id });
     return;
   }
@@ -485,8 +492,7 @@ async function handleProcedureAction(
   const topic = parsePoliceReportTopic(String(interaction.channel.topic ?? ""));
   if (!topic) return;
   const selected = config.complaintTypes.find((item) => item.id === topic.selectedId) ?? { id: topic.selectedId, name: "Denuncia", description: null, emoji: null, order: 0 };
-  const responsibleRoleIds = uniqueIds([...config.responsibleRoleIds, config.responsibleRoleId].filter(Boolean) as string[]);
-  const reviewerRoleIds = isHighCommandComplaint(selected) ? uniqueIds(config.highCommandRoleIds) : responsibleRoleIds;
+  const reviewerRoleIds = reviewerRoleIdsFor(config, selected);
   const { anonymous, selectedId } = topic;
   const requesterId = topic.requesterId ?? findRequesterId(interaction.channel, interaction.guild.members.me?.id);
   if (!requesterId) {
@@ -540,13 +546,20 @@ async function handleProcedureAction(
     return;
   }
 
-  const allowed = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator) || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
+  const isAdmin = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator));
+  const allowed = Boolean(isAdmin || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
   if (!allowed) {
     await interaction.reply({ content: isHighCommandComplaint(selected) ? "Apenas o Alto Comando configurado pode executar esta acao." : "Apenas responsaveis configurados podem executar esta acao.", ephemeral: true });
     return;
   }
   if (topic.status === "draft") {
     await interaction.reply({ content: "A equipe só pode usar estes botões depois que o denunciante confirmar o envio.", ephemeral: true });
+    return;
+  }
+  const restrictedToAssignee = ["approve", "validate", "alert", "ping", "request_info", "finish", "archive", "close"].includes(action);
+  if (restrictedToAssignee && topic.acceptedBy && topic.acceptedBy !== interaction.user.id && !isAdmin) {
+    await interaction.reply({ content: "Este ticket já foi assumido por outro membro da equipe. Apenas o responsável pode executar esta ação.", ephemeral: true });
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.action_denied", "Tentativa de acao por membro que nao assumiu o ticket.", { action, acceptedBy: topic.acceptedBy, channelId: interaction.channel.id });
     return;
   }
   await interaction.deferReply({ ephemeral: action === "request_info" || action === "ping" ? false : true });
@@ -570,16 +583,46 @@ async function handleProcedureAction(
     return;
   }
 
-  if (action === "ping" || action === "request_info") {
+  if (action === "approve" || action === "validate") {
+    if (!topic.acceptedBy && !isAdmin) {
+      await interaction.editReply("Assuma o ticket antes de validar a denúncia.");
+      return;
+    }
+    const next = { ...topic, acceptedAt: topic.acceptedAt ?? Date.now(), acceptedBy: topic.acceptedBy ?? interaction.user.id, status: "validated" as const };
+    await setPoliceReportTopic(interaction.channel, next);
+    await updateProcedurePanel(interaction, config, selected, next, requesterId);
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.validated", "Denúncia validada pela equipe IAB.", { anonymous, channelId: interaction.channel.id, requesterId, typeName: selected.name, validatedBy: interaction.user.id });
+    await interaction.editReply("Denúncia validada. O painel foi atualizado.");
+    return;
+  }
+
+  if (action === "alert" || action === "ping" || action === "request_info") {
+    if ("permissionOverwrites" in interaction.channel) {
+      await interaction.channel.permissionOverwrites.edit(requesterId, {
+        AttachFiles: true,
+        ReadMessageHistory: true,
+        SendMessages: true,
+        ViewChannel: true
+      }, { reason: `Denunciante chamado de volta por ${interaction.user.tag}` }).catch(async (error) => {
+        await writeLog(context, interaction.guild!.id, interaction.user.id, "police-reports.alert_access_failed", "Erro ao devolver acesso ao denunciante.", { channelId: interaction.channel!.id, error: error instanceof Error ? error.message : String(error), requesterId });
+      });
+    }
     const dmText = anonymous
       ? "🔔 A equipe IAB solicitou sua atencao em uma denuncia anonima.\n\nVoce pode responder normalmente pelo canal do ticket. Sua identidade continuara oculta."
       : `🔔 A equipe IAB solicitou mais informações sobre uma denúncia.\n\nResponda a equipe conforme as orientações recebidas.`;
     const user = await interaction.client.users.fetch(requesterId).catch(() => null);
     const dmSent = Boolean(await user?.send({ allowedMentions: { parse: [] }, content: dmText }).then(() => true).catch(() => false));
+    if ("send" in interaction.channel) {
+      await interaction.channel.send({
+        allowedMentions: { users: [requesterId] },
+        content: `<@${requesterId}> a equipe IAB solicitou novas informações. Envie as provas ou respostas necessárias neste canal.`
+      }).catch(() => null);
+    }
+    await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.requester_alerted", "Denunciante chamado de volta ao canal.", { anonymous, channelId: interaction.channel.id, requesterId, requestedBy: interaction.user.id, typeName: selected.name });
     await interaction.editReply({
       content: anonymous
-        ? `🔔 O denunciante anonimo foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
-        : `🔔 O denunciante foi notificado pela equipe IAB.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
+        ? `🔔 O denunciante anonimo voltou a ter acesso ao canal.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`
+        : `🔔 O denunciante voltou a ter acesso ao canal.${dmSent ? "" : "\nNao foi possivel entregar a DM; o privado pode estar fechado."}`,
       allowedMentions: { parse: [] }
     });
     return;
@@ -665,12 +708,12 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
   const locked = topic.status === "finished" || topic.status === "archived";
   const actions = topic.status === "draft"
     ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Enviar denúncia").setEmoji("📨").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Confirmar envio da denúncia").setEmoji("📨").setStyle(ButtonStyle.Danger)
     )]
     : [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:accept`).setLabel("Aceitar denúncia").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
-      new ButtonBuilder().setCustomId(`${PREFIX}:request_info`).setLabel("Solicitar informações").setEmoji("🔔").setStyle(ButtonStyle.Primary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:transcript`).setLabel("Gerar transcript").setEmoji("📁").setStyle(ButtonStyle.Secondary).setDisabled(locked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir Ticket").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
+      new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Validar denúncia").setEmoji("🛡️").setStyle(ButtonStyle.Primary).setDisabled(locked || topic.status === "validated"),
+      new ButtonBuilder().setCustomId(`${PREFIX}:alert`).setLabel("Alertar denunciante").setEmoji("🔔").setStyle(ButtonStyle.Secondary).setDisabled(locked),
       new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji("🗄️").setStyle(ButtonStyle.Secondary).setDisabled(locked),
       new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji("🔒").setStyle(ButtonStyle.Danger).setDisabled(locked)
     )];
@@ -838,6 +881,17 @@ export async function handlePoliceReportsMessage(message: Message, context: BotC
   const requesterId = ticket.requesterId ?? findRequesterId(message.channel, message.guild.members.me?.id);
   const isAuthor = message.author.id === requesterId;
   const isStaff = !isAuthor;
+  if (isStaff && ticket.acceptedBy && ticket.acceptedBy !== message.author.id) {
+    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!member?.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.delete().catch(() => null);
+      await message.channel.send({ allowedMentions: { users: [message.author.id] }, content: `<@${message.author.id}> este ticket já foi assumido por outro responsável. Apenas o responsável pode conduzir o atendimento.` })
+        .then((warning) => setTimeout(() => warning.delete().catch(() => null), 8000))
+        .catch(() => null);
+      await writeLog(context, message.guild.id, message.author.id, "police-reports.message_denied", "Mensagem bloqueada porque o ticket ja foi assumido por outro responsavel.", { acceptedBy: ticket.acceptedBy, channelId: message.channel.id });
+      return true;
+    }
+  }
   if (isAuthor && !ticket.anonymous) return false;
 
   const files = message.attachments.map((attachment) => ({ attachment: attachment.url, name: attachment.name ?? undefined }));
@@ -916,7 +970,7 @@ function serializePoliceReportTopic(topic: PoliceReportTopic) {
 }
 
 function parseReportStatus(value: string | undefined): PoliceReportStatus {
-  return value === "submitted" || value === "accepted" || value === "finished" || value === "archived" ? value : "draft";
+  return value === "submitted" || value === "accepted" || value === "validated" || value === "finished" || value === "archived" ? value : "draft";
 }
 
 function numberOrNull(value: string | undefined) {

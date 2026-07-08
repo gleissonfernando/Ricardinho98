@@ -3020,10 +3020,13 @@ const defaultPoliceReportsConfig: PoliceReportsConfig = {
 };
 
 function normalizePoliceReportsConfig(config: Partial<PoliceReportsConfig>): Partial<PoliceReportsConfig> {
+  const responsibleRoleId = config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? null;
   return {
     ...config,
     buttonLabel: config.buttonLabel === "Selecionar denuncia" ? "Abrir denuncia" : config.buttonLabel,
-    panelTitle: config.panelTitle === "Sistema de Denuncias IAB" ? "Denúncia IAB" : config.panelTitle
+    panelTitle: config.panelTitle === "Sistema de Denuncias IAB" ? "Denúncia IAB" : config.panelTitle,
+    responsibleRoleId,
+    responsibleRoleIds: responsibleRoleId ? [responsibleRoleId] : []
   };
 }
 
@@ -3254,6 +3257,10 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
         setError("Selecione a categoria onde os canais temporarios serao criados.");
         return;
       }
+      if (config.enabled && !config.responsibleRoleId) {
+        setError("Selecione o cargo responsavel pelas denuncias da IAB.");
+        return;
+      }
       if (config.enabled && hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
         setError("Configure a categoria e os cargos do Alto Comando para as denuncias de Alto Comando.");
         return;
@@ -3283,8 +3290,8 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
       setError("Informe o nome de todos os tipos de denuncia.");
       return;
     }
-    if (!config.panelChannelId || !config.categoryId || !config.archiveCategoryId) {
-      setError("Configure o canal do painel, a categoria temporaria e a categoria de finalizacao antes de publicar.");
+    if (!config.panelChannelId || !config.categoryId || !config.archiveCategoryId || !config.responsibleRoleId) {
+      setError("Configure o canal do painel, a categoria temporaria, a categoria de finalizacao e o cargo responsavel antes de publicar.");
       return;
     }
     if (hasHighCommandComplaintType(config.complaintTypes) && (!config.highCommandCategoryId || !config.highCommandRoleIds.length)) {
@@ -3346,7 +3353,7 @@ function PoliceReportsPanel({ botId, canManage, guild }: { botId?: string | null
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Categoria Alto Comando" onChange={(highCommandCategoryId) => patch({ highCommandCategoryId })} placeholder="Categoria exclusiva do Alto Comando" value={config.highCommandCategoryId} />
           <FivemChannelSelect channels={categories} disabled={!canManage || loading} label="Destino apos finalizar" onChange={(archiveCategoryId) => patch({ archiveCategoryId })} placeholder="Categoria para mover o canal finalizado" value={config.archiveCategoryId} />
           <FivemChannelSelect channels={channels} disabled={!canManage || loading} label="Canal de logs" onChange={(logChannelId) => patch({ logChannelId })} placeholder="Selecione" value={config.logChannelId} />
-          <MultiRoleSelect disabled={!canManage || loading} label="Cargos responsaveis" onChange={(responsibleRoleIds) => patch({ responsibleRoleIds, responsibleRoleId: responsibleRoleIds[0] ?? null })} roles={roles} values={config.responsibleRoleIds?.length ? config.responsibleRoleIds : config.responsibleRoleId ? [config.responsibleRoleId] : []} />
+          <RoleSelect disabled={!canManage || loading} label="Cargo responsavel pelas denuncias da IAB" onChange={(responsibleRoleId) => patch({ responsibleRoleId: responsibleRoleId || null, responsibleRoleIds: responsibleRoleId ? [responsibleRoleId] : [] })} roles={roles} value={config.responsibleRoleId ?? config.responsibleRoleIds?.[0] ?? ""} />
           <MultiRoleSelect disabled={!canManage || loading} label="Cargos Alto Comando" onChange={(highCommandRoleIds) => patch({ highCommandRoleIds })} roles={roles} values={config.highCommandRoleIds} />
           <TicketField disabled={!canManage || loading} label="Titulo do painel" onChange={(panelTitle) => patch({ panelTitle })} value={config.panelTitle} />
           <TicketField disabled={!canManage || loading} label="Texto do botao" onChange={(buttonLabel) => patch({ buttonLabel })} value={config.buttonLabel} />
