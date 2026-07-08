@@ -15,7 +15,7 @@ import {
   type Interaction,
   type Message
 } from "discord.js";
-import { currentRuntimeBotId, isBotModuleEnabled } from "../config/env";
+import { currentRuntimeBotId, isBotModuleEnabled, setRuntimeEnabledModules } from "../config/env";
 import type { BotCommand, BotContext } from "../types";
 import { renderComponentsV2Panel, resolvePanelImageUrl } from "./panelVisualRenderer";
 import type { PanelVisualConfig, PanelVisualPosition } from "./panelVisualRenderer";
@@ -52,6 +52,7 @@ const IAB_EMOJI = {
   validate: "🛡️",
   finish: "🔒"
 } as const;
+const PROCEDURE_ACTIONS = ["submit", "submit_confirm", "submit_cancel", "assume", "accept", "approve", "validate", "alert", "ping", "request_info", "finish", "archive", "transcript", "close"] as const;
 
 type ComplaintType = { id: string; name: string; description: string | null; emoji: string | null; order: number };
 type PoliceReportsConfig = {
@@ -186,6 +187,9 @@ export function startPoliceReportsService(client: Client<true>, context: BotCont
       void publishPoliceReportsPanel(guild, context, false).catch((error) => {
         console.warn(`[police-reports] painel existente nao foi sincronizado em ${guild.id}:`, error instanceof Error ? error.message : error);
       });
+      void restoreOpenPoliceReportChannels(guild, context).catch((error) => {
+        console.warn(`[police-reports] tickets abertos nao foram restaurados em ${guild.id}:`, error instanceof Error ? error.message : error);
+      });
     }
   }, 5_000).unref?.();
 }
@@ -197,8 +201,11 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     return true;
   }
   if (!isBotModuleEnabled(MODULE_ID)) {
-    await interaction.reply({ content: "A Denúncia IAB não está liberada para este bot.", ephemeral: true }).catch(() => undefined);
-    return true;
+    const restored = await refreshPoliceReportsRuntimeModules(context);
+    if (!restored && !isExistingPoliceReportTicketInteraction(interaction)) {
+      await interaction.reply({ content: "A Denúncia IAB não está liberada para este bot.", ephemeral: true }).catch(() => undefined);
+      return true;
+    }
   }
   if (interaction.isStringSelectMenu()) {
     await ensureEphemeralReply(interaction);
@@ -221,7 +228,7 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await showIdentitySelection(interaction, selected);
     return true;
   }
-  const action = interaction.customId.split(":")[1];
+  const action = normalizePoliceReportsAction(interaction.customId.split(":")[1]);
   if (action === "page") {
     await interaction.deferUpdate();
     const config = await loadConfig(interaction.guild.id, context, false);
@@ -235,8 +242,24 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
   if (shouldPreAck) {
     await ensureEphemeralReply(interaction);
   }
-  const config = await loadConfig(interaction.guild.id, context, false);
+  if (interaction.isButton() && isProcedureAction(action)) {
+    if (action === "submit_cancel") {
+      await interaction.update({ components: [], content: "Envio cancelado. O ticket continua aberto para você enviar provas." }).catch(() => undefined);
+      return true;
+    }
+    await acknowledgeProcedureAction(interaction, action);
+  }
+  const config = await loadConfig(interaction.guild.id, context, false).catch(async (error) => {
+    console.warn("[police-reports] falha ao carregar configuracao para interacao:", error instanceof Error ? error.message : error);
+    if (interaction.isButton() && isProcedureAction(action)) {
+      await respondProcedure(interaction, "Nao foi possivel carregar a configuracao da Denuncia IAB agora. Tente novamente em alguns segundos.");
+    }
+    return null;
+  });
   if (!config) {
+    if (interaction.isButton() && isProcedureAction(action)) {
+      return true;
+    }
     await respondEphemeral(interaction, "A configuracao deste painel nao esta disponivel.");
     return true;
   }
@@ -250,7 +273,7 @@ export async function handlePoliceReportsInteraction(interaction: Interaction, c
     await createTemporaryProcedureChannel(interaction, context, config, selected, mode === "anonymous");
     return true;
   }
-  if (["submit", "submit_confirm", "submit_cancel", "assume", "accept", "approve", "validate", "alert", "ping", "request_info", "finish", "archive", "transcript", "close"].includes(action ?? "")) {
+  if (isProcedureAction(action)) {
     await handleProcedureAction(interaction, context, config, action!);
     return true;
   }
@@ -299,6 +322,84 @@ async function respondEphemeral(interaction: PoliceReportsComponentInteraction, 
   }
 
   await interaction.reply(body as never).catch(() => undefined);
+}
+
+async function refreshPoliceReportsRuntimeModules(context: BotContext) {
+  const runtime = await context.api.getRuntimeModules().catch((error) => {
+    console.warn("[police-reports] nao foi possivel recarregar modulos antes da interacao:", error instanceof Error ? error.message : error);
+    return null;
+  });
+
+  if (!runtime) {
+    return false;
+  }
+
+  setRuntimeEnabledModules(runtime.active ? runtime.enabledModules : [], runtime.botId);
+  return isBotModuleEnabled(MODULE_ID);
+}
+
+function isExistingPoliceReportTicketInteraction(interaction: Interaction) {
+  if (!interaction.isButton()) {
+    return false;
+  }
+
+  const channel = interaction.channel;
+  if (!channel || !("topic" in channel)) {
+    return false;
+  }
+
+  const action = normalizePoliceReportsAction(interaction.customId.split(":")[1]);
+  if (!isProcedureAction(action)) {
+    return false;
+  }
+
+  return Boolean(parsePoliceReportTopic(String(channel.topic ?? "")));
+}
+
+function isProcedureAction(action: string | undefined): action is typeof PROCEDURE_ACTIONS[number] {
+  return PROCEDURE_ACTIONS.includes(action as typeof PROCEDURE_ACTIONS[number]);
+}
+
+async function acknowledgeProcedureAction(interaction: ButtonInteraction, action: string) {
+  if (interaction.deferred || interaction.replied) return;
+
+  if (action === "submit_confirm") {
+    await interaction.update({ components: [], content: "Enviando denúncia para análise..." }).catch(() => undefined);
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: action === "request_info" || action === "ping" ? false : true }).catch(() => undefined);
+}
+
+async function respondProcedure(interaction: ButtonInteraction, payload: string | Parameters<ButtonInteraction["reply"]>[0]) {
+  const body = typeof payload === "string" ? { content: payload, ephemeral: true } : payload;
+
+  if (interaction.deferred && !interaction.replied) {
+    await interaction.editReply(body as never).catch(() => undefined);
+    return;
+  }
+
+  if (interaction.replied || interaction.deferred) {
+    await interaction.followUp(body as never).catch(() => undefined);
+    return;
+  }
+
+  await interaction.reply(body as never).catch(() => undefined);
+}
+
+async function restoreOpenPoliceReportChannels(guild: Guild, context: BotContext) {
+  const now = Date.now();
+  const channels = guild.channels.cache.filter((channel) => "topic" in channel && Boolean(parsePoliceReportTopic(String(channel.topic ?? ""))));
+
+  for (const channel of channels.values()) {
+    const topic = parsePoliceReportTopic(String(("topic" in channel ? channel.topic : "") ?? ""));
+    if (!topic || topic.status === "finished" || topic.status === "archived" || !topic.expiresAt || topic.expiresAt <= now) {
+      continue;
+    }
+
+    const remainingMinutes = Math.max(1, Math.ceil((topic.expiresAt - now) / 60_000));
+    scheduleChannelExpiry(channel.id, guild.id, remainingMinutes, context);
+  }
 }
 
 async function publishPoliceReportsPanel(guild: Guild, context: BotContext, allowCreate: boolean) {
@@ -566,91 +667,104 @@ async function handleProcedureAction(
   config: PoliceReportsConfig,
   action: string
 ) {
-  if (!interaction.guild || !interaction.channel || !("topic" in interaction.channel)) return;
+  if (!interaction.guild || !interaction.channel || !("topic" in interaction.channel)) {
+    await respondProcedure(interaction, "Esta ação precisa ser usada dentro do canal da denúncia.");
+    return;
+  }
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   const topic = parsePoliceReportTopic(String(interaction.channel.topic ?? ""));
-  if (!topic) return;
+  if (!topic) {
+    await respondProcedure(interaction, "Nao foi possivel identificar os dados desta denuncia. Reabra o painel ou chame a equipe responsavel.");
+    return;
+  }
   const selected = config.complaintTypes.find((item) => item.id === topic.selectedId) ?? { id: topic.selectedId, name: "Denuncia", description: null, emoji: null, order: 0 };
   const reviewerRoleIds = reviewerRoleIdsFor(config, selected);
   const { anonymous, selectedId } = topic;
   const requesterId = topic.requesterId ?? findRequesterId(interaction.channel, interaction.guild.members.me?.id);
   const devBypass = isPoliceReportsDev(interaction.user.id);
   if (!requesterId) {
-    await interaction.reply({ content: "Nao foi possivel identificar internamente o autor desta denuncia.", ephemeral: true });
+    await respondProcedure(interaction, "Nao foi possivel identificar internamente o autor desta denuncia.");
     return;
   }
 
   if (action === "submit") {
     if (interaction.user.id !== requesterId && !devBypass) {
-      await interaction.reply({ content: "Somente o denunciante pode enviar esta denúncia.", ephemeral: true });
+      await respondProcedure(interaction, "Somente o denunciante pode enviar esta denúncia.");
       return;
     }
     if (topic.status !== "draft") {
-      await interaction.reply({ content: "Essa denúncia já foi enviada para análise.", ephemeral: true });
+      await respondProcedure(interaction, "Essa denúncia já foi enviada para análise.");
       return;
     }
-    await interaction.reply({
-      components: [{
-        type: 17,
-        accent_color: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
-        components: [
-          { type: 10, content: "## Confirmar envio\nTem certeza que deseja enviar essa denúncia para análise?\n\nDepois de confirmar, você perderá acesso ao canal e a equipe responsável receberá o ticket." },
-          new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`${PREFIX}:submit_confirm`).setLabel("Confirmar envio").setEmoji(IAB_EMOJI.submitConfirm).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`${PREFIX}:submit_cancel`).setLabel("Cancelar").setEmoji(IAB_EMOJI.submitCancel).setStyle(ButtonStyle.Secondary)
-          )
-        ]
-      }],
-      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    await respondProcedure(interaction, {
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId(`${PREFIX}:submit_confirm`).setLabel("Confirmar envio").setEmoji(IAB_EMOJI.submitConfirm).setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId(`${PREFIX}:submit_cancel`).setLabel("Cancelar").setEmoji(IAB_EMOJI.submitCancel).setStyle(ButtonStyle.Secondary)
+        )
+      ],
+      content: "Tem certeza que deseja enviar essa denúncia para análise?\n\nDepois de confirmar, você perderá acesso ao canal e a equipe responsável receberá o ticket.",
+      ephemeral: true
     });
     return;
   }
 
   if (action === "submit_cancel") {
-    await interaction.update({ components: [], content: "Envio cancelado. O ticket continua aberto para você enviar provas." });
+    await respondProcedure(interaction, "Envio cancelado. O ticket continua aberto para você enviar provas.");
     return;
   }
 
   if (action === "submit_confirm") {
     if (interaction.user.id !== requesterId && !devBypass) {
-      await interaction.reply({ content: "Somente o denunciante pode confirmar o envio.", ephemeral: true });
+      await respondProcedure(interaction, "Somente o denunciante pode confirmar o envio.");
       return;
     }
     if (topic.status !== "draft") {
-      await interaction.reply({ content: "Essa denúncia já foi enviada.", ephemeral: true });
+      await respondProcedure(interaction, "Essa denúncia já foi enviada.");
       return;
     }
-    await interaction.deferUpdate();
-    await submitPoliceReport(interaction, context, config, selected, topic, requesterId, reviewerRoleIds, mentionRoleIdsFor(config, selected));
-    await interaction.followUp({ content: "Denúncia enviada para análise. Você não verá mais este canal.", ephemeral: true }).catch(() => null);
+    try {
+      await submitPoliceReport(interaction, context, config, selected, topic, requesterId, reviewerRoleIds, mentionRoleIdsFor(config, selected));
+      await interaction.followUp({ content: "Denúncia enviada para análise. Você não verá mais este canal.", ephemeral: true }).catch(() => null);
+    } catch (error) {
+      await interaction.followUp({ content: "Nao foi possivel enviar esta denuncia agora. A equipe foi avisada nos logs.", ephemeral: true }).catch(() => null);
+      await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.submit_failed", "Falha ao confirmar envio da denuncia.", {
+        channelId: interaction.channel.id,
+        error: error instanceof Error ? error.message : String(error),
+        requesterId,
+        selectedType: selected.name
+      });
+    }
     return;
   }
 
   const isAdmin = Boolean(member?.permissions.has(PermissionFlagsBits.Administrator));
   const allowed = Boolean(devBypass || isAdmin || reviewerRoleIds.some((roleId) => member?.roles.cache.has(roleId)));
   if (!allowed) {
-    await interaction.reply({ content: isHighCommandComplaint(selected) ? "Apenas o Alto Comando configurado pode executar esta acao." : "Apenas responsaveis configurados podem executar esta acao.", ephemeral: true });
+    await respondProcedure(interaction, isHighCommandComplaint(selected) ? "Apenas o Alto Comando configurado pode executar esta acao." : "Apenas responsaveis configurados podem executar esta acao.");
     return;
   }
   if (topic.status === "draft") {
-    await interaction.reply({ content: "A equipe só pode usar estes botões depois que o denunciante confirmar o envio.", ephemeral: true });
+    await respondProcedure(interaction, "A equipe só pode usar estes botões depois que o denunciante confirmar o envio.");
     return;
   }
   if (topic.status === "finished") {
-    await interaction.reply({ content: "Este ticket já foi finalizado.", ephemeral: true });
+    await respondProcedure(interaction, "Este ticket já foi finalizado.");
     return;
   }
   if (topic.status === "archived" && action !== "finish" && action !== "close") {
-    await interaction.reply({ content: "Este ticket está arquivado. Apenas a finalização definitiva ainda está disponível.", ephemeral: true });
+    await respondProcedure(interaction, "Este ticket está arquivado. Apenas a finalização definitiva ainda está disponível.");
     return;
   }
   const restrictedToAssignee = ["approve", "validate", "alert", "ping", "request_info", "finish", "archive", "close"].includes(action);
   if (restrictedToAssignee && topic.acceptedBy && topic.acceptedBy !== interaction.user.id && !isAdmin && !devBypass) {
-    await interaction.reply({ content: "Este ticket já foi assumido por outro membro da equipe. Apenas o responsável pode executar esta ação.", ephemeral: true });
+    await respondProcedure(interaction, "Este ticket já foi assumido por outro membro da equipe. Apenas o responsável pode executar esta ação.");
     await writeLog(context, interaction.guild.id, interaction.user.id, "police-reports.action_denied", "Tentativa de acao por membro que nao assumiu o ticket.", { action, acceptedBy: topic.acceptedBy, channelId: interaction.channel.id });
     return;
   }
-  await interaction.deferReply({ ephemeral: action === "request_info" || action === "ping" ? false : true });
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ ephemeral: action === "request_info" || action === "ping" ? false : true });
+  }
 
   if (action === "assume" || action === "accept") {
     if (topic.acceptedBy && topic.acceptedBy !== interaction.user.id) {
@@ -1078,6 +1192,10 @@ function serializePoliceReportTopic(topic: PoliceReportTopic) {
 
 function parseReportStatus(value: string | undefined): PoliceReportStatus {
   return value === "submitted" || value === "accepted" || value === "validated" || value === "finished" || value === "archived" ? value : "draft";
+}
+
+function normalizePoliceReportsAction(action: string | undefined) {
+  return action === "ticket" ? "submit" : action;
 }
 
 function numberOrNull(value: string | undefined) {
