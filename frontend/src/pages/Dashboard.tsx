@@ -48,6 +48,7 @@ import {
 import { DashboardLayout } from "../components/layout/dashboard-layout";
 import type { ViewId } from "../components/layout/sidebar";
 import { ClipsPanel } from "../components/clips/ClipsPanel";
+import { CommunicationPanel } from "../components/communication/CommunicationPanel";
 import { FacAbsencePanel } from "../components/fivem/FacAbsencePanel";
 import { FivemActionsPanel } from "../components/fivem/FivemActionsPanel";
 import { PolicePatrolReportsPanel } from "../components/fivem/PolicePatrolReportsPanel";
@@ -59,7 +60,9 @@ import { LogsSettingsPanel } from "../components/LogsSettingsPanel";
 import { MissionToolsPanel } from "../components/mission-tools/MissionToolsPanel";
 import { MediaLibraryPanel } from "../components/media/MediaLibraryPanel";
 import { SiteAccessPanel } from "../components/moderation/SiteAccessPanel";
+import { OpenPointNotificationPanel } from "../components/open-point/OpenPointNotificationPanel";
 import { PanelImageSettings } from "../components/panels/PanelImageSettings";
+import { PoliceCoursesPanel } from "../components/police/PoliceCoursesPanel";
 import { ManualPaymentsPanel } from "../components/manual-payments/ManualPaymentsPanel";
 import { PriceTablesPanel } from "../components/price-tables/PriceTablesPanel";
 import { VoiceRecorderPanel } from "../components/moderation/VoiceRecorderPanel";
@@ -491,6 +494,69 @@ const moduleCatalog: ModuleDefinition[] = [
     view: "police-absence"
   },
   {
+    id: "police-actions",
+    title: "Acoes Policiais",
+    description: "Operacoes policiais com painel, participantes e relatorios separados.",
+    icon: Activity,
+    view: "police-actions"
+  },
+  {
+    id: "police-reports",
+    title: "Denuncia IAB",
+    description: "Central de denuncias internas com anonimo, tickets, categorias e logs da corregedoria.",
+    icon: ShieldAlert,
+    view: "police-reports"
+  },
+  {
+    id: "police-rh",
+    title: "RH Policial",
+    description: "Solicitacoes de ausencia, adornos, retorno automatico e painel de RH policial.",
+    icon: CalendarClock,
+    view: "police-rh"
+  },
+  {
+    id: "police-flight",
+    title: "Escalacao DAF",
+    description: "Painel de inscricao, controle e encerramento de voos/DAF.",
+    icon: Radio,
+    view: "police-flight"
+  },
+  {
+    id: "police-courses",
+    title: "Cursos Policiais",
+    description: "Cursos, inscricoes, publicacao de painéis e historico de participantes.",
+    icon: CalendarClock,
+    view: "police-courses"
+  },
+  {
+    id: "police-patrol-reports",
+    title: "Relatorios Policiais",
+    description: "Relatorios profissionais de patrulhamento exclusivos para oficiais.",
+    icon: ShieldCheck,
+    view: "police-patrol-reports"
+  },
+  {
+    id: "dm-system",
+    title: "DM Policial",
+    description: "Envio controlado de mensagens diretas com cargos autorizados e logs.",
+    icon: AtSign,
+    view: "dm-system"
+  },
+  {
+    id: "summons-system",
+    title: "Intimacao",
+    description: "Tickets de intimacao por categoria, logs privados e permissões da equipe.",
+    icon: ShieldAlert,
+    view: "summons-system"
+  },
+  {
+    id: "open-point-notification",
+    title: "Ponto Aberto",
+    description: "Notificacoes, multas e justificativas para membros com ponto aberto.",
+    icon: Bell,
+    view: "open-point-notification"
+  },
+  {
     id: "fivem-orders",
     title: "Encomendas FiveM",
     description: "Controle separado para pedidos, fila, producao, entrega e historico de encomendas.",
@@ -590,7 +656,14 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
   "fivem-actions": "fivem-actions",
   "police-absence": "police-absences",
   "police-actions": "police-actions",
+  "police-reports": "police-reports",
+  "police-rh": "police-rh",
+  "police-flight": "police-flight",
+  "police-courses": "police-courses",
   "police-patrol-reports": "police-patrol-reports",
+  "dm-system": "dm-system",
+  "summons-system": "summons-system",
+  "open-point-notification": "open-point-notification",
   "fivem-orders": "fivem-orders",
   "fivem-families": "fivem-orders",
   "fivem-washing": "fivem-washing",
@@ -629,6 +702,19 @@ const viewModuleIds: Partial<Record<ViewId, string>> = {
 };
 
 const settingsModuleIds = new Set(["tickets", "avisos", "network", "server-generator"]);
+const policeModuleIds = new Set([
+  "fivem-hierarchy",
+  "police-absences",
+  "police-actions",
+  "police-reports",
+  "police-rh",
+  "police-flight",
+  "police-courses",
+  "police-patrol-reports",
+  "dm-system",
+  "summons-system",
+  "open-point-notification"
+]);
 
 export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardProps) {
   const [dashboardProfile, setDashboardProfile] = useState<DashboardMeResponse | null>(null);
@@ -1315,10 +1401,48 @@ export function Dashboard({ auth, initialBotSlug = null, onLogout }: DashboardPr
             guild={selectedGuild}
           />
         ) : null}
+        {activeView === "police-reports" || activeView === "police-rh" || activeView === "police-flight" ? (
+          <AdvancedSecurityModulePanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, viewModuleIds[activeView] ?? "", canManageDashboard)}
+            guild={selectedGuild}
+            moduleId={viewModuleIds[activeView] ?? ""}
+          />
+        ) : null}
+        {activeView === "police-courses" && selectedGuild ? (
+          <PoliceCoursesPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "police-courses", canManageDashboard)}
+            guild={selectedGuild}
+          />
+        ) : null}
         {activeView === "police-patrol-reports" ? (
           <PolicePatrolReportsPanel
             botId={activeBotId}
             canManage={canManageModule(selectedBot, "police-patrol-reports", canManageDashboard)}
+            guild={selectedGuild}
+          />
+        ) : null}
+        {activeView === "dm-system" ? (
+          <CommunicationPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "dm-system", canManageDashboard)}
+            guild={selectedGuild}
+            type="dm"
+          />
+        ) : null}
+        {activeView === "summons-system" ? (
+          <CommunicationPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "summons-system", canManageDashboard)}
+            guild={selectedGuild}
+            type="summons"
+          />
+        ) : null}
+        {activeView === "open-point-notification" ? (
+          <OpenPointNotificationPanel
+            botId={activeBotId}
+            canManage={canManageModule(selectedBot, "open-point-notification", canManageDashboard)}
             guild={selectedGuild}
           />
         ) : null}
@@ -1508,6 +1632,24 @@ const advancedSecurityModuleDetails: Record<string, {
     description: "Módulo isolado para limites, relações e histórico de damas por cargo.",
     icon: Users,
     items: ["Cargos autorizados", "Limites", "Relacionamentos", "Histórico"]
+  },
+  "police-reports": {
+    title: "Denuncia IAB",
+    description: "Central de denuncias internas com anonimo, tickets, categorias e logs da corregedoria.",
+    icon: ShieldAlert,
+    items: ["Canal do painel", "Categorias por tipo", "Cargos responsáveis", "Logs e transcript"]
+  },
+  "police-rh": {
+    title: "RH Policial",
+    description: "Painel de RH para ausencias, adornos, retorno automatico e logs internos.",
+    icon: CalendarClock,
+    items: ["Ausencias", "Adornos", "Cargo temporario", "Retorno automatico"]
+  },
+  "police-flight": {
+    title: "Escalacao DAF",
+    description: "Painel de inscricao e controle de escalacao DAF com encerramento e logs.",
+    icon: Radio,
+    items: ["Canal do painel", "Inscricoes", "Encerramento", "Logs"]
   },
   music: {
     title: "Sistema de Música",
@@ -3542,7 +3684,14 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     { builtIn: true, description: "Acoes profissionais da FAC com painel, participantes e relatorios separados.", id: "fivem-actions", permissions: "Admin FiveM", title: "Acoes FAC" },
     { builtIn: true, description: "Solicitacoes e aprovacao de ausencias para oficiais.", id: "police-absences", permissions: "Admin Policia", title: "Ausencia Policial" },
     { builtIn: true, description: "Operacoes policiais com painel, participantes e relatorios separados.", id: "police-actions", permissions: "Admin Policia", title: "Acoes Policiais" },
-    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" }
+    { builtIn: true, description: "Denuncias internas com anonimo, tickets e logs da corregedoria.", id: "police-reports", permissions: "Admin Policia", title: "Denuncia IAB" },
+    { builtIn: true, description: "Ausencias, adornos, retorno automatico e painel de RH policial.", id: "police-rh", permissions: "Admin Policia", title: "RH Policial" },
+    { builtIn: true, description: "Escalacao DAF com inscricoes, encerramento e logs.", id: "police-flight", permissions: "Admin Policia", title: "Escalacao DAF" },
+    { builtIn: true, description: "Cursos, inscricoes, publicacao de painéis e historico.", id: "police-courses", permissions: "Admin Policia", title: "Cursos Policiais" },
+    { builtIn: true, description: "Relatórios de patrulhamento exclusivos para oficiais.", id: "police-patrol-reports", permissions: "Admin Polícia", title: "Relatórios Policiais" },
+    { builtIn: true, description: "Envio controlado de DMs com cargos autorizados e logs.", id: "dm-system", permissions: "Admin Policia", title: "DM Policial" },
+    { builtIn: true, description: "Tickets de intimacao por categoria e permissões da equipe.", id: "summons-system", permissions: "Admin Policia", title: "Intimacao" },
+    { builtIn: true, description: "Notificacoes, multas e justificativas de ponto aberto.", id: "open-point-notification", permissions: "Admin Policia", title: "Ponto Aberto" }
   ];
   const catalog = fivemModules.length ? fivemModules : fallbackCatalog;
   const enabled = new Set(enabledModules.map((moduleId) => moduleId === "fivem-fac" ? "fivem-absences" : moduleId));
@@ -3552,7 +3701,7 @@ function fivemUserModules(enabledModules: string[], fivemModules: FivemModuleDef
     .filter((module) => {
       if (mode === "orders") return module.id === "fivem-orders";
       if (mode === "goals") return module.id === "fivem-goals";
-      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && module.id !== "police-absences" && module.id !== "police-actions" && module.id !== "police-patrol-reports";
+      return module.id !== "fivem-orders" && module.id !== "fivem-goals" && module.id !== "fivem-hierarchy" && module.id !== "fivem-absences" && !policeModuleIds.has(module.id);
     })
     .map((module) => ({
       description: module.description,
@@ -3576,7 +3725,15 @@ function fivemIconForModule(moduleId: string) {
     "fivem-hierarchy": Users,
     "fivem-orders": ListChecks,
     "police-absences": CalendarClock,
-    "police-actions": Activity
+    "police-actions": Activity,
+    "police-reports": ShieldAlert,
+    "police-rh": CalendarClock,
+    "police-flight": Radio,
+    "police-courses": CalendarClock,
+    "police-patrol-reports": ShieldCheck,
+    "dm-system": AtSign,
+    "summons-system": ShieldAlert,
+    "open-point-notification": Bell
   };
 
   return icons[moduleId] ?? Boxes;
@@ -3658,7 +3815,14 @@ function canManageModule(bot: DashboardBot | null, moduleId: string, fallback: b
       "fivem-actions",
       "police-absences",
       "police-actions",
+      "police-reports",
+      "police-rh",
+      "police-flight",
+      "police-courses",
       "police-patrol-reports",
+      "dm-system",
+      "summons-system",
+      "open-point-notification",
       "fivem-fac"
     ].includes(moduleId);
   }
@@ -3683,6 +3847,10 @@ function isModuleReleasedForBot(bot: DashboardBot, moduleId: string) {
 
   if (moduleId === "police-absences") {
     return released.has("police-absences");
+  }
+
+  if (moduleId === "police-patrol-reports") {
+    return released.has("police-patrol-reports") || released.has("patrol-reports");
   }
 
   if (moduleId === "fivem-drugs") {
@@ -8283,12 +8451,12 @@ function visualPanelIdForView(view: ViewId) {
 }
 
 function policePanelImageSlotsForView(view: ViewId) {
-  if (view !== "fivem-hierarchy" && view !== "police-actions" && view !== "police-patrol-reports") {
+  if (!["fivem-hierarchy", "police-actions", "police-reports", "police-rh", "police-flight", "police-patrol-reports"].includes(view)) {
     return null;
   }
 
   const basePanelId = visualPanelIdForView(view);
-  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : "Relatorios";
+  const label = view === "fivem-hierarchy" ? "Hierarquia" : view === "police-actions" ? "Acoes" : view === "police-reports" ? "Denuncias" : view === "police-rh" ? "RH" : view === "police-flight" ? "DAF" : "Relatorios";
 
   return [
     { id: basePanelId, label: `${label} - Banner 1` },

@@ -3,6 +3,7 @@ import {
   Activity,
   Archive,
   AtSign,
+  Bell,
   Bot,
   Building2,
   CalendarClock,
@@ -80,7 +81,14 @@ export type ViewId =
   | "fivem-actions"
   | "police-absence"
   | "police-actions"
+  | "police-reports"
+  | "police-rh"
+  | "police-flight"
+  | "police-courses"
   | "police-patrol-reports"
+  | "dm-system"
+  | "summons-system"
+  | "open-point-notification"
   | "fivem-orders"
   | "fivem-families"
   | "fivem-washing"
@@ -157,7 +165,14 @@ const navItems: NavItem[] = [
   { id: "fivem-actions", label: "Ações FAC", icon: Activity, moduleId: "fivem-actions" },
   { id: "police-absence", label: "Ausencia Policial", icon: CalendarClock, moduleId: "police-absences" },
   { id: "police-actions", label: "Acoes Policiais", icon: Activity, moduleId: "police-actions" },
+  { id: "police-reports", label: "Denuncia IAB", icon: ShieldAlert, moduleId: "police-reports" },
+  { id: "police-rh", label: "RH Policial", icon: CalendarClock, moduleId: "police-rh" },
+  { id: "police-flight", label: "Escalacao DAF", icon: Radio, moduleId: "police-flight" },
+  { id: "police-courses", label: "Cursos Policiais", icon: CalendarClock, moduleId: "police-courses" },
   { id: "police-patrol-reports", label: "Relatórios Policiais", icon: ShieldCheck, moduleId: "police-patrol-reports" },
+  { id: "dm-system", label: "DM Policial", icon: AtSign, moduleId: "dm-system" },
+  { id: "summons-system", label: "Intimacao", icon: ShieldAlert, moduleId: "summons-system" },
+  { id: "open-point-notification", label: "Ponto Aberto", icon: Bell, moduleId: "open-point-notification" },
   { id: "fivem-orders", label: "Encomendas RP", icon: Archive, moduleId: "fivem-orders" },
   { id: "fivem-families", label: "Famílias", icon: Users, moduleIds: ["fivem-orders", "fivem-drugs", "fivem-washing"] },
   { id: "fivem-washing", label: "Sistema de Lavagem", icon: CircleDollarSign, moduleId: "fivem-washing" },
@@ -181,11 +196,25 @@ function navSectionForItem(item: NavItem): NavSectionId {
     item.id === "fivem-hierarchy"
     || item.id === "police-absence"
     || item.id === "police-actions"
+    || item.id === "police-reports"
+    || item.id === "police-rh"
+    || item.id === "police-flight"
+    || item.id === "police-courses"
     || item.id === "police-patrol-reports"
+    || item.id === "dm-system"
+    || item.id === "summons-system"
+    || item.id === "open-point-notification"
     || item.moduleId === "fivem-hierarchy"
     || item.moduleId === "police-absences"
     || item.moduleId === "police-actions"
+    || item.moduleId === "police-reports"
+    || item.moduleId === "police-rh"
+    || item.moduleId === "police-flight"
+    || item.moduleId === "police-courses"
     || item.moduleId === "police-patrol-reports"
+    || item.moduleId === "dm-system"
+    || item.moduleId === "summons-system"
+    || item.moduleId === "open-point-notification"
   ) {
     return "police";
   }

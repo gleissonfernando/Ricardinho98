@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
+  AtSign,
   Boxes,
   BriefcaseBusiness,
   Building2,
@@ -12,6 +13,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Radio,
   ScrollText,
   Settings,
   Shield,
@@ -1092,14 +1094,33 @@ function fiveMModuleIcon(moduleId: string): LucideIcon {
     "fivem-hierarchy": Users,
     "police-absences": CalendarClock,
     "police-actions": Activity,
-    "police-patrol-reports": ShieldCheck
+    "police-reports": ShieldAlert,
+    "police-rh": CalendarClock,
+    "police-flight": Radio,
+    "police-courses": CalendarClock,
+    "police-patrol-reports": ShieldCheck,
+    "dm-system": AtSign,
+    "summons-system": ShieldAlert,
+    "open-point-notification": Bell
   };
 
   return icons[moduleId] ?? Boxes;
 }
 
 function isPoliceModule(moduleId: string) {
-  return moduleId === "fivem-hierarchy" || moduleId === "police-absences" || moduleId === "police-actions" || moduleId === "police-patrol-reports";
+  return [
+    "fivem-hierarchy",
+    "police-absences",
+    "police-actions",
+    "police-reports",
+    "police-rh",
+    "police-flight",
+    "police-courses",
+    "police-patrol-reports",
+    "dm-system",
+    "summons-system",
+    "open-point-notification"
+  ].includes(moduleId);
 }
 
 function isFiveMManagerModule(moduleId: string) {
