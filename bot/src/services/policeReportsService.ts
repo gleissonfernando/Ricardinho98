@@ -576,6 +576,14 @@ async function handleProcedureAction(
     await interaction.reply({ content: "A equipe só pode usar estes botões depois que o denunciante confirmar o envio.", ephemeral: true });
     return;
   }
+  if (topic.status === "finished") {
+    await interaction.reply({ content: "Este ticket já foi finalizado.", ephemeral: true });
+    return;
+  }
+  if (topic.status === "archived" && action !== "finish" && action !== "close") {
+    await interaction.reply({ content: "Este ticket está arquivado. Apenas a finalização definitiva ainda está disponível.", ephemeral: true });
+    return;
+  }
   const restrictedToAssignee = ["approve", "validate", "alert", "ping", "request_info", "finish", "archive", "close"].includes(action);
   if (restrictedToAssignee && topic.acceptedBy && topic.acceptedBy !== interaction.user.id && !isAdmin) {
     await interaction.reply({ content: "Este ticket já foi assumido por outro membro da equipe. Apenas o responsável pode executar esta ação.", ephemeral: true });
@@ -727,7 +735,9 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
   const submittedAt = topic.submittedAt ? Math.floor(topic.submittedAt / 1000) : null;
   const acceptedAt = topic.acceptedAt ? Math.floor(topic.acceptedAt / 1000) : null;
   const closedAt = topic.closedAt ? Math.floor(topic.closedAt / 1000) : null;
-  const locked = topic.status === "finished" || topic.status === "archived";
+  const finished = topic.status === "finished";
+  const archived = topic.status === "archived";
+  const interactionLocked = finished || archived;
   const topMention = topic.status === "draft" || !mentionRoleIds.length
     ? null
     : `**Equipe responsável:** ${mentionRoleIds.map((roleId) => `<@&${roleId}>`).join(" ")}`;
@@ -736,11 +746,11 @@ function createProcedurePanel(config: PoliceReportsConfig, selected: ComplaintTy
       new ButtonBuilder().setCustomId(`${PREFIX}:submit`).setLabel("Confirmar envio da denúncia").setEmoji(IAB_EMOJI.submit).setStyle(ButtonStyle.Danger)
     )]
     : [new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir Ticket").setEmoji(IAB_EMOJI.assume).setStyle(ButtonStyle.Success).setDisabled(locked || Boolean(topic.acceptedBy)),
-      new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Validar denúncia").setEmoji(IAB_EMOJI.validate).setStyle(ButtonStyle.Primary).setDisabled(locked || topic.status === "validated"),
-      new ButtonBuilder().setCustomId(`${PREFIX}:alert`).setLabel("Alertar denunciante").setEmoji(IAB_EMOJI.alert).setStyle(ButtonStyle.Secondary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji(IAB_EMOJI.archive).setStyle(ButtonStyle.Secondary).setDisabled(locked),
-      new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji(IAB_EMOJI.finish).setStyle(ButtonStyle.Danger).setDisabled(locked)
+      new ButtonBuilder().setCustomId(`${PREFIX}:assume`).setLabel("Assumir Ticket").setEmoji(IAB_EMOJI.assume).setStyle(ButtonStyle.Success).setDisabled(interactionLocked || Boolean(topic.acceptedBy)),
+      new ButtonBuilder().setCustomId(`${PREFIX}:approve`).setLabel("Validar denúncia").setEmoji(IAB_EMOJI.validate).setStyle(ButtonStyle.Primary).setDisabled(interactionLocked || topic.status === "validated"),
+      new ButtonBuilder().setCustomId(`${PREFIX}:alert`).setLabel("Alertar denunciante").setEmoji(IAB_EMOJI.alert).setStyle(ButtonStyle.Secondary).setDisabled(interactionLocked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:archive`).setLabel("Arquivar").setEmoji(IAB_EMOJI.archive).setStyle(ButtonStyle.Secondary).setDisabled(interactionLocked),
+      new ButtonBuilder().setCustomId(`${PREFIX}:finish`).setLabel("Finalizar").setEmoji(IAB_EMOJI.finish).setStyle(ButtonStyle.Danger).setDisabled(finished)
     )];
   const payload = renderComponentsV2Panel({
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
