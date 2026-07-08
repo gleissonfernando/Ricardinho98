@@ -27,6 +27,13 @@ const PAGE_SIZE = 25;
 const IAB_WEBHOOK_NAME = "Human Resources - NPD";
 const PANEL_TITLE = "Denúncia IAB";
 const BUTTON_LABEL = "Abrir denuncia";
+const PANEL_HELP_TEXT = [
+  "**Como funciona**",
+  "1. Selecione o tipo de denuncia no menu abaixo.",
+  "2. Escolha se deseja registrar como identificada ou anonima.",
+  "3. Um canal privado sera aberto para voce enviar provas, prints, videos, links e detalhes.",
+  "4. Depois de revisar tudo, confirme o envio para a equipe da Corregedoria analisar."
+].join("\n");
 const IAB_EMOJI = {
   alert: "🔔",
   anonymous: "🎭",
@@ -384,7 +391,7 @@ function createPanelPayload(config: PoliceReportsConfig, requestedPage: number) 
     accentColor: Number.parseInt(config.color.replace("#", ""), 16) || 0x7c3aed,
     actions,
     description: `${config.panelDescription}${pageCount > 1 ? `\n\nPagina ${page + 1} de ${pageCount}` : ""}`,
-    fields: [],
+    fields: [PANEL_HELP_TEXT],
     footerIcon: config.footerVisual,
     footerText: `**NPD - IAB** · Selecione o tipo abaixo · <t:${Math.floor(Date.now() / 1000)}:f>`,
     headerText: "**North Police Department - Corregedoria**",
